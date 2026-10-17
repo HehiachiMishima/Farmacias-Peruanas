@@ -1,0 +1,392 @@
+@use 'breakpoints' as bp;
+
+/**
+ * Coreografía de aparición/ocultación del sidebar "Módulos".
+ * Tres capas encadenadas: velos → panel → items en cascada.
+ * Todo con nuestro sistema: curvas de salida/entrada propias, superficies
+ * monocromas de DESIGN.md y sin dependencias externas.
+ */
+$salida: cubic-bezier(0.16, 1, 0.3, 1);
+$entrada: cubic-bezier(0.7, 0, 0.84, 0);
+$veil-dur: 500ms;
+$veil-paso: 70ms;
+$panel-dur: 650ms;
+$panel-retardo: 150ms;
+$cierre-dur: 320ms;
+$item-paso: 100ms;
+$item-retardo: 250ms;
+
+:host {
+  display: block;
+  min-height: 100dvh;
+}
+
+.shell {
+  min-height: 100dvh;
+}
+
+.shell__veil {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(var(--sidebar-w), 86vw);
+  transform: translateX(-100%);
+  pointer-events: none;
+  transition: transform $cierre-dur $entrada;
+}
+
+.shell__veil--1 {
+  z-index: calc(var(--z-drawer) - 2);
+  background: var(--surface-3);
+}
+
+.shell__veil--2 {
+  z-index: calc(var(--z-drawer) - 1);
+  background: var(--surface);
+}
+
+.shell--open .shell__veil {
+  transform: translateX(0);
+  transition: transform $veil-dur $salida;
+}
+
+.shell--open .shell__veil--2 {
+  transition-delay: $veil-paso;
+}
+
+.shell__sidebar {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(var(--sidebar-w), 86vw);
+  z-index: var(--z-drawer);
+  transform: translateX(-100%);
+  transition: transform $cierre-dur $entrada;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-fg);
+  border-right: 1px solid var(--sidebar-border);
+  will-change: transform;
+}
+
+.shell--open .shell__sidebar {
+  transform: translateX(0);
+  transition: transform $panel-dur $salida;
+  transition-delay: $panel-retardo;
+}
+
+.shell__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--topbar-h);
+  padding: 0 var(--space-5);
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.shell__brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  border: 1px solid var(--sidebar-border);
+  padding: 2px;
+}
+.shell__brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.shell__brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.shell__brand-title {
+  font-weight: 600;
+  color: var(--sidebar-fg-strong);
+}
+
+.shell__brand-sub {
+  font-size: var(--fs-xs);
+  color: var(--sidebar-fg);
+}
+
+.shell__nav {
+  flex: 1;
+  padding: var(--space-5) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow-y: auto;
+}
+
+@mixin relevar($dur, $fade) {
+  transition: opacity $fade $salida, transform $dur $salida;
+  transition-delay: calc(#{$item-retardo} + var(--i, 0) * #{$item-paso});
+}
+
+.shell__nav-label {
+  padding: 0 var(--space-3);
+  margin-bottom: var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sidebar-fg);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity $cierre-dur $entrada, transform $cierre-dur $entrada;
+}
+
+.shell--open .shell__nav-label {
+  opacity: 1;
+  transform: none;
+  @include relevar(420ms, 320ms);
+}
+
+.shell__nav-item {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  color: var(--sidebar-fg);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  transition: background var(--transition-fast), color var(--transition-fast);
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--sidebar-fg-strong);
+  }
+
+  &:focus-visible {
+    box-shadow: none;
+    outline: 2px solid var(--brand);
+    outline-offset: -2px;
+  }
+}
+
+.shell__nav-itemInner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3);
+  opacity: 0;
+  transform: translateY(140%);
+  transition: opacity 200ms $entrada, transform $cierre-dur $entrada;
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.shell--open .shell__nav-itemInner {
+  opacity: 1;
+  transform: none;
+  @include relevar(520ms, 320ms);
+}
+
+.shell__nav-item--active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-fg);
+  font-weight: 600;
+}
+
+.shell__sidebar-foot {
+  padding: var(--space-3);
+  border-top: 1px solid var(--sidebar-border);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity $cierre-dur $entrada, transform $cierre-dur $entrada;
+}
+
+.shell--open .shell__sidebar-foot {
+  opacity: 1;
+  transform: none;
+  @include relevar(420ms, 320ms);
+}
+
+.shell__panel-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--sidebar-fg);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast);
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--sidebar-fg-strong);
+    border-color: var(--border-strong);
+  }
+}
+
+.shell__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-sticky) - 5);
+  background: var(--overlay);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity $cierre-dur $entrada;
+}
+
+.shell--open .shell__overlay {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 300ms $salida;
+  transition-delay: 100ms;
+}
+
+.shell__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100dvh;
+  background: transparent;
+}
+
+.shell__topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--topbar-h);
+  padding: 0 var(--space-6);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+
+  @include bp.down(md) {
+    padding: 0 var(--space-4);
+  }
+}
+
+.shell__menu-btn {
+  display: inline-flex;
+}
+
+.shell__menu-icon {
+  position: relative;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+}
+
+.shell__menu-icon > * {
+  position: absolute;
+  inset: 0;
+  transition: transform 460ms $salida, opacity 240ms $entrada;
+}
+
+.shell__menu-icon-close {
+  opacity: 0;
+  transform: rotate(90deg);
+}
+
+.shell--open .shell__menu-icon-open {
+  opacity: 0;
+  transform: rotate(-90deg);
+}
+
+.shell--open .shell__menu-icon-close {
+  opacity: 1;
+  transform: rotate(0deg);
+}
+
+.shell__topbar-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-md);
+  color: var(--text-3);
+}
+
+.shell__crumb-current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.shell__crumb-sep {
+  opacity: 0.5;
+}
+
+.shell__topbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.shell__user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border);
+
+  @include bp.down(md) {
+    display: none;
+  }
+}
+
+.shell__user-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+  max-width: 180px;
+}
+
+.shell__user-name {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell__user-mail {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell__content {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: clamp(var(--space-5), 3vw, var(--space-8));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell__veil,
+  .shell__sidebar,
+  .shell__overlay,
+  .shell__nav-label,
+  .shell__nav-itemInner,
+  .shell__sidebar-foot,
+  .shell__menu-icon > * {
+    transition-delay: 0ms !important;
+  }
+}

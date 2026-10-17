@@ -1,0 +1,18 @@
+# --- Secretos (nunca al repositorio) ---
+.env
+.env.*
+!.env.example
+
+# --- Certificados (CA TLS de Aiven) ---
+certs/
+*.pem
+
+# --- Sistema operativo / editores ---
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.vscode/
+
+# --- Logs ---
+*.log

@@ -1,0 +1,89 @@
+<div class="shell" [class.shell--open]="menuAbierto()">
+  <span class="shell__veil shell__veil--1" aria-hidden="true"></span>
+  <span class="shell__veil shell__veil--2" aria-hidden="true"></span>
+
+  <aside id="shell-nav" class="shell__sidebar" [attr.inert]="menuAbierto() ? null : ''">
+    <div class="shell__brand">
+      <span class="shell__brand-mark"><img src="logo_web.png" alt="Ingeniería Logística" width="22" height="22"></span>
+      <span class="shell__brand-text">
+        <span class="shell__brand-title">{{ panel.nombre }}</span>
+        <span class="shell__brand-sub">Hehiachi Mishima</span>
+      </span>
+    </div>
+
+    <nav class="shell__nav">
+      <p class="shell__nav-label" [style.--i]="0">Módulos</p>
+      @for (modulo of modulos(); track modulo.id; let i = $index) {
+        <a
+          class="shell__nav-item"
+          [style.--i]="i + 1"
+          [routerLink]="modulo.ruta"
+          routerLinkActive="shell__nav-item--active"
+          (click)="cerrarMenu()"
+        >
+          <span class="shell__nav-itemInner">
+            <ui-icon [name]="modulo.icono" [size]="18" />
+            <span>{{ modulo.nombre }}</span>
+          </span>
+        </a>
+      }
+    </nav>
+
+    <div class="shell__sidebar-foot" [style.--i]="modulos().length + 2">
+      <button type="button" class="shell__panel-btn" (click)="irAPaneles()">
+        <ui-icon name="panel" [size]="18" />
+        Cambiar de panel
+      </button>
+    </div>
+  </aside>
+
+  <div class="shell__overlay" (click)="cerrarMenu()"></div>
+
+  <div class="shell__body">
+    <header class="shell__topbar">
+      <button
+        type="button"
+        class="ui-icon-btn shell__menu-btn"
+        (click)="alternarMenu()"
+        aria-label="Menú"
+        [attr.aria-expanded]="menuAbierto()"
+        aria-controls="shell-nav"
+      >
+        <span class="shell__menu-icon" aria-hidden="true">
+          <ui-icon class="shell__menu-icon-open" name="menu" [size]="20" />
+          <ui-icon class="shell__menu-icon-close" name="close" [size]="20" />
+        </span>
+      </button>
+
+      <div class="shell__topbar-title">
+        <span class="shell__crumb">Panel</span>
+        <span class="shell__crumb-sep">/</span>
+        <span class="shell__crumb-current">{{ panel.nombre }}</span>
+      </div>
+
+      <div class="shell__topbar-actions">
+        <button type="button" class="ui-icon-btn" (click)="alternarTema($event)" aria-label="Cambiar tema">
+          <ui-icon [name]="tema.tema() === 'dark' ? 'sun' : 'moon'" [size]="18" />
+        </button>
+
+        @if (usuario(); as u) {
+          <div class="shell__user">
+            <span class="ui-avatar">{{ iniciales() }}</span>
+            <span class="shell__user-info">
+              <span class="shell__user-name">{{ u.nombre }} {{ u.apellido }}</span>
+              <span class="shell__user-mail">{{ u.email }}</span>
+            </span>
+          </div>
+        }
+
+        <button type="button" class="ui-icon-btn" (click)="cerrarSesion()" aria-label="Cerrar sesión">
+          <ui-icon name="logout" [size]="18" />
+        </button>
+      </div>
+    </header>
+
+    <main class="shell__content">
+      <router-outlet />
+    </main>
+  </div>
+</div>

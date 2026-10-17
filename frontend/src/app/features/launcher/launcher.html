@@ -1,0 +1,72 @@
+<div class="launcher">
+  <header class="launcher__topbar">
+    <div class="launcher__brand">
+      <span class="launcher__brand-mark"><img src="logo_web.png" alt="Ingeniería Logística" width="24" height="24"></span>
+      <span class="launcher__brand-name">Hehiachi Mishima</span>
+    </div>
+
+    <div class="launcher__actions">
+      <button type="button" class="ui-icon-btn" (click)="alternarTema($event)" aria-label="Cambiar tema">
+        <ui-icon [name]="tema.tema() === 'dark' ? 'sun' : 'moon'" [size]="18" />
+      </button>
+
+      @if (usuario(); as u) {
+        <div class="launcher__user">
+          <span class="ui-avatar">{{ iniciales() }}</span>
+          <span class="launcher__user-info">
+            <span class="launcher__user-name">{{ u.nombre }} {{ u.apellido }}</span>
+            <span class="launcher__user-mail">{{ u.email }}</span>
+          </span>
+        </div>
+      }
+
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" (click)="cerrarSesion()">
+        <ui-icon name="logout" [size]="16" />
+        Salir
+      </button>
+    </div>
+  </header>
+
+  <main class="launcher__main">
+    <div class="launcher__intro">
+      <p class="launcher__eyebrow">Panel de acceso</p>
+      <h1 class="launcher__title">¿A dónde quieres ir?</h1>
+      <p class="launcher__subtitle">
+        Tienes acceso a <strong>{{ accesibles() }}</strong> de {{ paneles.length }} módulos disponibles.
+      </p>
+    </div>
+
+    <div class="launcher__grid">
+      @for (panel of paneles; track panel.id) {
+        <button
+          type="button"
+          class="panel-card"
+          [class.panel-card--locked]="!accesible(panel)"
+          [attr.aria-disabled]="!accesible(panel)"
+          (click)="abrir(panel)"
+        >
+          <span class="panel-card__glow" aria-hidden="true"></span>
+
+          <span class="panel-card__head">
+            <span class="panel-card__icon"><ui-icon [name]="panel.icono" [size]="22" /></span>
+            @if (!accesible(panel)) {
+              <span class="panel-card__lock" title="Sin acceso"><ui-icon name="lock" [size]="16" /></span>
+            } @else {
+              <span class="panel-card__open"><ui-icon name="chevronRight" [size]="18" /></span>
+            }
+          </span>
+
+          <span class="panel-card__name">{{ panel.nombre }}</span>
+          <span class="panel-card__desc">{{ panel.descripcion }}</span>
+
+          <span class="panel-card__meta">
+            <span class="ui-badge" [class]="accesible(panel) ? 'ui-badge--success' : 'ui-badge--neutral'">
+              <span class="ui-dot"></span>
+              {{ accesible(panel) ? 'Disponible' : 'Bloqueado' }}
+            </span>
+          </span>
+        </button>
+      }
+    </div>
+  </main>
+</div>

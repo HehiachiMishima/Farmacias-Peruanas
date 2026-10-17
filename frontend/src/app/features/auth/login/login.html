@@ -1,0 +1,75 @@
+<div class="login">
+  <section class="login__brand">
+    <div class="login__brand-inner">
+      <h1 class="login__brand-title">Hehiachi Mishima</h1>
+      <p class="login__brand-text">
+        Plataforma de control de accesos. Administra identidades, roles y permisos desde un solo lugar.
+      </p>
+      <ul class="login__features">
+        <li><ui-icon name="check" [size]="16" /> Control de acceso basado en permisos</li>
+        <li><ui-icon name="check" [size]="16" /> Gestión de usuarios y roles</li>
+        <li><ui-icon name="check" [size]="16" /> Interfaz responsiva y accesible</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="login__panel">
+    <div class="login__card">
+      <header class="login__header">
+        <h2>Iniciar sesión</h2>
+        <p>Ingresa tus credenciales para continuar.</p>
+      </header>
+
+      @if (error()) {
+      <div class="login__alert" role="alert">
+        <ui-icon name="alertTriangle" [size]="18" />
+        <span>{{ error() }}</span>
+      </div>
+      }
+
+      <form class="login__form" [formGroup]="formulario" (ngSubmit)="enviar()" novalidate>
+        <div class="ui-field">
+          <label class="ui-label" for="usuario">Usuario</label>
+          <div class="login__control">
+            <ui-icon name="user" [size]="18" class="login__control-icon" />
+            <input id="usuario" type="text" class="ui-input" [class.ui-input--invalid]="campoInvalido('usuario')"
+              formControlName="usuario" autocomplete="username" placeholder="tu.usuario" autofocus />
+          </div>
+          @if (campoInvalido('usuario')) {
+          <span class="ui-error">Ingresa tu usuario.</span>
+          }
+        </div>
+
+        <div class="ui-field">
+          <label class="ui-label" for="contrasena">Contraseña</label>
+          <div class="login__control">
+            <ui-icon name="permisos" [size]="18" class="login__control-icon" />
+            <input id="contrasena" [type]="verContrasena() ? 'text' : 'password'" class="ui-input"
+              [class.ui-input--invalid]="campoInvalido('contrasena')" formControlName="contrasena"
+              autocomplete="current-password" placeholder="••••••••" />
+            <button type="button" class="login__toggle" (click)="toggleContrasena()"
+              [attr.aria-label]="verContrasena() ? 'Ocultar contraseña' : 'Mostrar contraseña'">
+              <ui-icon [name]="verContrasena() ? 'xCircle' : 'search'" [size]="18" />
+            </button>
+          </div>
+          @if (campoInvalido('contrasena')) {
+          <span class="ui-error">Ingresa tu contraseña.</span>
+          }
+        </div>
+
+        <button type="submit" class="ui-btn ui-btn--primary ui-btn--lg ui-btn--block" [disabled]="cargando()">
+          @if (cargando()) {
+          <span class="ui-spinner"
+            style="width:18px;height:18px;border-color:rgba(255,255,255,.4);border-top-color:#fff"></span>
+          Verificando…
+          } @else {
+          Ingresar
+          <ui-icon name="login" [size]="18" />
+          }
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <ui-light-pillar aria-hidden="true" />
+</div>

@@ -1,0 +1,187 @@
+<header class="page-head">
+  <div>
+    <h1 class="page-head__title">Roles</h1>
+    <p class="page-head__sub">Roles y los permisos que conceden.</p>
+  </div>
+  <button *hasPermiso="permisos.CREAR_ROLES" type="button" class="ui-btn ui-btn--primary" (click)="abrirCrear()">
+    <ui-icon name="plus" [size]="18" />
+    Nuevo rol
+  </button>
+</header>
+
+<div class="toolbar">
+  <div class="ui-search toolbar__grow">
+    <ui-icon name="search" [size]="18" />
+    <input type="search" class="ui-input" placeholder="Buscar rol…" [value]="busqueda()"
+      (input)="buscar($any($event.target).value)" />
+  </div>
+  <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()" [disabled]="cargando()">
+    <ui-icon name="refresh" [size]="16" />
+    Actualizar
+  </button>
+</div>
+
+<div class="table-card">
+  @if (cargando()) {
+  <div class="loading"><span class="ui-spinner"></span> Cargando roles…</div>
+  } @else if (error()) {
+  <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!">
+    <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()">
+      <ui-icon name="refresh" [size]="16" /> Reintentar
+    </button>
+  </ui-empty>
+  } @else if (filtrados().length === 0) {
+  <ui-empty icono="roles" [titulo]="busqueda() ? 'Sin resultados' : 'Aún no hay roles'"
+    [mensaje]="busqueda() ? 'Ningún rol coincide con la búsqueda.' : 'Crea el primer rol para agrupar permisos.'"></ui-empty>
+  } @else {
+  <div class="ui-table-wrap">
+    <table class="ui-table" appColumnasRedimensionables>
+      <thead>
+        <tr>
+          <th>Rol</th>
+          <th>Descripción</th>
+          <th>Estado</th>
+          <th>Creado por</th>
+          <th>Actualizado por</th>
+          <th>Creado</th>
+          <th>Actualizado</th>
+          <th class="col-actions">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (rol of paginados(); track rol.id) {
+        <tr>
+          <td>
+            <div class="ui-person">
+              <span class="ui-avatar"><ui-icon name="shieldCheck" [size]="18" /></span>
+              <span class="ui-table__primary">{{ rol.nombre }}</span>
+            </div>
+          </td>
+          <td>{{ rol.descripcion || '—' }}</td>
+          <td>
+            @if (rol.activo) {
+            <span class="ui-badge ui-badge--success"><span class="ui-dot"></span> Activo</span>
+            } @else {
+            <span class="ui-badge ui-badge--neutral"><span class="ui-dot"></span> Inactivo</span>
+            }
+          </td>
+          <td class="u-muted">{{ rol.creadoPor | actorLabel }}</td>
+          <td class="u-muted">{{ rol.actualizadoPor | actorLabel }}</td>
+          <td class="u-muted">{{ rol.creadoEn | date: 'dd/MM/yyyy HH:mm' }}</td>
+          <td class="u-muted">{{ rol.actualizadoEn ? (rol.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—' }}</td>
+          <td>
+            <div class="row-actions">
+              <button *hasPermiso="permisos.ASIGNAR_PERMISOS" type="button" class="ui-icon-btn" title="Permisos"
+                (click)="abrirPermisos(rol)">
+                <ui-icon name="key" [size]="18" />
+              </button>
+              <button *hasPermiso="permisos.MODIFICAR_ROLES" type="button" class="ui-icon-btn" title="Editar"
+                (click)="abrirEditar(rol)">
+                <ui-icon name="edit" [size]="18" />
+              </button>
+              <button *hasPermiso="permisos.MODIFICAR_ROLES" type="button" class="ui-icon-btn"
+                [class.ui-icon-btn--danger]="rol.activo"
+                [title]="rol.activo ? 'Desactivar' : 'Activar'" (click)="toggleActivo(rol)">
+                <ui-icon name="power" [size]="18" />
+              </button>
+              <button *hasPermiso="permisos.ELIMINAR_ROLES" type="button" class="ui-icon-btn ui-icon-btn--danger"
+                title="Eliminar" (click)="confirmarEliminar(rol)">
+                <ui-icon name="trash" [size]="18" />
+              </button>
+            </div>
+          </td>
+        </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <ui-paginador [pagina]="paginaActual()" [total]="filtrados().length" [porPagina]="porPagina()"
+    (paginaCambia)="pagina.set($event)" (porPaginaCambia)="cambiarPorPagina($event)" />
+  }
+</div>
+
+<ui-modal [abierto]="formAbierto()" [titulo]="editando() ? 'Editar rol' : 'Nuevo rol'" (cerrar)="cerrarForm()">
+  <form class="grid-form" [formGroup]="formulario" (ngSubmit)="guardar()" novalidate>
+    <div class="ui-field" style="grid-column: 1 / -1">
+      <label class="ui-label">Nombre <span class="ui-required">*</span></label>
+      <input class="ui-input" [class.ui-input--invalid]="campoInvalido('nombre')" formControlName="nombre"
+        placeholder="Administrador" />
+      @if (campoInvalido('nombre')) { <span class="ui-error">El nombre es obligatorio.</span> }
+    </div>
+    <div class="ui-field" style="grid-column: 1 / -1">
+      <label class="ui-label">Descripción</label>
+      <textarea class="ui-textarea" formControlName="descripcion" placeholder="Para qué sirve este rol"></textarea>
+    </div>
+    <label class="check">
+      <input type="checkbox" formControlName="activo" />
+      <span class="check__box"><ui-icon name="check" [size]="14" /></span>
+      <span>Rol activo</span>
+    </label>
+  </form>
+
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--ghost" (click)="cerrarForm()">Cancelar</button>
+    <button type="button" class="ui-btn ui-btn--primary" (click)="guardar()" [disabled]="guardando()">
+      @if (guardando()) { <span class="ui-spinner" style="width:16px;height:16px"></span> }
+      {{ editando() ? 'Guardar cambios' : 'Crear rol' }}
+    </button>
+  </div>
+</ui-modal>
+
+<ui-modal [abierto]="eliminarAbierto()" ancho="sm" [compacto]="true" titulo="Eliminar rol"
+  (cerrar)="eliminarAbierto.set(false)">
+  @if (aEliminar(); as rol) {
+  <div class="confirm">
+    <span class="confirm__icon"><ui-icon name="trash" [size]="22" /></span>
+    <div class="confirm__text">
+      <p class="confirm__title">¿Eliminar el rol "{{ rol.nombre }}"?</p>
+      <p class="confirm__desc">Esta acción no se puede deshacer.</p>
+    </div>
+  </div>
+  }
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--ghost" (click)="eliminarAbierto.set(false)">Cancelar</button>
+    <button type="button" class="ui-btn ui-btn--danger" (click)="eliminar()" [disabled]="eliminando()">
+      @if (eliminando()) { <span class="ui-spinner" style="width:16px;height:16px"></span> }
+      Eliminar
+    </button>
+  </div>
+</ui-modal>
+
+<ui-modal [abierto]="permisosAbierto()" titulo="Permisos del rol" [subtitulo]="rolPermisos()?.nombre ?? ''"
+  (cerrar)="permisosAbierto.set(false)">
+  <p class="modal-hint">
+    Activa los permisos que concede este rol. Todos los usuarios con este rol los heredarán.
+  </p>
+  @if (cargandoPermisos()) {
+  <div class="loading"><span class="ui-spinner"></span> Cargando permisos…</div>
+  } @else if (catalogoPermisos().length === 0) {
+  <ui-empty icono="permisos" titulo="Sin permisos" mensaje="No hay permisos en el catálogo." />
+  } @else {
+  <ul class="role-list">
+    @for (permiso of catalogoPermisos(); track permiso.id) {
+    <li class="role-item">
+      <span class="role-item__icon"><ui-icon name="key" [size]="18" /></span>
+      <span class="role-item__text">
+        <span class="role-item__name">
+          {{ permiso.nombre }}
+          @if (!permiso.activo) {
+            <span class="ui-badge ui-badge--neutral">Inactivo</span>
+          }
+        </span>
+        <span class="role-item__desc">{{ permiso.descripcion || 'Sin descripción' }}</span>
+      </span>
+      <button type="button" class="switch" [class.switch--on]="estaAsignado(permiso.id)"
+        [disabled]="cambiandoPermiso() === permiso.id" (click)="alternarPermiso(permiso)"
+        [attr.aria-pressed]="estaAsignado(permiso.id)">
+        <span class="switch__thumb"></span>
+      </button>
+    </li>
+    }
+  </ul>
+  }
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--primary" (click)="permisosAbierto.set(false)">Listo</button>
+  </div>
+</ui-modal>

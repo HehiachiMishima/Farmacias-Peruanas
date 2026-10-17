@@ -1,0 +1,120 @@
+<header class="page-head">
+  <div>
+    <h1 class="page-head__title">{{ saludo() }}{{ usuario() ? ', ' + usuario()!.nombre : '' }}</h1>
+    <p class="page-head__sub">Este es el resumen del control de accesos de la plataforma.</p>
+  </div>
+</header>
+
+<section class="metrics">
+  @for (metrica of metricas(); track metrica.id) {
+    <article class="metric" [class]="'metric--' + metrica.acento">
+      <span class="metric__glow" aria-hidden="true"></span>
+      <div class="metric__top">
+        <span class="metric__icon"><ui-icon [name]="metrica.icono" [size]="20" /></span>
+        <span class="metric__label">{{ metrica.etiqueta }}</span>
+      </div>
+      @if (cargando()) {
+        <span class="metric__skeleton ui-skeleton"></span>
+      } @else {
+        <span class="metric__value">{{ metrica.valor ?? '—' }}</span>
+      }
+      <span class="metric__detail">{{ metrica.detalle }}</span>
+    </article>
+  }
+</section>
+
+@if (hayDatosUsuarios() || hayBarras()) {
+  <section class="charts">
+    <h2 class="section-title">Estadísticas</h2>
+    <div class="charts__grid">
+      @if (hayDatosUsuarios()) {
+        <article class="chart-card">
+          <header class="chart-card__head">
+            <div>
+              <h3 class="chart-card__title">Estado de usuarios</h3>
+              <p class="chart-card__sub">Activos frente a inactivos</p>
+            </div>
+            <span class="ui-badge ui-badge--success"><span class="ui-dot"></span>{{ pctActivos() }}% activos</span>
+          </header>
+          <div class="chart-card__body">
+            <ui-donut
+              [segmentos]="segmentosUsuarios()"
+              centro="Usuarios"
+              titulo="Estado de usuarios"
+            />
+          </div>
+        </article>
+      }
+
+      @if (hayBarras()) {
+        <article class="chart-card">
+          <header class="chart-card__head">
+            <div>
+              <h3 class="chart-card__title">Totales por entidad</h3>
+              <p class="chart-card__sub">Volumen registrado por tipo</p>
+            </div>
+          </header>
+          <div class="chart-card__body">
+            <ui-bars [datos]="barrasEntidades()" [altura]="240" />
+          </div>
+        </article>
+      }
+
+      @if (hayDatosUsuarios()) {
+        <article class="chart-card">
+          <header class="chart-card__head">
+            <div>
+              <h3 class="chart-card__title">Usuarios activos</h3>
+              <p class="chart-card__sub">Proporción habilitada</p>
+            </div>
+          </header>
+          <div class="chart-card__body chart-card__body--center">
+            <ui-gauge [valor]="pctActivos()" etiqueta="Activos" color="var(--success)" [tamano]="200" />
+          </div>
+        </article>
+      }
+    </div>
+  </section>
+}
+
+<section class="quick">
+  <h2 class="section-title">Accesos rápidos</h2>
+  <div class="quick__grid">
+    @for (modulo of modulos(); track modulo.id) {
+      <a class="quick__card" [routerLink]="[panelRuta, modulo.ruta]">
+        <span class="quick__icon"><ui-icon [name]="modulo.icono" [size]="20" /></span>
+        <span class="quick__text">
+          <span class="quick__name">{{ modulo.nombre }}</span>
+          <span class="quick__desc">{{ modulo.descripcion }}</span>
+        </span>
+        <ui-icon name="chevronRight" [size]="18" class="quick__arrow" />
+      </a>
+    }
+  </div>
+</section>
+
+<section class="info">
+  <h2 class="section-title">Cómo funciona el acceso</h2>
+  <div class="info__card">
+    <ol class="info__list">
+      <li>
+        <span class="info__step">1</span>
+        <div>
+          <strong>Inicias sesión.</strong> El backend valida tus credenciales y resuelve tus permisos.
+        </div>
+      </li>
+      <li>
+        <span class="info__step">2</span>
+        <div>
+          <strong>Ves solo lo permitido.</strong> Los paneles y módulos aparecen según tus permisos; el resto queda bloqueado.
+        </div>
+      </li>
+      <li>
+        <span class="info__step">3</span>
+        <div>
+          <strong>Los roles agrupan permisos.</strong> El rol vive en el backend; la interfaz se guía por permisos individuales.
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>

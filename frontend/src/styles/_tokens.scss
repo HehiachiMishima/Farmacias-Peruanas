@@ -1,0 +1,168 @@
+/**
+ * Design tokens — Apple (DESIGN.md)
+ * "gallery vitrine in morning fog"
+ *
+ * Estrategia: se conservan los nombres de token que consume la app y se
+ * remapean a la paleta/geometría de Apple. Cambiar de tema (light/dark)
+ * sigue funcionando.
+ */
+:root {
+  color-scheme: light;
+
+  /* ===== Apple — Color ===== */
+  --color-graphite: #707070;
+  --color-link-blue: #0066cc;
+  --gradient-iridescent-spectrum: linear-gradient(
+    60deg,
+    rgb(8, 148, 255) 0%,
+    rgb(201, 89, 221) 40%,
+    rgb(255, 46, 84) 67%,
+    rgb(255, 144, 3) 100%
+  );
+
+  /* ===== Apple — Tipografía ===== */
+  --font-sf-pro-display: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Inter Tight', 'Inter',
+    system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-sf-pro-text: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Inter', system-ui,
+    'Segoe UI', Roboto, sans-serif;
+
+  /* --- Alias de compatibilidad (nombres previos) ===== */
+  --font-mono: 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
+
+  /* Escala tipográfica fluida: crece con el viewport pero nunca se deforma. */
+  --fs-xs: clamp(0.72rem, 0.7rem + 0.1vw, 0.78rem);
+  --fs-sm: clamp(0.8rem, 0.78rem + 0.14vw, 0.88rem);
+  --fs-md: clamp(0.875rem, 0.85rem + 0.2vw, 0.95rem);
+  --fs-base: clamp(0.95rem, 0.92rem + 0.2vw, 1rem);
+  --fs-lg: clamp(1.05rem, 1rem + 0.35vw, 1.2rem);
+  --fs-2xl: clamp(1.35rem, 1.15rem + 1.1vw, 1.85rem);
+  --fs-3xl: clamp(1.7rem, 1.3rem + 2.2vw, 2.5rem);
+
+  /* Semánticos de marca → un único azul de conversión (Apple) */
+  --brand: #0071e3;
+  --brand-hover: #0077e6;
+  --brand-soft: #e8e8ed;
+  --brand-contrast: #ffffff;
+  --accent: #0066cc;
+
+  --success: #248a3d;
+  --success-soft: #e7f5ec;
+  --warning: #b25000;
+  --warning-soft: #fdf1e5;
+  --danger: #d70015;
+  --danger-soft: #fdecee;
+  --info: #6e6e73;
+  --info-soft: #e8e8ed;
+
+  /* Superficies (progresión de superficies, sin color nuevo) */
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-2: #f5f5f7;
+  --surface-3: #e8e8ed;
+  --overlay: rgba(0, 0, 0, 0.42);
+
+  --border: #e8e8ed;
+  --border-strong: #d2d2d7;
+
+  --text: #1d1d1f;
+  --text-2: #707070;
+  --text-3: #86868b;
+
+  --sidebar-bg: #ffffff;
+  --sidebar-fg: #707070;
+  --sidebar-fg-strong: #1d1d1f;
+  --sidebar-active-bg: #e8e8ed;
+  --sidebar-active-fg: #1d1d1f;
+  --sidebar-border: #e8e8ed;
+
+  --radius-xs: 10px;
+  --radius-sm: 12px;
+  --radius: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 28px;
+  --radius-pill: 980px;
+
+  /* Plano por diseño: sin sombras ni elevación */
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow-lg: none;
+
+  --ring: 0 0 0 4px rgba(0, 113, 227, 0.28);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --lh-tight: 1.1;
+  --lh-normal: 1.47;
+
+  --transition-fast: 140ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: 240ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 460ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  --z-sticky: 1020;
+  --z-drawer: 1040;
+  --z-modal: 1050;
+  --z-toast: 1060;
+  --z-loader: 2000;
+
+  --sidebar-w: 264px;
+  --topbar-h: 48px;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --gradient-iridescent-spectrum: linear-gradient(
+    60deg,
+    rgb(8, 148, 255) 0%,
+    rgb(201, 89, 221) 40%,
+    rgb(255, 46, 84) 67%,
+    rgb(255, 144, 3) 100%
+  );
+
+  --brand: #0a84ff;
+  --brand-hover: #3395ff;
+  --brand-soft: #2c2c2e;
+  --brand-contrast: #ffffff;
+  --accent: #0a84ff;
+
+  --success: #30d158;
+  --success-soft: #17331f;
+  --warning: #ff9f0a;
+  --warning-soft: #3a2c12;
+  --danger: #ff453a;
+  --danger-soft: #3a1a1a;
+  --info: #98989d;
+  --info-soft: #2c2c2e;
+
+  --bg: #000000;
+  --surface: #1d1d1f;
+  --surface-2: #2c2c2e;
+  --surface-3: #3a3a3c;
+  --overlay: rgba(0, 0, 0, 0.66);
+
+  --border: #2c2c2e;
+  --border-strong: #3a3a3c;
+
+  --text: #f5f5f7;
+  --text-2: #a1a1a6;
+  --text-3: #86868b;
+
+  --sidebar-bg: #1d1d1f;
+  --sidebar-fg: #a1a1a6;
+  --sidebar-fg-strong: #f5f5f7;
+  --sidebar-active-bg: rgba(255, 255, 255, 0.14);
+  --sidebar-active-fg: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+
+  --ring: 0 0 0 4px rgba(10, 132, 255, 0.35);
+}

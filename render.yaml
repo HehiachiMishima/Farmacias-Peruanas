@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+# ============================================================
+# Blueprint de Render (infraestructura como codigo).
+# UN solo servicio web a partir del Dockerfile de la raiz, que
+# ya incluye el frontend (Angular + nginx) y el backend (Spring Boot).
+#
+# Pasos para desplegar:
+#   1. Sube el repositorio a GitHub/GitLab.
+#   2. En Render: New + > Blueprint > selecciona el repositorio.
+#   3. Render pedira los valores marcados con "sync: false"
+#      (credenciales de la base de datos y datos del administrador).
+# ============================================================
+
+services:
+  - type: web
+    name: hehiachi-mishima
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      # Puerto publico que expone nginx (el backend usa el 2003 interno).
+      - key: PORT
+        value: "10000"
+
+      # --- Base de datos (se solicitan al crear el Blueprint) ---
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_PARAMS
+        sync: false
+
+      # --- Seguridad ---
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ISSUER
+        value: "hehiachi-mishima"
+      # Origen permitido = URL publica de este mismo servicio.
+      - key: CORS_ALLOWED_ORIGINS
+        fromService:
+          name: hehiachi-mishima
+          type: web
+          name: farmacias-peruanas
+          envVarKey: RENDER_EXTERNAL_URL
+
+      # --- Usuario administrador semilla ---
+      - key: USER_ADMIN
+        sync: false
+      - key: USER_PASSWORD
+        sync: false
+      - key: USER_NAME
+        sync: false
+      - key: USER_LASTNAME
+        sync: false
+      - key: USER_EMAIL
+        sync: false
+      - key: USER_PHONE
+        sync: false
+      - key: USER_ACTIVO
+        value: "TRUE"
+      - key: USER_ROL
+        value: "Administrador"
