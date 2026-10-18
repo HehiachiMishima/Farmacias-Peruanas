@@ -20,57 +20,97 @@
     <ui-icon name="refresh" [size]="16" />
     Actualizar
   </button>
+  <button
+    type="button"
+    class="ui-btn ui-btn--secondary"
+    [attr.aria-expanded]="filtrosAbierto()"
+    aria-controls="incidencias-filtros"
+    (click)="alternarFiltros()"
+  >
+    <ui-icon name="filtro" [size]="18" />
+    Filtros
+    @if (filtrosActivos() > 0) {
+      <span class="filtros-badge">{{ filtrosActivos() }}</span>
+    }
+  </button>
   <button *hasPermiso="permisos.CREAR_INCIDENCIAS" type="button" class="ui-btn ui-btn--primary" (click)="abrirCrear()">
     <ui-icon name="plus" [size]="18" />
     Nueva incidencia
   </button>
 </div>
 
-<div class="filtros">
-  <select class="ui-select" [value]="filtroCentro() ?? ''" (change)="setFiltroCentro($event)">
-    <option value="">Todos los centros</option>
-    @for (centro of centros(); track centro.id) {
-      <option [value]="centro.id">{{ centro.centro }}</option>
-    }
-  </select>
-  <select class="ui-select" [value]="filtroSistema() ?? ''" (change)="setFiltroSistema($event)">
-    <option value="">Todos los sistemas</option>
-    @for (sistema of sistemas(); track sistema.id) {
-      <option [value]="sistema.id">{{ sistema.sistema }}</option>
-    }
-  </select>
-  <select class="ui-select" [value]="filtroArea() ?? ''" (change)="setFiltroArea($event)">
-    <option value="">Todas las áreas</option>
-    @for (area of areas(); track area.id) {
-      <option [value]="area.id">{{ area.area }}</option>
-    }
-  </select>
-  <select
-    class="ui-select"
-    [value]="filtroResponsable() ?? ''"
-    (change)="setFiltroResponsable($event)"
-    [disabled]="filtroArea() === null || cargandoResponsablesFiltro()"
-  >
-    <option value="">
-      {{ filtroArea() === null ? 'Responsable (elige un área)' : 'Todos los responsables' }}
-    </option>
-    @for (responsable of responsablesFiltro(); track responsable.id) {
-      <option [value]="responsable.id">{{ responsable.responsable }}</option>
-    }
-  </select>
-  <label class="filtro-fecha">
-    <span>Desde</span>
-    <input type="date" class="ui-input" [value]="filtroDesde()" (input)="setFiltroDesde($event)" />
-  </label>
-  <label class="filtro-fecha">
-    <span>Hasta</span>
-    <input type="date" class="ui-input" [value]="filtroHasta()" (input)="setFiltroHasta($event)" />
-  </label>
-  <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm filtros__limpiar" (click)="limpiarFiltros()">
-    <ui-icon name="close" [size]="16" />
-    Limpiar filtros
-  </button>
-</div>
+<ui-panel-filtros
+  id="incidencias-filtros"
+  [abierto]="filtrosAbierto()"
+  titulo="Filtros"
+  (cerrar)="filtrosAbierto.set(false)"
+>
+  <div class="filtros">
+    <div class="ui-field">
+      <label class="ui-label">Centro</label>
+      <select class="ui-select" [value]="filtroCentro() ?? ''" (change)="setFiltroCentro($event)">
+        <option value="">Todos</option>
+        @for (centro of centros(); track centro.id) {
+          <option [value]="centro.id">{{ centro.centro }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Sistema</label>
+      <select class="ui-select" [value]="filtroSistema() ?? ''" (change)="setFiltroSistema($event)">
+        <option value="">Todos</option>
+        @for (sistema of sistemas(); track sistema.id) {
+          <option [value]="sistema.id">{{ sistema.sistema }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Área</label>
+      <select class="ui-select" [value]="filtroArea() ?? ''" (change)="setFiltroArea($event)">
+        <option value="">Todas</option>
+        @for (area of areas(); track area.id) {
+          <option [value]="area.id">{{ area.area }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Responsable</label>
+      <select
+        class="ui-select"
+        [value]="filtroResponsable() ?? ''"
+        (change)="setFiltroResponsable($event)"
+        [disabled]="filtroArea() === null || cargandoResponsablesFiltro()"
+      >
+        <option value="">
+          {{ filtroArea() === null ? 'Elige un área primero' : (cargandoResponsablesFiltro() ? 'Cargando…' : 'Todos') }}
+        </option>
+        @for (responsable of responsablesFiltro(); track responsable.id) {
+          <option [value]="responsable.id">{{ responsable.responsable }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Desde</label>
+      <input type="date" class="ui-input" [value]="filtroDesde()" (input)="setFiltroDesde($event)" />
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Hasta</label>
+      <input type="date" class="ui-input" [value]="filtroHasta()" (input)="setFiltroHasta($event)" />
+    </div>
+
+    <div class="filtros__pie">
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--block" (click)="limpiarFiltros()">
+        <ui-icon name="close" [size]="16" />
+        Limpiar filtros
+      </button>
+    </div>
+  </div>
+</ui-panel-filtros>
 
 <div class="table-card">
   @if (cargando()) {
@@ -95,6 +135,7 @@
         <thead>
           <tr>
             <th>Ticket</th>
+            <th>Descripción</th>
             <th>Centro</th>
             <th>Sistema</th>
             <th>Tipo</th>
@@ -112,9 +153,11 @@
         <tbody>
           @for (incidencia of paginados(); track incidencia.id) {
             <tr>
+              <td><span class="ui-table__primary u-mono">{{ incidencia.ticket }}</span></td>
               <td>
-                <span class="ui-table__primary u-mono">{{ incidencia.ticket }}</span>
-                <span class="cell-sub u-muted">{{ incidencia.descripcion }}</span>
+                <span class="cell-sub u-muted" [title]="incidencia.descripcion">
+                  {{ incidencia.descripcion }}
+                </span>
               </td>
               <td class="u-muted">{{ incidencia.centro ?? '—' }}</td>
               <td class="u-muted">{{ incidencia.sistema ?? '—' }}</td>
@@ -129,6 +172,15 @@
               <td class="u-muted">{{ incidencia.actualizadoPor | actorLabel }}</td>
               <td>
                 <div class="row-actions">
+                  <button
+                    *hasPermiso="permisos.VER_INCIDENCIAS"
+                    type="button"
+                    class="ui-icon-btn"
+                    title="Ver"
+                    (click)="abrirVer(incidencia)"
+                  >
+                    <ui-icon name="ver" [size]="18" />
+                  </button>
                   <button
                     *hasPermiso="permisos.MODIFICAR_INCIDENCIAS"
                     type="button"
@@ -319,6 +371,81 @@
       @if (guardando()) { <span class="ui-spinner" style="width:16px;height:16px"></span> }
       {{ editando() ? 'Guardar cambios' : 'Registrar incidencia' }}
     </button>
+  </div>
+</ui-modal>
+
+<ui-modal
+  [abierto]="verAbierto()"
+  ancho="lg"
+  [titulo]="aVer()?.ticket ?? 'Incidencia'"
+  subtitulo="Detalle de la incidencia"
+  (cerrar)="cerrarVer()"
+>
+  @if (aVer(); as incidencia) {
+    <div class="detalle">
+      <div class="detalle__item detalle__item--full">
+        <span class="detalle__label">Descripción</span>
+        <span class="detalle__valor">{{ incidencia.descripcion }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Ticket</span>
+        <span class="detalle__valor u-mono">{{ incidencia.ticket }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Centro</span>
+        <span class="detalle__valor">{{ incidencia.centro ?? '—' }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Sistema</span>
+        <span class="detalle__valor">{{ incidencia.sistema ?? '—' }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Tipo</span>
+        <span class="detalle__valor">{{ incidencia.tipoIncidencia ?? '—' }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Área</span>
+        <span class="detalle__valor">{{ incidencia.area ?? '—' }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Responsable</span>
+        <span class="detalle__valor">{{ incidencia.responsable ?? '—' }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Hora de inicio</span>
+        <span class="detalle__valor u-mono">{{ hhmm(incidencia.horaInicio) }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Hora de fin</span>
+        <span class="detalle__valor u-mono">{{ hhmm(incidencia.horaFin) }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Tiempo de solución</span>
+        <span class="detalle__valor u-mono">{{ hhmm(incidencia.tiempoSolucion) }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Creado</span>
+        <span class="detalle__valor">{{ incidencia.creadoEn | date: 'dd/MM/yyyy HH:mm' }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Creado por</span>
+        <span class="detalle__valor">{{ incidencia.creadoPor | actorLabel }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Actualizado por</span>
+        <span class="detalle__valor">{{ incidencia.actualizadoPor | actorLabel }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Actualizado</span>
+        <span class="detalle__valor">
+          {{ incidencia.actualizadoEn ? (incidencia.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—' }}
+        </span>
+      </div>
+    </div>
+  }
+
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--primary" (click)="cerrarVer()">Cerrar</button>
   </div>
 </ui-modal>
 

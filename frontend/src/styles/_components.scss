@@ -849,3 +849,87 @@ body.col-resize--activo .col-resize {
 
 .u-muted { color: var(--text-3); }
 .u-mono { font-family: var(--font-mono); font-size: var(--fs-sm); }
+
+/**
+ * Panel de filtros (drawer derecho). Misma coreografía de ocultar/mostrar que
+ * el sidebar "Módulos": velo + panel que se desliza fuera de pantalla.
+ * El diseño de los campos lo aporta cada módulo vía ng-content.
+ */
+$pf-salida: cubic-bezier(0.16, 1, 0.3, 1);
+$pf-entrada: cubic-bezier(0.7, 0, 0.84, 0);
+$pf-panel-dur: 650ms;
+$pf-panel-retardo: 150ms;
+$pf-cierre-dur: 320ms;
+
+.ui-panel-filtros__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-drawer) - 3);
+  background: var(--overlay);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity $pf-cierre-dur $pf-entrada;
+}
+
+.ui-panel-filtros--abierto .ui-panel-filtros__overlay {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 300ms $pf-salida;
+  transition-delay: 100ms;
+}
+
+.ui-panel-filtros__panel {
+  position: fixed;
+  inset: 0 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: min(340px, 86vw);
+  z-index: var(--z-drawer);
+  transform: translateX(100%);
+  transition: transform $pf-cierre-dur $pf-entrada;
+  background: var(--surface);
+  color: var(--text);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  will-change: transform;
+}
+
+.ui-panel-filtros--abierto .ui-panel-filtros__panel {
+  transform: translateX(0);
+  transition: transform $pf-panel-dur $pf-salida;
+  transition-delay: $pf-panel-retardo;
+}
+
+.ui-panel-filtros__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.ui-panel-filtros__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-2);
+}
+
+.ui-panel-filtros__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-panel-filtros__panel,
+  .ui-panel-filtros__overlay {
+    transition-delay: 0ms !important;
+  }
+}

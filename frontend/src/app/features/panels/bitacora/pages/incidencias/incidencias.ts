@@ -26,6 +26,7 @@ import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
+import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 
 type CampoFormulario =
   | 'idDataCentro'
@@ -50,6 +51,7 @@ type CampoFormulario =
     HasPermiso,
     ColumnasRedimensionables,
     Paginador,
+    PanelFiltros,
   ],
   templateUrl: './incidencias.html',
   styleUrl: './incidencias.scss',
@@ -82,6 +84,18 @@ export class Incidencias {
   readonly filtroHasta = signal('');
   readonly responsablesFiltro = signal<Responsable[]>([]);
   readonly cargandoResponsablesFiltro = signal(false);
+  readonly filtrosAbierto = signal(false);
+
+  readonly filtrosActivos = computed(() => {
+    let total = 0;
+    if (this.filtroCentro() !== null) total++;
+    if (this.filtroSistema() !== null) total++;
+    if (this.filtroArea() !== null) total++;
+    if (this.filtroResponsable() !== null) total++;
+    if (this.filtroDesde()) total++;
+    if (this.filtroHasta()) total++;
+    return total;
+  });
 
   readonly filtrados = computed(() => {
     const termino = this.filtroBusqueda().trim().toLowerCase();
@@ -167,6 +181,9 @@ export class Incidencias {
   readonly aEliminar = signal<Incidencia | null>(null);
   readonly eliminando = signal(false);
 
+  readonly verAbierto = signal(false);
+  readonly aVer = signal<Incidencia | null>(null);
+
   constructor() {
     this.directorio.cargar();
     this.cargarCatalogos();
@@ -217,6 +234,10 @@ export class Incidencias {
   buscar(valor: string): void {
     this.filtroBusqueda.set(valor);
     this.pagina.set(1);
+  }
+
+  alternarFiltros(): void {
+    this.filtrosAbierto.update((abierto) => !abierto);
   }
 
   setFiltroCentro(evento: Event): void {
@@ -371,6 +392,16 @@ export class Incidencias {
   confirmarEliminar(incidencia: Incidencia): void {
     this.aEliminar.set(incidencia);
     this.eliminarAbierto.set(true);
+  }
+
+  abrirVer(incidencia: Incidencia): void {
+    this.aVer.set(incidencia);
+    this.verAbierto.set(true);
+  }
+
+  cerrarVer(): void {
+    this.verAbierto.set(false);
+    this.aVer.set(null);
   }
 
   eliminar(): void {

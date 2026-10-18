@@ -69,4 +69,6 @@ export const ICONOS: Record<string, string[]> = {
   sistema: ['M2 2h20v8H2z', 'M2 14h20v8H2z', 'M6 6h.01', 'M6 18h.01'],
   area: ['M2 7h20v14H2z', 'M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'],
   responsable: ['M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0z', 'M5 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1'],
+  filtro: ['M22 3H2l8 9.46V19l4 2v-8.54L22 3z'],
+  ver: ['M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],
 };
