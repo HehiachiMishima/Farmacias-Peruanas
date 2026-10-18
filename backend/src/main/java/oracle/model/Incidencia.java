@@ -2,6 +2,7 @@ package oracle.model;
 
 import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -57,7 +58,7 @@ public class Incidencia extends Auditable {
 
     @Column(name = "hora_fin")
     private LocalTime horaFin;
-
+ 
     @Column(name = "tiempo_solucion")
     private LocalTime tiempoSolucion;
 }

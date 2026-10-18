@@ -68,7 +68,6 @@ CREATE TABLE IF NOT EXISTS data_incidencia (
 -- ============================================================
 -- Incidencias con FKs a los catálogos
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS incidencias (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'Identificador único de la incidencia.',
     id_data_centro BIGINT NOT NULL COMMENT 'FK al catálogo de centros.',
@@ -201,3 +200,4 @@ VALUES (
     )
 ON DUPLICATE KEY UPDATE
     descripcion = VALUES(descripcion);
+
