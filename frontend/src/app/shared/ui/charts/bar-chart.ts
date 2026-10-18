@@ -4,28 +4,53 @@ export interface BarraDato {
   etiqueta: string;
   valor: number;
   color: string;
+  detalle?: string;
 }
 
 @Component({
   selector: 'ui-bars',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="bars" [style.height.px]="altura()">
-      @for (barra of barras(); track barra.etiqueta; let i = $index) {
-        <div class="bars__col">
-          <span class="bars__value">{{ barra.valor }}</span>
-          <div class="bars__track">
-            <div
-              class="bars__fill"
-              [style.height.%]="barra.pct"
-              [style.background]="barra.color"
-              [style.animation-delay]="i * 90 + 'ms'"
-            ></div>
+    @if (horizontal()) {
+      <div class="hbars">
+        @for (barra of barras(); track barra.etiqueta; let i = $index) {
+          <div class="hrow" [style.--bar-color]="barra.color" [style.animation-delay]="i * 70 + 'ms'">
+            <div class="hrow__top">
+              <span class="hrow__label" [title]="barra.etiqueta">{{ barra.etiqueta }}</span>
+              <span class="hrow__meta">
+                <span class="hrow__value">{{ barra.valor }}</span>
+                @if (barra.detalle) {
+                  <span class="hrow__sub">{{ barra.detalle }}</span>
+                }
+              </span>
+            </div>
+            <div class="hrow__track">
+              <div class="hrow__fill" [style.width.%]="barra.pct"></div>
+            </div>
           </div>
-          <span class="bars__label">{{ barra.etiqueta }}</span>
-        </div>
-      }
-    </div>
+        }
+      </div>
+    } @else {
+      <div class="bars" [style.height.px]="altura()">
+        @for (barra of barras(); track barra.etiqueta; let i = $index) {
+          <div class="bars__col">
+            <span class="bars__value">{{ barra.valor }}</span>
+            @if (barra.detalle) {
+              <span class="bars__sub">{{ barra.detalle }}</span>
+            }
+            <div class="bars__track">
+              <div
+                class="bars__fill"
+                [style.height.%]="barra.pct"
+                [style.background]="barra.color"
+                [style.animation-delay]="i * 90 + 'ms'"
+              ></div>
+            </div>
+            <span class="bars__label">{{ barra.etiqueta }}</span>
+          </div>
+        }
+      </div>
+    }
   `,
   styles: `
     :host { display: block; }
@@ -50,6 +75,14 @@ export interface BarraDato {
       font-size: var(--fs-lg);
       font-weight: 600;
       color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .bars__sub {
+      margin-top: calc(var(--space-1) * -1);
+      font-size: var(--fs-xs);
+      font-weight: 600;
+      color: var(--text-3);
       font-variant-numeric: tabular-nums;
     }
 
@@ -82,15 +115,112 @@ export interface BarraDato {
       white-space: nowrap;
     }
 
+    .hbars {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+    }
+
+    .hrow {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius-lg);
+      animation: bar-row var(--transition-slow) both;
+      transition: background var(--transition);
+    }
+
+    .hrow:hover {
+      background: var(--surface-2);
+    }
+
+    .hrow__top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-3);
+    }
+
+    .hrow__label {
+      font-size: var(--fs-md);
+      font-weight: 600;
+      color: var(--text);
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .hrow__meta {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-3);
+      flex: none;
+    }
+
+    .hrow__value {
+      font-size: var(--fs-xl);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--bar-color, var(--brand));
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hrow__sub {
+      font-size: var(--fs-sm);
+      font-weight: 600;
+      color: var(--text-3);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hrow__track {
+      height: 44px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-2);
+      overflow: hidden;
+      transition: background var(--transition);
+    }
+
+    .hrow__fill {
+      height: 100%;
+      border-radius: var(--radius-pill);
+      background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--bar-color, var(--brand)) 62%, transparent),
+        var(--bar-color, var(--brand))
+      );
+      box-shadow: 0 2px 12px color-mix(in srgb, var(--bar-color, var(--brand)) 40%, transparent);
+      transform-origin: left;
+      animation: bar-slide 900ms var(--transition-slow) both;
+    }
+
     @keyframes bar-grow {
       from { transform: scaleY(0); opacity: 0.4; }
       to { transform: scaleY(1); opacity: 1; }
+    }
+
+    @keyframes bar-slide {
+      from { transform: scaleX(0); opacity: 0.4; }
+      to { transform: scaleX(1); opacity: 1; }
+    }
+
+    @keyframes bar-row {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hrow,
+      .hrow__fill,
+      .bars__fill { animation: none; }
     }
   `,
 })
 export class BarChart {
   readonly datos = input<BarraDato[]>([]);
   readonly altura = input<number>(220);
+  readonly horizontal = input<boolean>(false);
 
   readonly barras = computed(() => {
     const datos = this.datos();

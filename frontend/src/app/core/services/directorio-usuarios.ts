@@ -42,4 +42,22 @@ export class DirectorioUsuarios {
   nombre(id: number): string | null {
     return this.nombres().get(id) ?? null;
   }
+
+  /**
+   * Etiqueta legible para las columnas creado_por / actualizado_por.
+   * 0 = sistema/seeding; null = sin dato; sin coincidencia = «Usuario #id».
+   */
+  etiqueta(valor: number | null | undefined): string {
+    if (valor === null || valor === undefined) {
+      return '—';
+    }
+    if (valor === 0) {
+      return 'Sistema';
+    }
+    const nombre = this.nombre(valor);
+    if (!nombre) {
+      return `Usuario #${valor}`;
+    }
+    return nombre.startsWith('@') ? nombre : `@${nombre}`;
+  }
 }

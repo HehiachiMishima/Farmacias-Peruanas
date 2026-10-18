@@ -440,6 +440,8 @@
 
 .toolbar__grow { flex: 1; min-width: 200px; }
 
+.toolbar--end { justify-content: flex-end; }
+
 .table-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -781,6 +783,7 @@ body.col-resize--activo .col-resize {
   width: 100%;
   max-width: 540px;
   max-height: calc(100vh - 2 * var(--space-6));
+  max-height: calc(100dvh - 2 * var(--space-6));
   display: flex;
   flex-direction: column;
   background: var(--surface);

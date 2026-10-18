@@ -21,6 +21,17 @@
     Actualizar
   </button>
   <button
+    *hasPermiso="permisos.VER_INCIDENCIAS"
+    type="button"
+    class="ui-btn ui-btn--secondary ui-btn--sm"
+    title="Exportar a Excel (CSV)"
+    (click)="exportar()"
+    [disabled]="cargando() || filtrados().length === 0"
+  >
+    <ui-icon name="descargar" [size]="16" />
+    Exportar
+  </button>
+  <button
     type="button"
     class="ui-btn ui-btn--secondary"
     [attr.aria-expanded]="filtrosAbierto()"

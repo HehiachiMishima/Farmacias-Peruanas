@@ -12,16 +12,6 @@ export class ActorLabelPipe implements PipeTransform {
   private readonly directorio = inject(DirectorioUsuarios);
 
   transform(valor: number | null | undefined): string {
-    if (valor === null || valor === undefined) {
-      return '—';
-    }
-    if (valor === 0) {
-      return 'Sistema';
-    }
-    const nombre = this.directorio.nombre(valor);
-    if (!nombre) {
-      return `Usuario #${valor}`;
-    }
-    return nombre.startsWith('@') ? nombre : `@${nombre}`;
+    return this.directorio.etiqueta(valor);
   }
 }

@@ -1,0 +1,205 @@
+<header class="page-head">
+  <div>
+    <h1 class="page-head__title">Dashboard</h1>
+    <p class="page-head__sub">Indicadores de la bitácora de incidencias.</p>
+  </div>
+</header>
+
+<div class="toolbar toolbar--end">
+  <button type="button" class="ui-btn ui-btn--secondary" (click)="cargar()" [disabled]="cargando()">
+    <ui-icon name="refresh" [size]="16" />
+    Actualizar
+  </button>
+  <button
+    type="button"
+    class="ui-btn ui-btn--secondary"
+    [attr.aria-expanded]="filtrosAbierto()"
+    aria-controls="dashboard-filtros"
+    (click)="alternarFiltros()"
+  >
+    <ui-icon name="filtro" [size]="18" />
+    Filtros
+    @if (filtrosActivos() > 0) {
+      <span class="filtros-badge">{{ filtrosActivos() }}</span>
+    }
+  </button>
+</div>
+
+<ui-panel-filtros
+  id="dashboard-filtros"
+  [abierto]="filtrosAbierto()"
+  titulo="Filtros"
+  (cerrar)="filtrosAbierto.set(false)"
+>
+  <div class="filtros">
+    <div class="ui-field">
+      <label class="ui-label">Centro</label>
+      <select class="ui-select" [value]="filtroCentro() ?? ''" (change)="setFiltroCentro($event)">
+        <option value="">Todos</option>
+        @for (centro of centros(); track centro.id) {
+          <option [value]="centro.id">{{ centro.centro }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Sistema</label>
+      <select class="ui-select" [value]="filtroSistema() ?? ''" (change)="setFiltroSistema($event)">
+        <option value="">Todos</option>
+        @for (sistema of sistemas(); track sistema.id) {
+          <option [value]="sistema.id">{{ sistema.sistema }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Área</label>
+      <select class="ui-select" [value]="filtroArea() ?? ''" (change)="setFiltroArea($event)">
+        <option value="">Todas</option>
+        @for (area of areas(); track area.id) {
+          <option [value]="area.id">{{ area.area }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Responsable</label>
+      <select
+        class="ui-select"
+        [value]="filtroResponsable() ?? ''"
+        (change)="setFiltroResponsable($event)"
+        [disabled]="filtroArea() === null || cargandoResponsablesFiltro()"
+      >
+        <option value="">
+          {{ filtroArea() === null ? 'Elige un área primero' : (cargandoResponsablesFiltro() ? 'Cargando…' : 'Todos') }}
+        </option>
+        @for (responsable of responsablesFiltro(); track responsable.id) {
+          <option [value]="responsable.id">{{ responsable.responsable }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Desde</label>
+      <input type="date" class="ui-input" [value]="filtroDesde()" (input)="setFiltroDesde($event)" />
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Hasta</label>
+      <input type="date" class="ui-input" [value]="filtroHasta()" (input)="setFiltroHasta($event)" />
+    </div>
+
+    <div class="filtros__pie">
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--block" (click)="limpiarFiltros()">
+        <ui-icon name="close" [size]="16" />
+        Limpiar filtros
+      </button>
+    </div>
+  </div>
+</ui-panel-filtros>
+
+@if (error()) {
+  <div class="table-card">
+    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!">
+      <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()">
+        <ui-icon name="refresh" [size]="16" /> Reintentar
+      </button>
+    </ui-empty>
+  </div>
+} @else {
+  <section class="metrics">
+    <article class="metric metric--brand">
+      <div class="metric__top">
+        <span class="metric__icon"><ui-icon name="incidencias" [size]="20" /></span>
+        <span class="metric__label">Total de incidencias</span>
+      </div>
+      @if (cargando()) {
+        <span class="metric__skeleton ui-skeleton"></span>
+      } @else {
+        <span class="metric__value">{{ totalIncidencias() }}</span>
+      }
+      <span class="metric__detail">Según los filtros aplicados</span>
+    </article>
+
+    <article class="metric metric--success">
+      <div class="metric__top">
+        <span class="metric__icon"><ui-icon name="reloj" [size]="20" /></span>
+        <span class="metric__label">Tiempo total de solución</span>
+      </div>
+      @if (cargando()) {
+        <span class="metric__skeleton ui-skeleton"></span>
+      } @else {
+        <span class="metric__value">{{ totalTiempo() }}</span>
+      }
+      <span class="metric__detail">Suma de incidencias con hora de fin</span>
+    </article>
+  </section>
+
+  <section class="charts">
+    <div class="charts__grid">
+      <article class="chart-card">
+        <header class="chart-card__head">
+          <div>
+            <h3 class="chart-card__title">Sistemas con más incidencias</h3>
+            <p class="chart-card__sub">Top 5 · nº de incidencias y tiempo total de solución</p>
+          </div>
+        </header>
+        <div class="chart-card__body">
+          @if (barrasSistemas().length > 0) {
+            <ui-bars [datos]="barrasSistemas()" [horizontal]="true" />
+          } @else {
+            <p class="chart-card__empty">Sin datos para los filtros aplicados.</p>
+          }
+        </div>
+      </article>
+
+      <article class="chart-card">
+        <header class="chart-card__head">
+          <div>
+            <h3 class="chart-card__title">Tipos de incidencia</h3>
+            <p class="chart-card__sub">Top 5 · nº de incidencias y tiempo total de solución</p>
+          </div>
+        </header>
+        <div class="chart-card__body">
+          @if (barrasTipos().length > 0) {
+            <ui-bars [datos]="barrasTipos()" [horizontal]="true" />
+          } @else {
+            <p class="chart-card__empty">Sin datos para los filtros aplicados.</p>
+          }
+        </div>
+      </article>
+
+      <article class="chart-card">
+        <header class="chart-card__head">
+          <div>
+            <h3 class="chart-card__title">Incidencias por centro</h3>
+            <p class="chart-card__sub">Top 5 · nº de incidencias y tiempo total de solución</p>
+          </div>
+        </header>
+        <div class="chart-card__body">
+          @if (barrasCentros().length > 0) {
+            <ui-bars [datos]="barrasCentros()" [horizontal]="true" />
+          } @else {
+            <p class="chart-card__empty">Sin datos para los filtros aplicados.</p>
+          }
+        </div>
+      </article>
+
+      <article class="chart-card">
+        <header class="chart-card__head">
+          <div>
+            <h3 class="chart-card__title">Incidencias por área</h3>
+            <p class="chart-card__sub">Top 5 · nº de incidencias y tiempo total de solución</p>
+          </div>
+        </header>
+        <div class="chart-card__body">
+          @if (barrasAreas().length > 0) {
+            <ui-bars [datos]="barrasAreas()" [horizontal]="true" />
+          } @else {
+            <p class="chart-card__empty">Sin datos para los filtros aplicados.</p>
+          }
+        </div>
+      </article>
+    </div>
+  </section>
+}

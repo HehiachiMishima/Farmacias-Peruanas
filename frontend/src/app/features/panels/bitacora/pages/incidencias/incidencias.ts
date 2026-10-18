@@ -1,9 +1,10 @@
-import { DatePipe } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { DatePipe, formatDate } from '@angular/common';
+import { Component, LOCALE_ID, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
+import { exportarCsv } from '../../../../../core/utils/csv.util';
 import {
   Area,
   Centro,
@@ -39,6 +40,22 @@ type CampoFormulario =
   | 'horaInicio'
   | 'fechaCreacion';
 
+const CABECERAS_EXPORT = [
+  'Ticket',
+  'Descripción',
+  'Centro',
+  'Sistema',
+  'Tipo',
+  'Área',
+  'Responsable',
+  'Hora inicio',
+  'Hora fin',
+  'Tiempo de solución',
+  'Creado',
+  'Creado por',
+  'Actualizado por',
+];
+
 @Component({
   selector: 'app-bitacora-incidencias',
   imports: [
@@ -64,6 +81,7 @@ export class Incidencias {
   private readonly areasApi = inject(AreasApi);
   private readonly notificaciones = inject(Notificaciones);
   private readonly directorio = inject(DirectorioUsuarios);
+  private readonly locale = inject(LOCALE_ID);
 
   readonly permisos = PERMISOS;
 
@@ -229,6 +247,25 @@ export class Incidencias {
 
   hhmm(valor: string | null): string {
     return valor ? valor.slice(0, 5) : '—';
+  }
+
+  exportar(): void {
+    const filas = this.filtrados().map((incidencia) => [
+      incidencia.ticket,
+      incidencia.descripcion,
+      incidencia.centro ?? '—',
+      incidencia.sistema ?? '—',
+      incidencia.tipoIncidencia ?? '—',
+      incidencia.area ?? '—',
+      incidencia.responsable ?? '—',
+      incidencia.horaInicio,
+      incidencia.horaFin ?? '—',
+      incidencia.tiempoSolucion ?? '—',
+      formatDate(incidencia.creadoEn, 'dd/MM/yyyy HH:mm', this.locale),
+      this.directorio.etiqueta(incidencia.creadoPor),
+      this.directorio.etiqueta(incidencia.actualizadoPor),
+    ]);
+    exportarCsv(`incidencias_${this.hoy()}.csv`, CABECERAS_EXPORT, filas);
   }
 
   buscar(valor: string): void {

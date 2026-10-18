@@ -1,3 +1,5 @@
+@use 'breakpoints' as bp;
+
 .filtros {
   display: flex;
   flex-direction: column;
@@ -71,4 +73,10 @@
 .detalle__valor {
   color: var(--text);
   overflow-wrap: anywhere;
+}
+
+@include bp.down(sm) {
+  .detalle {
+    grid-template-columns: 1fr;
+  }
 }
