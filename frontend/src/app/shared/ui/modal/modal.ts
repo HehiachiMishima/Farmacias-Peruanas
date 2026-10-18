@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { Icon } from '../icon/icon';
 
-export type AnchoModal = 'sm' | 'md' | 'lg';
+export type AnchoModal = 'sm' | 'md' | 'lg' | 'xl';
 
 const ENFOCABLES =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
