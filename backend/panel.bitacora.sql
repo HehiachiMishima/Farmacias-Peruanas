@@ -144,8 +144,15 @@ VALUES (
         1
     ),
     (
+        'CREAR_INCIDENCIAS',
+        'Permite registrar incidencias.',
+        TRUE,
+        1,
+        1
+    ),
+    (
         'MODIFICAR_INCIDENCIAS',
-        'Permite crear y editar incidencias.',
+        'Permite editar incidencias.',
         TRUE,
         1,
         1
@@ -165,8 +172,15 @@ VALUES (
         1
     ),
     (
+        'CREAR_CONTROL',
+        'Permite crear catálogos de control.',
+        TRUE,
+        1,
+        1
+    ),
+    (
         'MODIFICAR_CONTROL',
-        'Permite crear y editar catálogos de control.',
+        'Permite editar catálogos de control.',
         TRUE,
         1,
         1

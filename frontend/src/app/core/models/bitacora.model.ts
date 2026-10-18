@@ -84,3 +84,41 @@ export interface TipoIncidenciaCrearRequest {
 export interface TipoIncidenciaActualizarRequest {
   incidencia?: string;
 }
+
+export interface Incidencia {
+  id: number;
+  idDataCentro: number;
+  centro: string | null;
+  idDataSistema: number;
+  sistema: string | null;
+  idDataIncidencia: number;
+  tipoIncidencia: string | null;
+  ticket: string;
+  idDataArea: number;
+  area: string | null;
+  idDataResponsable: number;
+  responsable: string | null;
+  descripcion: string;
+  horaInicio: string;
+  horaFin: string | null;
+  tiempoSolucion: string | null;
+  creadoEn: string;
+  actualizadoEn: string | null;
+  creadoPor: number | null;
+  actualizadoPor: number | null;
+}
+
+export interface IncidenciaCrearRequest {
+  idDataCentro: number;
+  idDataSistema: number;
+  idDataIncidencia: number;
+  ticket: string;
+  idDataArea: number;
+  idDataResponsable: number;
+  descripcion: string;
+  horaInicio: string;
+  horaFin: string | null;
+  fechaCreacion: string;
+}
+
+export type IncidenciaActualizarRequest = IncidenciaCrearRequest;

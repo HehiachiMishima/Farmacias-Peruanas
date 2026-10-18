@@ -13,7 +13,7 @@
 
 services:
   - type: web
-    name: hehiachi-mishima
+    name: farmacias-peruanas
     runtime: docker
     plan: free
     region: oregon
