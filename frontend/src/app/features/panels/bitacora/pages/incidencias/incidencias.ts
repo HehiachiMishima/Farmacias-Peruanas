@@ -53,6 +53,7 @@ const CABECERAS_EXPORT = [
   'Tiempo de solución',
   'Creado',
   'Creado por',
+  'Actualizado',
   'Actualizado por',
 ];
 
@@ -263,9 +264,16 @@ export class Incidencias {
       incidencia.tiempoSolucion ?? '—',
       formatDate(incidencia.creadoEn, 'dd/MM/yyyy HH:mm', this.locale),
       this.directorio.etiqueta(incidencia.creadoPor),
+      incidencia.actualizadoEn
+        ? formatDate(incidencia.actualizadoEn, 'dd/MM/yyyy HH:mm', this.locale)
+        : '—',
       this.directorio.etiqueta(incidencia.actualizadoPor),
     ]);
     exportarCsv(`incidencias_${this.hoy()}.csv`, CABECERAS_EXPORT, filas);
+    this.notificaciones.exito(
+      'Exportado',
+      `Se exportaron ${filas.length} ${filas.length === 1 ? 'incidencia' : 'incidencias'} a Excel (CSV).`,
+    );
   }
 
   buscar(valor: string): void {

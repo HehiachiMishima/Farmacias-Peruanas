@@ -157,6 +157,7 @@
             <th>Solución</th>
             <th>Creado</th>
             <th>Creado por</th>
+            <th>Actualizado</th>
             <th>Actualizado por</th>
             <th class="col-actions">Acciones</th>
           </tr>
@@ -180,6 +181,7 @@
               <td class="u-mono">{{ hhmm(incidencia.tiempoSolucion) }}</td>
               <td class="u-muted">{{ incidencia.creadoEn | date: 'dd/MM/yyyy' }}</td>
               <td class="u-muted">{{ incidencia.creadoPor | actorLabel }}</td>
+              <td class="u-muted">{{ incidencia.actualizadoEn ? (incidencia.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—' }}</td>
               <td class="u-muted">{{ incidencia.actualizadoPor | actorLabel }}</td>
               <td>
                 <div class="row-actions">
