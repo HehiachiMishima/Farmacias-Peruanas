@@ -1,3 +1,4 @@
+-- Active: 1791152181635@@127.0.0.1@3306@farmacias_peruanas
 -- ============================================================
 -- ESQUEMA: RBAC + Overrides
 -- ============================================================
@@ -21,9 +22,9 @@
 --       - No se pueden eliminar.
 --       - No se pueden renombrar, cambiar descripción ni desactivar.
 
-CREATE DATABASE IF NOT EXISTS hehiachi_mishima CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS farmacias_peruanas CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-USE hehiachi_mishima;
+USE farmacias_peruanas;
 
 SET NAMES utf8mb4;
 
@@ -198,17 +199,20 @@ AFTER INSERT ON permisos
 FOR EACH ROW
 BEGIN
     DECLARE v_admin_id BIGINT;
-    SELECT id INTO v_admin_id
-    FROM roles
-    WHERE nombre = 'ADMINISTRADOR'
-    LIMIT 1;
+
+    SELECT id
+      INTO v_admin_id
+      FROM roles
+     WHERE nombre = 'ADMINISTRADOR'
+     LIMIT 1;
+
     IF v_admin_id IS NOT NULL THEN
         INSERT IGNORE INTO roles_permisos (rol_id, permiso_id, creado_por)
         VALUES (v_admin_id, NEW.id, 0);
     END IF;
 END$$
 
-DELIMITER ;
+DELIMITER;
 
 -- ============================================================
 -- DATOS INICIALES
@@ -395,7 +399,12 @@ BEFORE DELETE ON roles_permisos
 FOR EACH ROW
 BEGIN
     DECLARE v_nombre VARCHAR(50);
-    SELECT nombre INTO v_nombre FROM roles WHERE id = OLD.rol_id;
+
+    SELECT nombre
+      INTO v_nombre
+      FROM roles
+     WHERE id = OLD.rol_id;
+
     IF v_nombre = 'ADMINISTRADOR' THEN
         SIGNAL SQLSTATE '45000'
             SET MESSAGE_TEXT = 'No se pueden quitar permisos al rol ADMINISTRADOR. Solo se pueden agregar.';
@@ -435,4 +444,4 @@ BEGIN
     END IF;
 END$$
 
-DELIMITER ;
+DELIMITER;

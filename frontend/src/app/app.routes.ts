@@ -25,5 +25,11 @@ export const routes: Routes = [
     canActivate: [permisoGuard(PERMISOS.PANEL_ADMIN)],
     loadChildren: () => import('./features/panels/admin/admin.routes').then((m) => m.ADMIN_ROUTES),
   },
+  {
+    path: 'bitacora',
+    canActivate: [permisoGuard(PERMISOS.PANEL_BITACORA)],
+    loadChildren: () =>
+      import('./features/panels/bitacora/bitacora.routes').then((m) => m.BITACORA_ROUTES),
+  },
   { path: '**', redirectTo: '' },
 ];

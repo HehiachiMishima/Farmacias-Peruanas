@@ -1,28 +1,28 @@
-import { Component, HostListener, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, computed, inject, input, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { PANEL_ADMIN } from '../../../core/config/paneles';
-import { Auth } from '../../../core/services/auth';
-import { TemaService } from '../../../core/services/tema';
-import { Icon } from '../../../shared/ui/icon/icon';
+import { PanelDef } from '../../core/config/paneles';
+import { Auth } from '../../core/services/auth';
+import { TemaService } from '../../core/services/tema';
+import { Icon } from '../../shared/ui/icon/icon';
 
 @Component({
-  selector: 'app-admin-shell',
+  selector: 'app-panel-shell',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon],
-  templateUrl: './admin-shell.html',
-  styleUrl: './admin-shell.scss',
+  templateUrl: './panel-shell.html',
+  styleUrl: './panel-shell.scss',
 })
-export class AdminShell {
+export class PanelShell {
   private readonly auth = inject(Auth);
   private readonly router = inject(Router);
   readonly tema = inject(TemaService);
 
-  readonly panel = PANEL_ADMIN;
+  readonly panel = input.required<PanelDef>();
   readonly usuario = this.auth.usuario;
   readonly menuAbierto = signal(this.pantallaGrande());
 
   readonly modulos = computed(() => {
     const permisos = this.auth.permisos();
-    return this.panel.modulos.filter((modulo) => permisos.includes(modulo.permiso));
+    return this.panel().modulos.filter((modulo) => permisos.includes(modulo.permiso));
   });
 
   readonly iniciales = computed(() => {

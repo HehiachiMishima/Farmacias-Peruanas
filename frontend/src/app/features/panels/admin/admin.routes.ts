@@ -4,7 +4,7 @@ import { PANEL_ADMIN, primerModuloAccesible } from '../../../core/config/paneles
 import { PERMISOS } from '../../../core/config/permisos';
 import { permisoGuard } from '../../../core/guards/permiso.guard';
 import { SesionStore } from '../../../core/services/sesion';
-import { AdminShell } from './admin-shell';
+import { PanelShell } from '../panel-shell';
 
 function primerModuloAdmin(): string {
   try {
@@ -18,7 +18,8 @@ function primerModuloAdmin(): string {
 export const ADMIN_ROUTES: Routes = [
   {
     path: '',
-    component: AdminShell,
+    component: PanelShell,
+    data: { panel: PANEL_ADMIN },
     children: [
       { path: '', pathMatch: 'full', redirectTo: primerModuloAdmin },
       {

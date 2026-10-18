@@ -1,0 +1,20 @@
+package oracle.response;
+
+import java.time.LocalDateTime;
+import oracle.model.DataCentro;
+
+/** Salida publica de centro. */
+public record CentroResponse(
+        Long id,
+        String centro,
+        LocalDateTime creadoEn,
+        LocalDateTime actualizadoEn,
+        Long creadoPor,
+        Long actualizadoPor) {
+
+    public static CentroResponse of(DataCentro c) {
+        return new CentroResponse(
+                c.getId(), c.getCentro(), c.getCreadoEn(), c.getActualizadoEn(),
+                c.getCreadoPor(), c.getActualizadoPor());
+    }
+}
