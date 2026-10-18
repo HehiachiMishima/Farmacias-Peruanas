@@ -19,6 +19,9 @@ export class ActorLabelPipe implements PipeTransform {
       return 'Sistema';
     }
     const nombre = this.directorio.nombre(valor);
-    return nombre ? `@${nombre}` : `Usuario #${valor}`;
+    if (!nombre) {
+      return `Usuario #${valor}`;
+    }
+    return nombre.startsWith('@') ? nombre : `@${nombre}`;
   }
 }

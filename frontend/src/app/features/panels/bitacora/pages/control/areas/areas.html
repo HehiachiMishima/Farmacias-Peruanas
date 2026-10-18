@@ -192,40 +192,53 @@
   } @else if (hijosLista().length === 0) {
     <ui-empty icono="responsable" titulo="Sin responsables" mensaje="Esta área aún no tiene responsables." />
   } @else {
-    <ul class="child-list">
-      @for (responsable of hijosLista(); track responsable.id) {
-        <li class="child-item">
-          <span class="child-item__icon"><ui-icon name="responsable" [size]="18" /></span>
-          <span class="child-item__text">
-            <span class="child-item__name">{{ responsable.responsable }}</span>
-            <span class="child-item__desc">
-              Creado por {{ responsable.creadoPor | actorLabel }} ·
-              {{ responsable.creadoEn | date: 'dd/MM/yyyy HH:mm' }}
-            </span>
-          </span>
-          <div class="row-actions">
-            <button
-              *hasPermiso="permisos.MODIFICAR_CONTROL"
-              type="button"
-              class="ui-icon-btn"
-              title="Editar"
-              (click)="abrirHijoEditar(responsable)"
-            >
-              <ui-icon name="edit" [size]="16" />
-            </button>
-            <button
-              *hasPermiso="permisos.ELIMINAR_CONTROL"
-              type="button"
-              class="ui-icon-btn ui-icon-btn--danger"
-              title="Eliminar"
-              (click)="confirmarEliminarHijo(responsable)"
-            >
-              <ui-icon name="trash" [size]="16" />
-            </button>
-          </div>
-        </li>
-      }
-    </ul>
+    <div class="ui-table-wrap">
+      <table class="ui-table">
+        <thead>
+          <tr>
+            <th>Responsable</th>
+            <th>Creado por</th>
+            <th>Actualizado por</th>
+            <th>Creado</th>
+            <th>Actualizado</th>
+            <th class="col-actions">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (responsable of hijosLista(); track responsable.id) {
+            <tr>
+              <td><span class="ui-table__primary">{{ responsable.responsable }}</span></td>
+              <td class="u-muted">{{ responsable.creadoPor | actorLabel }}</td>
+              <td class="u-muted">{{ responsable.actualizadoPor | actorLabel }}</td>
+              <td class="u-muted">{{ responsable.creadoEn | date: 'dd/MM/yyyy HH:mm' }}</td>
+              <td class="u-muted">{{ responsable.actualizadoEn ? (responsable.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—' }}</td>
+              <td>
+                <div class="row-actions">
+                  <button
+                    *hasPermiso="permisos.MODIFICAR_CONTROL"
+                    type="button"
+                    class="ui-icon-btn"
+                    title="Editar"
+                    (click)="abrirHijoEditar(responsable)"
+                  >
+                    <ui-icon name="edit" [size]="16" />
+                  </button>
+                  <button
+                    *hasPermiso="permisos.ELIMINAR_CONTROL"
+                    type="button"
+                    class="ui-icon-btn ui-icon-btn--danger"
+                    title="Eliminar"
+                    (click)="confirmarEliminarHijo(responsable)"
+                  >
+                    <ui-icon name="trash" [size]="16" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   }
 
   <div modal-footer class="modal-foot">

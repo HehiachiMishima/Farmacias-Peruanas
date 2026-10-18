@@ -192,40 +192,53 @@
   } @else if (tiposLista().length === 0) {
     <ui-empty icono="incidencias" titulo="Sin tipos" mensaje="Este sistema aún no tiene tipos de incidencia." />
   } @else {
-    <ul class="child-list">
-      @for (tipo of tiposLista(); track tipo.id) {
-        <li class="child-item">
-          <span class="child-item__icon"><ui-icon name="incidencias" [size]="18" /></span>
-          <span class="child-item__text">
-            <span class="child-item__name">{{ tipo.incidencia }}</span>
-            <span class="child-item__desc">
-              Creado por {{ tipo.creadoPor | actorLabel }} ·
-              {{ tipo.creadoEn | date: 'dd/MM/yyyy HH:mm' }}
-            </span>
-          </span>
-          <div class="row-actions">
-            <button
-              *hasPermiso="permisos.MODIFICAR_CONTROL"
-              type="button"
-              class="ui-icon-btn"
-              title="Editar"
-              (click)="abrirTipoEditar(tipo)"
-            >
-              <ui-icon name="edit" [size]="16" />
-            </button>
-            <button
-              *hasPermiso="permisos.ELIMINAR_CONTROL"
-              type="button"
-              class="ui-icon-btn ui-icon-btn--danger"
-              title="Eliminar"
-              (click)="confirmarEliminarTipo(tipo)"
-            >
-              <ui-icon name="trash" [size]="16" />
-            </button>
-          </div>
-        </li>
-      }
-    </ul>
+    <div class="ui-table-wrap">
+      <table class="ui-table">
+        <thead>
+          <tr>
+            <th>Tipo de incidencia</th>
+            <th>Creado por</th>
+            <th>Actualizado por</th>
+            <th>Creado</th>
+            <th>Actualizado</th>
+            <th class="col-actions">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (tipo of tiposLista(); track tipo.id) {
+            <tr>
+              <td><span class="ui-table__primary">{{ tipo.incidencia }}</span></td>
+              <td class="u-muted">{{ tipo.creadoPor | actorLabel }}</td>
+              <td class="u-muted">{{ tipo.actualizadoPor | actorLabel }}</td>
+              <td class="u-muted">{{ tipo.creadoEn | date: 'dd/MM/yyyy HH:mm' }}</td>
+              <td class="u-muted">{{ tipo.actualizadoEn ? (tipo.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—' }}</td>
+              <td>
+                <div class="row-actions">
+                  <button
+                    *hasPermiso="permisos.MODIFICAR_CONTROL"
+                    type="button"
+                    class="ui-icon-btn"
+                    title="Editar"
+                    (click)="abrirTipoEditar(tipo)"
+                  >
+                    <ui-icon name="edit" [size]="16" />
+                  </button>
+                  <button
+                    *hasPermiso="permisos.ELIMINAR_CONTROL"
+                    type="button"
+                    class="ui-icon-btn ui-icon-btn--danger"
+                    title="Eliminar"
+                    (click)="confirmarEliminarTipo(tipo)"
+                  >
+                    <ui-icon name="trash" [size]="16" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   }
 
   <div modal-footer class="modal-foot">

@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { PERMISOS } from '../../../../../../core/config/permisos';
 import { Notificaciones } from '../../../../../../core/services/notificaciones';
+import { DirectorioUsuarios } from '../../../../../../core/services/directorio-usuarios';
 import { AreasApi } from '../../../../../../core/services/areas.api';
 import { Area, Responsable } from '../../../../../../core/models';
 import { HasPermiso } from '../../../../../../shared/directives/has-permiso.directive';
@@ -35,6 +36,7 @@ export class Areas {
   private readonly fb = inject(FormBuilder);
   private readonly areasApi = inject(AreasApi);
   private readonly notificaciones = inject(Notificaciones);
+  private readonly directorio = inject(DirectorioUsuarios);
 
   readonly permisos = PERMISOS;
 
@@ -108,6 +110,7 @@ export class Areas {
   readonly hijoEliminando = signal(false);
 
   constructor() {
+    this.directorio.cargar();
     this.cargar();
   }
 

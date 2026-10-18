@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { PERMISOS } from '../../../../../../core/config/permisos';
 import { Notificaciones } from '../../../../../../core/services/notificaciones';
+import { DirectorioUsuarios } from '../../../../../../core/services/directorio-usuarios';
 import { CentrosApi } from '../../../../../../core/services/centros.api';
 import { Centro } from '../../../../../../core/models';
 import { HasPermiso } from '../../../../../../shared/directives/has-permiso.directive';
@@ -35,6 +36,7 @@ export class Centros {
   private readonly fb = inject(FormBuilder);
   private readonly centrosApi = inject(CentrosApi);
   private readonly notificaciones = inject(Notificaciones);
+  private readonly directorio = inject(DirectorioUsuarios);
 
   readonly permisos = PERMISOS;
 
@@ -91,6 +93,7 @@ export class Centros {
   readonly eliminando = signal(false);
 
   constructor() {
+    this.directorio.cargar();
     this.cargar();
   }
 
