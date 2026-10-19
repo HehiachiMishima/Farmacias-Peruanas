@@ -47,7 +47,7 @@ services:
       # Origen permitido = URL publica de este mismo servicio.
       - key: CORS_ALLOWED_ORIGINS
         fromService:
-          name: hehiachi-mishima
+          name: farmacias-peruanas
           type: web
           name: farmacias-peruanas
           envVarKey: RENDER_EXTERNAL_URL
