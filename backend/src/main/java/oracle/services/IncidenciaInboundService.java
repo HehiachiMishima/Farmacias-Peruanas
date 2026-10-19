@@ -24,7 +24,6 @@ import oracle.response.ApiResponse;
 import oracle.response.EstadisticaInboundResponse;
 import oracle.response.IncidenciaInboundResponse;
 import oracle.response.PaginaResponse;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
