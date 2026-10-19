@@ -36,8 +36,8 @@ services:
         sync: false
       - key: DB_PASSWORD
         sync: false
-      - key: DB_PARAMS
-        sync: false
+      - key: SSL_MODE
+        value: REQUIRED
 
       # --- Seguridad ---
       - key: JWT_SECRET
