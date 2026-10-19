@@ -11,8 +11,8 @@
   </button>
 </div>
 
-<div class="table-card">
-  @if (cargando()) {
+<div class="table-card" [class.table-card--refrescando]="refrescando()">
+  @if (cargando() && items().length === 0) {
     <div class="loading"><span class="ui-spinner"></span> Cargando tipos…</div>
   } @else if (error()) {
     <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!">

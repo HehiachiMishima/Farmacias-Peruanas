@@ -59,21 +59,21 @@
   <div class="filtros">
     <div class="ui-field">
       <label class="ui-label">Proveedor</label>
-      <select class="ui-select" [value]="filtroProveedor() ?? ''" (change)="setFiltroProveedor($event)">
-        <option value="">Todos</option>
-        @for (p of proveedores(); track p.id) {
-          <option [value]="p.id">{{ p.proveedor }}</option>
-        }
-      </select>
+      <ui-select-buscable
+        [opciones]="opcionesProveedor()"
+        [valor]="filtroProveedor()"
+        placeholder="Todos los proveedores"
+        (valorCambia)="setFiltroProveedor($event)"
+      />
     </div>
     <div class="ui-field">
       <label class="ui-label">Tipo</label>
-      <select class="ui-select" [value]="filtroTipo() ?? ''" (change)="setFiltroTipo($event)">
-        <option value="">Todos</option>
-        @for (t of tipos(); track t.id) {
-          <option [value]="t.id">{{ t.incidenciaInbound }}</option>
-        }
-      </select>
+      <ui-select-buscable
+        [opciones]="opcionesTipo()"
+        [valor]="filtroTipo()"
+        placeholder="Todos los tipos"
+        (valorCambia)="setFiltroTipo($event)"
+      />
     </div>
     <div class="ui-field">
       <label class="ui-label">Desde</label>
@@ -92,8 +92,8 @@
   </div>
 </ui-panel-filtros>
 
-<div class="table-card">
-  @if (cargando()) {
+<div class="table-card" [class.table-card--refrescando]="refrescando()">
+  @if (cargando() && items().length === 0) {
     <div class="loading"><span class="ui-spinner"></span> Cargando incidencias…</div>
   } @else if (error()) {
     <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!">
@@ -155,17 +155,25 @@
     </div>
     <div class="ui-field">
       <label class="ui-label">Proveedor <span class="ui-required">*</span></label>
-      <select class="ui-select" [class.ui-input--invalid]="campoInvalido('idDataProveedor')" formControlName="idDataProveedor">
-        <option [ngValue]="null">Seleccione…</option>
-        @for (p of proveedores(); track p.id) { <option [ngValue]="p.id">{{ p.proveedor }}</option> }
-      </select>
+      <ui-select-buscable
+        [opciones]="opcionesProveedor()"
+        [valor]="formulario.controls.idDataProveedor.value"
+        [invalido]="campoInvalido('idDataProveedor')"
+        placeholder="Escribir para buscar proveedor…"
+        (valorCambia)="formulario.controls.idDataProveedor.setValue($event); formulario.controls.idDataProveedor.markAsDirty()"
+      />
+      @if (campoInvalido('idDataProveedor')) { <span class="ui-error">Obligatorio.</span> }
     </div>
     <div class="ui-field">
       <label class="ui-label">Tipo <span class="ui-required">*</span></label>
-      <select class="ui-select" [class.ui-input--invalid]="campoInvalido('idDataIncidenciaInbound')" formControlName="idDataIncidenciaInbound">
-        <option [ngValue]="null">Seleccione…</option>
-        @for (t of tipos(); track t.id) { <option [ngValue]="t.id">{{ t.incidenciaInbound }}</option> }
-      </select>
+      <ui-select-buscable
+        [opciones]="opcionesTipo()"
+        [valor]="formulario.controls.idDataIncidenciaInbound.value"
+        [invalido]="campoInvalido('idDataIncidenciaInbound')"
+        placeholder="Escribir para buscar tipo…"
+        (valorCambia)="formulario.controls.idDataIncidenciaInbound.setValue($event); formulario.controls.idDataIncidenciaInbound.markAsDirty()"
+      />
+      @if (campoInvalido('idDataIncidenciaInbound')) { <span class="ui-error">Obligatorio.</span> }
     </div>
     <div class="ui-field">
       <label class="ui-label">SKU <span class="ui-required">*</span></label>

@@ -37,6 +37,8 @@ export class ProveedoresInbound {
   readonly total = signal(0);
   readonly busqueda = signal('');
 
+  readonly refrescando = computed(() => this.cargando() && this.items().length > 0);
+
   private readonly busqueda$ = new Subject<string>();
 
   readonly pagina = signal(1);

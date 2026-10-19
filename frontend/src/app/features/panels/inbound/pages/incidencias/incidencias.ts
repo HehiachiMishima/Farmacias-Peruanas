@@ -12,7 +12,7 @@ import {
   IncidenciaInboundFiltros,
 } from '../../../../../core/models';
 import { DirectorioUsuarios } from '../../../../../core/services/directorio-usuarios';
-import { InboundControlApi } from '../../../../../core/services/inbound-control.api';
+import { InboundCatalogos } from '../../../../../core/services/inbound-catalogos';
 import { InboundIncidenciasApi } from '../../../../../core/services/inbound-incidencias.api';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
@@ -22,6 +22,7 @@ import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
+import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
 
 type CampoFormulario =
@@ -45,14 +46,14 @@ const CABECERAS_EXPORT = [
 
 @Component({
   selector: 'app-inbound-incidencias',
-  imports: [ReactiveFormsModule, DatePipe, ActorLabelPipe, Icon, Modal, EmptyState, HasPermiso, ColumnasRedimensionables, Paginador, PanelFiltros],
+  imports: [ReactiveFormsModule, DatePipe, ActorLabelPipe, Icon, Modal, EmptyState, HasPermiso, ColumnasRedimensionables, Paginador, PanelFiltros, SelectBuscable],
   templateUrl: './incidencias.html',
   styleUrl: './incidencias.scss',
 })
 export class InboundIncidencias {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(InboundIncidenciasApi);
-  private readonly controlApi = inject(InboundControlApi);
+  private readonly catalogos = inject(InboundCatalogos);
   private readonly notificaciones = inject(Notificaciones);
   private readonly directorio = inject(DirectorioUsuarios);
   private readonly locale = inject(LOCALE_ID);
@@ -64,8 +65,13 @@ export class InboundIncidencias {
   readonly items = signal<IncidenciaInbound[]>([]);
   readonly total = signal(0);
 
-  readonly proveedores = signal<any[]>([]);
-  readonly tipos = signal<any[]>([]);
+  readonly refrescando = computed(() => this.cargando() && this.items().length > 0);
+
+  readonly proveedores = this.catalogos.proveedores;
+  readonly tipos = this.catalogos.tipos;
+
+  readonly opcionesProveedor = computed(() => this.proveedores().map((p) => ({ id: p.id, etiqueta: p.proveedor })));
+  readonly opcionesTipo = computed(() => this.tipos().map((t) => ({ id: t.id, etiqueta: t.incidenciaInbound })));
 
   readonly filtroBusqueda = signal('');
   readonly filtroProveedor = signal<number | null>(null);
@@ -115,7 +121,7 @@ export class InboundIncidencias {
 
   constructor() {
     this.directorio.cargar();
-    this.cargarCatalogos();
+    this.catalogos.cargar();
     this.cargar();
 
     this.busqueda$
@@ -124,17 +130,6 @@ export class InboundIncidencias {
         this.filtroBusqueda.set(valor);
         this.cargarDesde(1);
       });
-  }
-
-  cargarCatalogos(): void {
-    this.controlApi.listarProveedores().subscribe({
-      next: (l) => this.proveedores.set(l),
-      error: (err: unknown) => this.notificaciones.error('No se pudieron cargar los proveedores', mensajeDeError(err)),
-    });
-    this.controlApi.listarTipos().subscribe({
-      next: (l) => this.tipos.set(l),
-      error: (err: unknown) => this.notificaciones.error('No se pudieron cargar los tipos', mensajeDeError(err)),
-    });
   }
 
   cargar(): void {
@@ -201,15 +196,13 @@ export class InboundIncidencias {
 
   alternarFiltros(): void { this.filtrosAbierto.update((a) => !a); }
 
-  setFiltroProveedor(evento: Event): void {
-    const v = (evento.target as HTMLSelectElement).value;
-    this.filtroProveedor.set(v ? Number(v) : null);
+  setFiltroProveedor(id: number | null): void {
+    this.filtroProveedor.set(id);
     this.cargarDesde(1);
   }
 
-  setFiltroTipo(evento: Event): void {
-    const v = (evento.target as HTMLSelectElement).value;
-    this.filtroTipo.set(v ? Number(v) : null);
+  setFiltroTipo(id: number | null): void {
+    this.filtroTipo.set(id);
     this.cargarDesde(1);
   }
 
