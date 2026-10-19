@@ -1,4 +1,5 @@
--- Active: 1791152181635@@127.0.0.1@3306@farmacias_peruanas
+-- Active: 1791863596251@@mysql-hehiachi-mishima-servidor-local.g.aivencloud.com@25590@farmacias_peruanas
+
 -- ============================================================
 -- ESQUEMA: RBAC + Overrides
 -- ============================================================
@@ -23,7 +24,6 @@
 --       - No se pueden renombrar, cambiar descripción ni desactivar.
 
 CREATE DATABASE IF NOT EXISTS farmacias_peruanas CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
 USE farmacias_peruanas;
 
 SET NAMES utf8mb4;

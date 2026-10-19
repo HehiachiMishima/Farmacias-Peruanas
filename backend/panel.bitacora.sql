@@ -1,4 +1,4 @@
--- Active: 1791152181635@@127.0.0.1@3306@farmacias_peruanas
+-- Active: 1791863596251@@mysql-hehiachi-mishima-servidor-local.g.aivencloud.com@25590@farmacias_peruanas
 -- ============================================================
 -- Catálogos / desplegables
 -- ============================================================
