@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Subject, debounceTime, distinctUntilChanged, finalize } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, finalize, switchMap } from 'rxjs';
 import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { PERMISOS } from '../../../../../../core/config/permisos';
 import { Notificaciones } from '../../../../../../core/services/notificaciones';
@@ -63,10 +63,24 @@ export class ProveedoresInbound {
     this.cargar();
 
     this.busqueda$
-      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
-      .subscribe((valor) => {
-        this.busqueda.set(valor);
-        this.cargarDesde(1);
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        takeUntilDestroyed(),
+        switchMap((valor: string) => {
+          this.busqueda.set(valor);
+          this.pagina.set(1);
+          this.cargando.set(true);
+          this.error.set(null);
+          return this.api.listarProveedoresPaginado(1, this.porPagina(), this.busqueda()).pipe(finalize(() => this.cargando.set(false)));
+        })
+      )
+      .subscribe({
+        next: (pagina) => {
+          this.items.set(pagina.contenido);
+          this.total.set(pagina.total);
+        },
+        error: (err: unknown) => this.error.set(mensajeDeError(err)),
       });
   }
 

@@ -161,6 +161,12 @@ Base: `/api`
 
 ---
 
+## Rendimiento y escalado
+
+- **Frontend**: búsqueda con debounce (300ms), `distinctUntilChanged` y `switchMap` (cancela requests anteriores para evitar respuestas fuera de orden). Componentes con `@for` + `trackBy` (id). Lazy loading por rutas.
+- **Backend**: cache en memoria de catálogos (TTL 10 min) compartido entre servicios para evitar `findAll()` por página (reduce N+1). Vistas + JdbcTemplate para resolución de permisos, `open-in-view=false`, virtual threads habilitados. Timeouts y pools configurados.
+- **API**: respuestas estructuradas, manejo global de errores (`@RestControllerAdvice`), CORS configurable, rate limiting de login por IP/ventana.
+
 ## Seguridad
 
 - `backend/.env` esta ignorado por Git; **no** lo subas.

@@ -8,7 +8,6 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import oracle.exception.ConflictoException;
 import oracle.exception.RecursoNoEncontradoException;
 import oracle.model.DataArea;
@@ -23,6 +22,7 @@ import oracle.repository.DataIncidenciaRepository;
 import oracle.repository.DataResponsableRepository;
 import oracle.repository.DataSistemaRepository;
 import oracle.repository.EstadisticaIncidenciaRepository;
+import oracle.config.CatalogoCache;
 import oracle.repository.IncidenciaRepository;
 import oracle.request.FiltroIncidencia;
 import oracle.request.IncidenciaActualizarRequest;
@@ -65,6 +65,7 @@ public class IncidenciaService {
     private final DataAreaRepository dataAreaRepository;
     private final DataResponsableRepository dataResponsableRepository;
     private final EstadisticaIncidenciaRepository estadisticaRepository;
+    private final CatalogoCache catalogoCache;
 
     public IncidenciaService(IncidenciaRepository incidenciaRepository,
             DataCentroRepository dataCentroRepository,
@@ -72,7 +73,8 @@ public class IncidenciaService {
             DataIncidenciaRepository dataIncidenciaRepository,
             DataAreaRepository dataAreaRepository,
             DataResponsableRepository dataResponsableRepository,
-            EstadisticaIncidenciaRepository estadisticaRepository) {
+            EstadisticaIncidenciaRepository estadisticaRepository,
+        CatalogoCache catalogoCache) {
         this.incidenciaRepository = incidenciaRepository;
         this.dataCentroRepository = dataCentroRepository;
         this.dataSistemaRepository = dataSistemaRepository;
@@ -80,6 +82,7 @@ public class IncidenciaService {
         this.dataAreaRepository = dataAreaRepository;
         this.dataResponsableRepository = dataResponsableRepository;
         this.estadisticaRepository = estadisticaRepository;
+        this.catalogoCache = catalogoCache;
     }
 
     public Mono<ApiResponse<PaginaResponse<IncidenciaResponse>>> listar(FiltroIncidencia filtro, int pagina,
@@ -230,16 +233,11 @@ public class IncidenciaService {
         if (incidencias.isEmpty()) {
             return List.of();
         }
-        Map<Long, String> centros = dataCentroRepository.findAll().stream()
-                .collect(Collectors.toMap(DataCentro::getId, DataCentro::getCentro));
-        Map<Long, String> sistemas = dataSistemaRepository.findAll().stream()
-                .collect(Collectors.toMap(DataSistema::getId, DataSistema::getSistema));
-        Map<Long, String> tipos = dataIncidenciaRepository.findAll().stream()
-                .collect(Collectors.toMap(DataIncidencia::getId, DataIncidencia::getIncidencia));
-        Map<Long, String> areas = dataAreaRepository.findAll().stream()
-                .collect(Collectors.toMap(DataArea::getId, DataArea::getArea));
-        Map<Long, String> responsables = dataResponsableRepository.findAll().stream()
-                .collect(Collectors.toMap(DataResponsable::getId, DataResponsable::getResponsable));
+        Map<Long, String> centros = catalogoCache.getCentros();
+        Map<Long, String> sistemas = catalogoCache.getSistemas();
+        Map<Long, String> tipos = catalogoCache.getTipos();
+        Map<Long, String> areas = catalogoCache.getAreas();
+        Map<Long, String> responsables = catalogoCache.getResponsables();
 
         return incidencias.stream()
                 .map(i -> IncidenciaResponse.of(i,

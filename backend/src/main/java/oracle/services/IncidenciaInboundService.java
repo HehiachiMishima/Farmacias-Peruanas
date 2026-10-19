@@ -6,7 +6,6 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import reactor.core.scheduler.Schedulers;
 import oracle.exception.ConflictoException;
 import oracle.exception.RecursoNoEncontradoException;
@@ -29,6 +28,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import oracle.config.CatalogoCache;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -41,16 +41,19 @@ public class IncidenciaInboundService {
   private final DataProveedorRepository proveedorRepo;
   private final DataIncidenciaInboundRepository tipoRepo;
   private final EstadisticaInboundRepository estadisticasRepo;
+  private final CatalogoCache catalogoCache;
 
   public IncidenciaInboundService(
       IncidenciaInboundRepository repo,
       DataProveedorRepository proveedorRepo,
       DataIncidenciaInboundRepository tipoRepo,
-      EstadisticaInboundRepository estadisticasRepo) {
+      EstadisticaInboundRepository estadisticasRepo,
+      CatalogoCache catalogoCache) {
     this.repo = repo;
     this.proveedorRepo = proveedorRepo;
     this.tipoRepo = tipoRepo;
     this.estadisticasRepo = estadisticasRepo;
+    this.catalogoCache = catalogoCache;
   }
 
   public Mono<ApiResponse<PaginaResponse<IncidenciaInboundResponse>>> listar(
@@ -189,10 +192,8 @@ public class IncidenciaInboundService {
     if (lista.isEmpty()) {
       return List.of();
     }
-    Map<Long, String> proveedores = proveedorRepo.findAll().stream()
-        .collect(Collectors.toMap(DataProveedor::getId, DataProveedor::getProveedor));
-    Map<Long, String> tipos = tipoRepo.findAll().stream()
-        .collect(Collectors.toMap(DataIncidenciaInbound::getId, DataIncidenciaInbound::getIncidenciaInbound));
+    Map<Long, String> proveedores = catalogoCache.getProveedores();
+    Map<Long, String> tipos = catalogoCache.getTiposInbound();
     return lista.stream()
         .map(i -> new IncidenciaInboundResponse(
             i.getId(),

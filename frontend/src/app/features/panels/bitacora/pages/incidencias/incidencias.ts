@@ -2,7 +2,7 @@ import { DatePipe, formatDate } from '@angular/common';
 import { Component, LOCALE_ID, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Subject, debounceTime, distinctUntilChanged, finalize, forkJoin } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, finalize, forkJoin, switchMap } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { exportarCsv } from '../../../../../core/utils/csv.util';
@@ -167,10 +167,24 @@ export class Incidencias {
     this.cargar();
 
     this.busqueda$
-      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
-      .subscribe((valor) => {
-        this.filtroBusqueda.set(valor);
-        this.cargarDesde(1);
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        takeUntilDestroyed(),
+        switchMap((valor: string) => {
+          this.filtroBusqueda.set(valor);
+          this.pagina.set(1);
+          this.cargando.set(true);
+          this.error.set(null);
+          return this.incidenciasApi.listar(this.filtros(), 1, this.porPagina()).pipe(finalize(() => this.cargando.set(false)));
+        })
+      )
+      .subscribe({
+        next: (pagina: any) => {
+          this.items.set(pagina.contenido);
+          this.total.set(pagina.total);
+        },
+        error: (err: unknown) => this.error.set(mensajeDeError(err)),
       });
 
     this.formulario.controls.idDataSistema.valueChanges.subscribe((sistemaId) => {
