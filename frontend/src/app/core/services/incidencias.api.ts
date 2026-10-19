@@ -1,9 +1,12 @@
 import { Service, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  EstadisticaIncidencia,
   Incidencia,
   IncidenciaActualizarRequest,
   IncidenciaCrearRequest,
+  IncidenciaFiltros,
+  Pagina,
 } from '../models';
 import { Api } from './api';
 
@@ -11,8 +14,20 @@ import { Api } from './api';
 export class IncidenciasApi {
   private readonly api = inject(Api);
 
-  listar(): Observable<Incidencia[]> {
-    return this.api.get<Incidencia[]>('/incidencias');
+  listar(filtros: IncidenciaFiltros = {}, pagina = 1, tamano = 10): Observable<Pagina<Incidencia>> {
+    return this.api.get<Pagina<Incidencia>>('/incidencias', {
+      ...filtros,
+      pagina,
+      tamano,
+    } as Record<string, unknown>);
+  }
+
+  exportar(filtros: IncidenciaFiltros = {}): Observable<Incidencia[]> {
+    return this.api.get<Incidencia[]>('/incidencias/exportar', filtros as Record<string, unknown>);
+  }
+
+  estadisticas(filtros: IncidenciaFiltros = {}): Observable<EstadisticaIncidencia> {
+    return this.api.get<EstadisticaIncidencia>('/incidencias/estadisticas', filtros as Record<string, unknown>);
   }
 
   crear(peticion: IncidenciaCrearRequest): Observable<Incidencia> {

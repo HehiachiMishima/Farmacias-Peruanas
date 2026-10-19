@@ -1,7 +1,8 @@
 import { DatePipe, formatDate } from '@angular/common';
 import { Component, LOCALE_ID, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { finalize, forkJoin } from 'rxjs';
+import { Subject, debounceTime, distinctUntilChanged, finalize, forkJoin } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { exportarCsv } from '../../../../../core/utils/csv.util';
@@ -10,6 +11,7 @@ import {
   Centro,
   Incidencia,
   IncidenciaCrearRequest,
+  IncidenciaFiltros,
   Responsable,
   Sistema,
   TipoIncidencia,
@@ -88,7 +90,8 @@ export class Incidencias {
 
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
-  readonly incidenciasLista = signal<Incidencia[]>([]);
+  readonly items = signal<Incidencia[]>([]);
+  readonly total = signal(0);
 
   readonly centros = signal<Centro[]>([]);
   readonly sistemas = signal<Sistema[]>([]);
@@ -105,6 +108,8 @@ export class Incidencias {
   readonly cargandoResponsablesFiltro = signal(false);
   readonly filtrosAbierto = signal(false);
 
+  private readonly busqueda$ = new Subject<string>();
+
   readonly filtrosActivos = computed(() => {
     let total = 0;
     if (this.filtroCentro() !== null) total++;
@@ -116,61 +121,13 @@ export class Incidencias {
     return total;
   });
 
-  readonly filtrados = computed(() => {
-    const termino = this.filtroBusqueda().trim().toLowerCase();
-    const centro = this.filtroCentro();
-    const sistema = this.filtroSistema();
-    const area = this.filtroArea();
-    const responsable = this.filtroResponsable();
-    const desde = this.filtroDesde();
-    const hasta = this.filtroHasta();
-
-    return this.incidenciasLista().filter((incidencia) => {
-      if (
-        termino &&
-        !incidencia.ticket.toLowerCase().includes(termino) &&
-        !incidencia.descripcion.toLowerCase().includes(termino)
-      ) {
-        return false;
-      }
-      if (centro !== null && incidencia.idDataCentro !== centro) {
-        return false;
-      }
-      if (sistema !== null && incidencia.idDataSistema !== sistema) {
-        return false;
-      }
-      if (area !== null && incidencia.idDataArea !== area) {
-        return false;
-      }
-      if (responsable !== null && incidencia.idDataResponsable !== responsable) {
-        return false;
-      }
-      const fecha = incidencia.creadoEn.slice(0, 10);
-      if (desde && fecha < desde) {
-        return false;
-      }
-      if (hasta && fecha > hasta) {
-        return false;
-      }
-      return true;
-    });
-  });
+  readonly hayFiltros = computed(() => this.filtrosActivos() > 0 || this.filtroBusqueda().trim() !== '');
 
   readonly pagina = signal(1);
   readonly porPagina = signal(10);
 
-  readonly totalPaginas = computed(() =>
-    Math.max(1, Math.ceil(this.filtrados().length / this.porPagina())),
-  );
-
-  readonly paginaActual = computed(() =>
-    Math.min(Math.max(1, this.pagina()), this.totalPaginas()),
-  );
-
-  readonly paginados = computed(() => {
-    const inicio = (this.paginaActual() - 1) * this.porPagina();
-    return this.filtrados().slice(inicio, inicio + this.porPagina());
-  });
+  readonly totalPaginas = computed(() => Math.max(1, Math.ceil(this.total() / this.porPagina())));
+  readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
 
   readonly formAbierto = signal(false);
   readonly editando = signal<Incidencia | null>(null);
@@ -202,11 +159,19 @@ export class Incidencias {
 
   readonly verAbierto = signal(false);
   readonly aVer = signal<Incidencia | null>(null);
+  readonly exportando = signal(false);
 
   constructor() {
     this.directorio.cargar();
     this.cargarCatalogos();
     this.cargar();
+
+    this.busqueda$
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
+      .subscribe((valor) => {
+        this.filtroBusqueda.set(valor);
+        this.cargarDesde(1);
+      });
 
     this.formulario.controls.idDataSistema.valueChanges.subscribe((sistemaId) => {
       this.cargarFormTipos(sistemaId, this.tipoPendiente);
@@ -238,12 +203,36 @@ export class Incidencias {
     this.cargando.set(true);
     this.error.set(null);
     this.incidenciasApi
-      .listar()
+      .listar(this.filtros(), this.pagina(), this.porPagina())
       .pipe(finalize(() => this.cargando.set(false)))
       .subscribe({
-        next: (lista) => this.incidenciasLista.set(lista),
+        next: (pagina) => {
+          this.items.set(pagina.contenido);
+          this.total.set(pagina.total);
+          if (pagina.contenido.length === 0 && pagina.total > 0 && this.pagina() > 1) {
+            this.pagina.set(Math.max(1, pagina.totalPaginas));
+            this.cargar();
+          }
+        },
         error: (err: unknown) => this.error.set(mensajeDeError(err)),
       });
+  }
+
+  private cargarDesde(pagina: number): void {
+    this.pagina.set(pagina);
+    this.cargar();
+  }
+
+  private filtros(): IncidenciaFiltros {
+    return {
+      centro: this.filtroCentro(),
+      sistema: this.filtroSistema(),
+      area: this.filtroArea(),
+      responsable: this.filtroResponsable(),
+      desde: this.filtroDesde(),
+      hasta: this.filtroHasta(),
+      texto: this.filtroBusqueda(),
+    };
   }
 
   hhmm(valor: string | null): string {
@@ -251,34 +240,45 @@ export class Incidencias {
   }
 
   exportar(): void {
-    const filas = this.filtrados().map((incidencia) => [
-      incidencia.ticket,
-      incidencia.descripcion,
-      incidencia.centro ?? '—',
-      incidencia.sistema ?? '—',
-      incidencia.tipoIncidencia ?? '—',
-      incidencia.area ?? '—',
-      incidencia.responsable ?? '—',
-      incidencia.horaInicio,
-      incidencia.horaFin ?? '—',
-      incidencia.tiempoSolucion ?? '—',
-      formatDate(incidencia.creadoEn, 'dd/MM/yyyy HH:mm', this.locale),
-      this.directorio.etiqueta(incidencia.creadoPor),
-      incidencia.actualizadoEn
-        ? formatDate(incidencia.actualizadoEn, 'dd/MM/yyyy HH:mm', this.locale)
-        : '—',
-      this.directorio.etiqueta(incidencia.actualizadoPor),
-    ]);
-    exportarCsv(`incidencias_${this.hoy()}.csv`, CABECERAS_EXPORT, filas);
-    this.notificaciones.exito(
-      'Exportado',
-      `Se exportaron ${filas.length} ${filas.length === 1 ? 'incidencia' : 'incidencias'} a Excel (CSV).`,
-    );
+    if (this.exportando() || this.total() === 0) {
+      return;
+    }
+    this.exportando.set(true);
+    this.incidenciasApi
+      .exportar(this.filtros())
+      .pipe(finalize(() => this.exportando.set(false)))
+      .subscribe({
+        next: (lista) => {
+          const filas = lista.map((incidencia) => [
+            incidencia.ticket,
+            incidencia.descripcion,
+            incidencia.centro ?? '—',
+            incidencia.sistema ?? '—',
+            incidencia.tipoIncidencia ?? '—',
+            incidencia.area ?? '—',
+            incidencia.responsable ?? '—',
+            incidencia.horaInicio,
+            incidencia.horaFin ?? '—',
+            incidencia.tiempoSolucion ?? '—',
+            formatDate(incidencia.creadoEn, 'dd/MM/yyyy HH:mm', this.locale),
+            this.directorio.etiqueta(incidencia.creadoPor),
+            incidencia.actualizadoEn
+              ? formatDate(incidencia.actualizadoEn, 'dd/MM/yyyy HH:mm', this.locale)
+              : '—',
+            this.directorio.etiqueta(incidencia.actualizadoPor),
+          ]);
+          exportarCsv(`incidencias_${this.hoy()}.csv`, CABECERAS_EXPORT, filas);
+          this.notificaciones.exito(
+            'Exportado',
+            `Se exportaron ${filas.length} ${filas.length === 1 ? 'incidencia' : 'incidencias'} a Excel (CSV).`,
+          );
+        },
+        error: (err: unknown) => this.notificaciones.error('No se pudo exportar', mensajeDeError(err)),
+      });
   }
 
   buscar(valor: string): void {
-    this.filtroBusqueda.set(valor);
-    this.pagina.set(1);
+    this.busqueda$.next(valor);
   }
 
   alternarFiltros(): void {
@@ -287,12 +287,12 @@ export class Incidencias {
 
   setFiltroCentro(evento: Event): void {
     this.filtroCentro.set(this.valorNumero(evento));
-    this.pagina.set(1);
+    this.cargarDesde(1);
   }
 
   setFiltroSistema(evento: Event): void {
     this.filtroSistema.set(this.valorNumero(evento));
-    this.pagina.set(1);
+    this.cargarDesde(1);
   }
 
   setFiltroArea(evento: Event): void {
@@ -300,25 +300,25 @@ export class Incidencias {
     this.filtroArea.set(areaId);
     this.filtroResponsable.set(null);
     this.responsablesFiltro.set([]);
-    this.pagina.set(1);
     if (areaId !== null) {
       this.cargarResponsablesFiltro(areaId);
     }
+    this.cargarDesde(1);
   }
 
   setFiltroResponsable(evento: Event): void {
     this.filtroResponsable.set(this.valorNumero(evento));
-    this.pagina.set(1);
+    this.cargarDesde(1);
   }
 
   setFiltroDesde(evento: Event): void {
     this.filtroDesde.set((evento.target as HTMLInputElement).value);
-    this.pagina.set(1);
+    this.cargarDesde(1);
   }
 
   setFiltroHasta(evento: Event): void {
     this.filtroHasta.set((evento.target as HTMLInputElement).value);
-    this.pagina.set(1);
+    this.cargarDesde(1);
   }
 
   limpiarFiltros(): void {
@@ -330,12 +330,16 @@ export class Incidencias {
     this.filtroDesde.set('');
     this.filtroHasta.set('');
     this.responsablesFiltro.set([]);
-    this.pagina.set(1);
+    this.cargarDesde(1);
   }
 
   cambiarPorPagina(valor: number): void {
     this.porPagina.set(valor);
-    this.pagina.set(1);
+    this.cargarDesde(1);
+  }
+
+  cambiarPagina(pagina: number): void {
+    this.cargarDesde(pagina);
   }
 
   campoInvalido(campo: CampoFormulario): boolean {
@@ -460,10 +464,10 @@ export class Incidencias {
       .pipe(finalize(() => this.eliminando.set(false)))
       .subscribe({
         next: () => {
-          this.incidenciasLista.update((lista) => lista.filter((item) => item.id !== incidencia.id));
           this.notificaciones.exito('Eliminado', `Incidencia ${incidencia.ticket} eliminada.`);
           this.eliminarAbierto.set(false);
           this.aEliminar.set(null);
+          this.cargar();
         },
         error: (err: unknown) => this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
       });

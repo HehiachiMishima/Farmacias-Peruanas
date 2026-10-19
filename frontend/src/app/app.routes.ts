@@ -31,5 +31,11 @@ export const routes: Routes = [
     loadChildren: () =>
       import('./features/panels/bitacora/bitacora.routes').then((m) => m.BITACORA_ROUTES),
   },
+  {
+    path: 'inbound',
+    canActivate: [permisoGuard(PERMISOS.PANEL_INBOUND)],
+    loadChildren: () =>
+      import('./features/panels/inbound/inbound.routes').then((m) => m.INBOUND_ROUTES),
+  },
   { path: '**', redirectTo: '' },
 ];

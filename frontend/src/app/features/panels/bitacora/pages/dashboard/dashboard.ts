@@ -1,7 +1,15 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { finalize, forkJoin } from 'rxjs';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
-import { Area, Centro, Incidencia, Responsable, Sistema } from '../../../../../core/models';
+import {
+  Area,
+  Centro,
+  EstadisticaIncidencia,
+  GrupoEstadistica,
+  IncidenciaFiltros,
+  Responsable,
+  Sistema,
+} from '../../../../../core/models';
 import { AreasApi } from '../../../../../core/services/areas.api';
 import { CentrosApi } from '../../../../../core/services/centros.api';
 import { IncidenciasApi } from '../../../../../core/services/incidencias.api';
@@ -11,12 +19,6 @@ import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
-
-interface Grupo {
-  etiqueta: string;
-  count: number;
-  segundos: number;
-}
 
 const TOP = 5;
 const PALETA = ['var(--brand)', 'var(--success)', 'var(--warning)', 'var(--danger)', '#a855f7'];
@@ -37,7 +39,7 @@ export class DashboardBitacora {
 
   readonly cargando = signal(true);
   readonly error = signal<string | null>(null);
-  readonly incidenciasLista = signal<Incidencia[]>([]);
+  readonly estadistica = signal<EstadisticaIncidencia | null>(null);
 
   readonly centros = signal<Centro[]>([]);
   readonly sistemas = signal<Sistema[]>([]);
@@ -64,50 +66,14 @@ export class DashboardBitacora {
     return total;
   });
 
-  readonly filtradas = computed(() => {
-    const centro = this.filtroCentro();
-    const sistema = this.filtroSistema();
-    const area = this.filtroArea();
-    const responsable = this.filtroResponsable();
-    const desde = this.filtroDesde();
-    const hasta = this.filtroHasta();
+  readonly totalIncidencias = computed(() => this.estadistica()?.total ?? 0);
 
-    return this.incidenciasLista().filter((incidencia) => {
-      if (centro !== null && incidencia.idDataCentro !== centro) {
-        return false;
-      }
-      if (sistema !== null && incidencia.idDataSistema !== sistema) {
-        return false;
-      }
-      if (area !== null && incidencia.idDataArea !== area) {
-        return false;
-      }
-      if (responsable !== null && incidencia.idDataResponsable !== responsable) {
-        return false;
-      }
-      const fecha = incidencia.creadoEn.slice(0, 10);
-      if (desde && fecha < desde) {
-        return false;
-      }
-      if (hasta && fecha > hasta) {
-        return false;
-      }
-      return true;
-    });
-  });
+  readonly totalTiempo = computed(() => this.formatear(this.estadistica()?.segundosTotales ?? 0));
 
-  readonly totalIncidencias = computed(() => this.filtradas().length);
-
-  readonly segundosTotales = computed(() =>
-    this.filtradas().reduce((total, incidencia) => total + this.aSegundos(incidencia.tiempoSolucion), 0),
-  );
-
-  readonly totalTiempo = computed(() => this.formatear(this.segundosTotales()));
-
-  readonly barrasSistemas = computed(() => this.aBarras(this.agrupar((i) => i.sistema)));
-  readonly barrasTipos = computed(() => this.aBarras(this.agrupar((i) => i.tipoIncidencia)));
-  readonly barrasCentros = computed(() => this.aBarras(this.agrupar((i) => i.centro)));
-  readonly barrasAreas = computed(() => this.aBarras(this.agrupar((i) => i.area)));
+  readonly barrasSistemas = computed(() => this.aBarras(this.estadistica()?.sistemas ?? []));
+  readonly barrasTipos = computed(() => this.aBarras(this.estadistica()?.tipos ?? []));
+  readonly barrasCentros = computed(() => this.aBarras(this.estadistica()?.centros ?? []));
+  readonly barrasAreas = computed(() => this.aBarras(this.estadistica()?.areas ?? []));
 
   constructor() {
     this.cargarCatalogos();
@@ -134,12 +100,23 @@ export class DashboardBitacora {
     this.cargando.set(true);
     this.error.set(null);
     this.incidenciasApi
-      .listar()
+      .estadisticas(this.filtros())
       .pipe(finalize(() => this.cargando.set(false)))
       .subscribe({
-        next: (lista) => this.incidenciasLista.set(lista),
+        next: (estadistica) => this.estadistica.set(estadistica),
         error: (err: unknown) => this.error.set(mensajeDeError(err)),
       });
+  }
+
+  private filtros(): IncidenciaFiltros {
+    return {
+      centro: this.filtroCentro(),
+      sistema: this.filtroSistema(),
+      area: this.filtroArea(),
+      responsable: this.filtroResponsable(),
+      desde: this.filtroDesde(),
+      hasta: this.filtroHasta(),
+    };
   }
 
   alternarFiltros(): void {
@@ -148,10 +125,12 @@ export class DashboardBitacora {
 
   setFiltroCentro(evento: Event): void {
     this.filtroCentro.set(this.valorNumero(evento));
+    this.cargar();
   }
 
   setFiltroSistema(evento: Event): void {
     this.filtroSistema.set(this.valorNumero(evento));
+    this.cargar();
   }
 
   setFiltroArea(evento: Event): void {
@@ -162,18 +141,22 @@ export class DashboardBitacora {
     if (areaId !== null) {
       this.cargarResponsablesFiltro(areaId);
     }
+    this.cargar();
   }
 
   setFiltroResponsable(evento: Event): void {
     this.filtroResponsable.set(this.valorNumero(evento));
+    this.cargar();
   }
 
   setFiltroDesde(evento: Event): void {
     this.filtroDesde.set((evento.target as HTMLInputElement).value);
+    this.cargar();
   }
 
   setFiltroHasta(evento: Event): void {
     this.filtroHasta.set((evento.target as HTMLInputElement).value);
+    this.cargar();
   }
 
   limpiarFiltros(): void {
@@ -184,6 +167,7 @@ export class DashboardBitacora {
     this.filtroDesde.set('');
     this.filtroHasta.set('');
     this.responsablesFiltro.set([]);
+    this.cargar();
   }
 
   private cargarResponsablesFiltro(areaId: number): void {
@@ -198,19 +182,7 @@ export class DashboardBitacora {
       });
   }
 
-  private agrupar(selector: (incidencia: Incidencia) => string | null): Grupo[] {
-    const mapa = new Map<string, Grupo>();
-    for (const incidencia of this.filtradas()) {
-      const etiqueta = selector(incidencia) ?? '—';
-      const grupo = mapa.get(etiqueta) ?? { etiqueta, count: 0, segundos: 0 };
-      grupo.count += 1;
-      grupo.segundos += this.aSegundos(incidencia.tiempoSolucion);
-      mapa.set(etiqueta, grupo);
-    }
-    return [...mapa.values()].sort((a, b) => b.count - a.count);
-  }
-
-  private aBarras(grupos: Grupo[]): BarraDato[] {
+  private aBarras(grupos: GrupoEstadistica[]): BarraDato[] {
     const barras: BarraDato[] = grupos.slice(0, TOP).map((grupo, indice) => ({
       etiqueta: grupo.etiqueta,
       valor: grupo.count,
@@ -229,14 +201,6 @@ export class DashboardBitacora {
     }
 
     return barras;
-  }
-
-  private aSegundos(valor: string | null): number {
-    if (!valor) {
-      return 0;
-    }
-    const [horas, minutos, segundos] = valor.split(':').map((parte) => Number(parte));
-    return (horas || 0) * 3600 + (minutos || 0) * 60 + (segundos || 0);
   }
 
   private formatear(segundos: number): string {

@@ -100,7 +100,43 @@ export const PANEL_BITACORA: PanelDef = {
   ],
 }
 
-export const PANELES: PanelDef[] = [PANEL_ADMIN, PANEL_BITACORA];
+export const PANEL_INBOUND: PanelDef = {
+  id: 'inbound',
+  nombre: 'Inbound',
+  descripcion: 'Incidencias de inbound, catálogos de control y métricas operativas.',
+  icono: 'inbound',
+  ruta: '/inbound',
+  permiso: PERMISOS.PANEL_INBOUND,
+  acento: 'brand',
+  modulos: [
+    {
+      id: 'incidencias',
+      nombre: 'Incidencias',
+      descripcion: 'Registro y seguimiento de incidencias de inbound.',
+      icono: 'incidencias',
+      ruta: 'incidencias',
+      permiso: PERMISOS.VER_INCIDENCIAS_INBOUND,
+    },
+    {
+      id: 'control',
+      nombre: 'Control',
+      descripcion: 'Proveedores y tipos de incidencia.',
+      icono: 'control',
+      ruta: 'control',
+      permiso: PERMISOS.VER_CONTROL_INBOUND,
+    },
+    {
+      id: 'dashboard',
+      nombre: 'Dashboard',
+      descripcion: 'Indicadores de inbound.',
+      icono: 'dashboard',
+      ruta: 'dashboard',
+      permiso: PERMISOS.VER_DASHBOARD_INBOUND,
+    },
+  ],
+}
+
+export const PANELES: PanelDef[] = [PANEL_ADMIN, PANEL_BITACORA, PANEL_INBOUND];
 
 export function primerModuloAccesible(panel: PanelDef, permisos: readonly string[]): ModuloPanel | undefined {
   return panel.modulos.find((modulo) => permisos.includes(modulo.permiso));

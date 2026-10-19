@@ -1,0 +1,19 @@
+<header class="page-head">
+  <div>
+    <h1 class="page-head__title">Control</h1>
+    <p class="page-head__sub">Proveedores y tipos de incidencia.</p>
+  </div>
+</header>
+
+<nav class="control-tabs">
+  <a class="control-tabs__tab" routerLink="proveedores" routerLinkActive="control-tabs__tab--active">
+    <ui-icon name="responsable" [size]="16" />
+    Proveedores
+  </a>
+  <a class="control-tabs__tab" routerLink="tipos" routerLinkActive="control-tabs__tab--active">
+    <ui-icon name="incidencias" [size]="16" />
+    Tipos
+  </a>
+</nav>
+
+<router-outlet />

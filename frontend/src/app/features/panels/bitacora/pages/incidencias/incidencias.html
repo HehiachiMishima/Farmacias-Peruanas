@@ -26,10 +26,10 @@
     class="ui-btn ui-btn--secondary ui-btn--sm"
     title="Exportar a Excel (CSV)"
     (click)="exportar()"
-    [disabled]="cargando() || filtrados().length === 0"
+    [disabled]="cargando() || exportando() || total() === 0"
   >
     <ui-icon name="descargar" [size]="16" />
-    Exportar
+    {{ exportando() ? 'Exportando…' : 'Exportar' }}
   </button>
   <button
     type="button"
@@ -132,13 +132,13 @@
         <ui-icon name="refresh" [size]="16" /> Reintentar
       </button>
     </ui-empty>
-  } @else if (filtrados().length === 0) {
+  } @else if (total() === 0) {
     <ui-empty
       icono="incidencias"
-      [titulo]="incidenciasLista().length === 0 ? 'Aún no hay incidencias' : 'Sin resultados'"
-      [mensaje]="incidenciasLista().length === 0
-        ? 'Registra la primera incidencia con el botón «Nueva incidencia».'
-        : 'Ninguna incidencia coincide con los filtros aplicados.'"
+      [titulo]="hayFiltros() ? 'Sin resultados' : 'Aún no hay incidencias'"
+      [mensaje]="hayFiltros()
+        ? 'Ninguna incidencia coincide con los filtros aplicados.'
+        : 'Registra la primera incidencia con el botón «Nueva incidencia».'"
     ></ui-empty>
   } @else {
     <div class="ui-table-wrap">
@@ -163,7 +163,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (incidencia of paginados(); track incidencia.id) {
+          @for (incidencia of items(); track incidencia.id) {
             <tr>
               <td><span class="ui-table__primary u-mono">{{ incidencia.ticket }}</span></td>
               <td>
@@ -222,9 +222,9 @@
 
     <ui-paginador
       [pagina]="paginaActual()"
-      [total]="filtrados().length"
+      [total]="total()"
       [porPagina]="porPagina()"
-      (paginaCambia)="pagina.set($event)"
+      (paginaCambia)="cambiarPagina($event)"
       (porPaginaCambia)="cambiarPorPagina($event)"
     />
   }

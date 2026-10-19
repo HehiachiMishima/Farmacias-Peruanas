@@ -1,0 +1,223 @@
+<header class="page-head">
+  <div>
+    <h1 class="page-head__title">Incidencias Inbound</h1>
+    <p class="page-head__sub">Registro y seguimiento de incidencias de inbound.</p>
+  </div>
+  <div class="page-head__actions">
+    <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()" [disabled]="cargando()">
+      <ui-icon name="refresh" [size]="16" /> Actualizar
+    </button>
+    <button *hasPermiso="permisos.CREAR_INCIDENCIAS_INBOUND" type="button" class="ui-btn ui-btn--primary" (click)="abrirCrear()">
+      <ui-icon name="plus" [size]="18" /> Nueva incidencia
+    </button>
+    <button *hasPermiso="permisos.VER_INCIDENCIAS_INBOUND" type="button" class="ui-btn ui-btn--secondary" (click)="exportar()" [disabled]="cargando() || exportando() || total() === 0">
+      <ui-icon name="descargar" [size]="16" /> {{ exportando() ? 'Exportando…' : 'Exportar' }}
+    </button>
+  </div>
+</header>
+
+<ui-panel-filtros [abierto]="filtrosAbierto()" (alternar)="alternarFiltros()">
+  <div class="filtros-grid">
+    <div class="ui-field">
+      <label class="ui-label">Proveedor</label>
+      <select class="ui-select" [value]="filtroProveedor() ?? ''" (change)="setFiltroProveedor($event)">
+        <option value="">Todos</option>
+        @for (p of proveedores(); track p.id) {
+          <option [value]="p.id">{{ p.proveedor }}</option>
+        }
+      </select>
+    </div>
+    <div class="ui-field">
+      <label class="ui-label">Tipo</label>
+      <select class="ui-select" [value]="filtroTipo() ?? ''" (change)="setFiltroTipo($event)">
+        <option value="">Todos</option>
+        @for (t of tipos(); track t.id) {
+          <option [value]="t.id">{{ t.incidenciaInbound }}</option>
+        }
+      </select>
+    </div>
+    <div class="ui-field">
+      <label class="ui-label">Desde</label>
+      <input type="date" class="ui-input" [value]="filtroDesde()" (change)="setFiltroDesde($event)" />
+    </div>
+    <div class="ui-field">
+      <label class="ui-label">Hasta</label>
+      <input type="date" class="ui-input" [value]="filtroHasta()" (change)="setFiltroHasta($event)" />
+    </div>
+  </div>
+  <div class="filtros-actions">
+    <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" (click)="limpiarFiltros()">Limpiar</button>
+  </div>
+</ui-panel-filtros>
+
+<div class="ui-search" style="margin-bottom:12px">
+  <ui-icon name="search" [size]="18" />
+  <input type="search" class="ui-input" placeholder="Buscar por OC o SKU…" [value]="filtroBusqueda()" (input)="buscar($any($event.target).value)" />
+</div>
+
+<div class="table-card">
+  @if (cargando()) {
+    <div class="loading"><span class="ui-spinner"></span> Cargando incidencias…</div>
+  } @else if (error()) {
+    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!">
+      <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()"><ui-icon name="refresh" [size]="16" /> Reintentar</button>
+    </ui-empty>
+  } @else if (items().length === 0) {
+    <ui-empty [titulo]="hayFiltros() ? 'Sin resultados' : 'Aún no hay incidencias'" [mensaje]="hayFiltros() ? 'Ninguna incidencia coincide con los filtros.' : 'Registra la primera incidencia.'"></ui-empty>
+  } @else {
+    <div class="ui-table-wrap">
+      <table class="ui-table" appColumnasRedimensionables>
+        <thead>
+          <tr>
+            <th>OC</th>
+            <th>Proveedor</th>
+            <th>Tipo</th>
+            <th>SKU</th>
+            <th>Unidades</th>
+            <th>Creado</th>
+            <th>Creado por</th>
+            <th>Actualizado</th>
+            <th>Actualizado por</th>
+            <th class="col-actions">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (i of items(); track i.id) {
+            <tr>
+              <td><span class="ui-table__primary">{{ i.ordenCompra }}</span></td>
+              <td>{{ i.proveedor ?? '—' }}</td>
+              <td>{{ i.tipoIncidencia ?? '—' }}</td>
+              <td>{{ i.skuProducto }}</td>
+              <td>{{ i.nUnidades }}</td>
+              <td class="u-muted">{{ i.creadoEn | date: 'dd/MM/yyyy HH:mm' }}</td>
+              <td class="u-muted">{{ i.creadoPor | actorLabel }}</td>
+              <td class="u-muted">{{ i.actualizadoEn ? (i.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—' }}</td>
+              <td class="u-muted">{{ i.actualizadoPor | actorLabel }}</td>
+              <td>
+                <div class="row-actions">
+                  <button *hasPermiso="permisos.VER_INCIDENCIAS_INBOUND" type="button" class="ui-icon-btn" title="Ver" (click)="abrirVer(i)"><ui-icon name="ver" [size]="18" /></button>
+                  <button *hasPermiso="permisos.MODIFICAR_INCIDENCIAS_INBOUND" type="button" class="ui-icon-btn" title="Editar" (click)="abrirEditar(i)"><ui-icon name="edit" [size]="18" /></button>
+                  <button *hasPermiso="permisos.ELIMINAR_INCIDENCIAS_INBOUND" type="button" class="ui-icon-btn ui-icon-btn--danger" title="Eliminar" (click)="confirmarEliminar(i)"><ui-icon name="trash" [size]="18" /></button>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <ui-paginador [pagina]="paginaActual()" [total]="total()" [porPagina]="porPagina()" (paginaCambia)="cambiarPagina($event)" (porPaginaCambia)="cambiarPorPagina($event)" />
+  }
+</div>
+
+<ui-modal [abierto]="formAbierto()" [titulo]="editando() ? 'Editar incidencia' : 'Nueva incidencia'" (cerrar)="cerrarForm()">
+  <form class="grid-form" [formGroup]="formulario" (ngSubmit)="guardar()" novalidate>
+    <div class="ui-field">
+      <label class="ui-label">Orden de compra <span class="ui-required">*</span></label>
+      <input class="ui-input" [class.ui-input--invalid]="campoInvalido('ordenCompra')" formControlName="ordenCompra" />
+      @if (campoInvalido('ordenCompra')) { <span class="ui-error">Obligatorio.</span> }
+    </div>
+    <div class="ui-field">
+      <label class="ui-label">Proveedor <span class="ui-required">*</span></label>
+      <select class="ui-select" [class.ui-input--invalid]="campoInvalido('idDataProveedor')" formControlName="idDataProveedor">
+        <option [ngValue]="null">Seleccione…</option>
+        @for (p of proveedores(); track p.id) { <option [ngValue]="p.id">{{ p.proveedor }}</option> }
+      </select>
+    </div>
+    <div class="ui-field">
+      <label class="ui-label">Tipo <span class="ui-required">*</span></label>
+      <select class="ui-select" [class.ui-input--invalid]="campoInvalido('idDataIncidenciaInbound')" formControlName="idDataIncidenciaInbound">
+        <option [ngValue]="null">Seleccione…</option>
+        @for (t of tipos(); track t.id) { <option [ngValue]="t.id">{{ t.incidenciaInbound }}</option> }
+      </select>
+    </div>
+    <div class="ui-field">
+      <label class="ui-label">SKU <span class="ui-required">*</span></label>
+      <input class="ui-input" [class.ui-input--invalid]="campoInvalido('skuProducto')" formControlName="skuProducto" />
+    </div>
+    <div class="ui-field">
+      <label class="ui-label">Unidades <span class="ui-required">*</span></label>
+      <input type="number" class="ui-input" [class.ui-input--invalid]="campoInvalido('nUnidades')" formControlName="nUnidades" />
+    </div>
+  </form>
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--ghost" (click)="cerrarForm()">Cancelar</button>
+    <button type="button" class="ui-btn ui-btn--primary" (click)="guardar()" [disabled]="guardando()">
+      @if (guardando()) { <span class="ui-spinner" style="width:16px;height:16px"></span> }
+      {{ editando() ? 'Guardar cambios' : 'Crear' }}
+    </button>
+  </div>
+</ui-modal>
+
+<ui-modal
+  [abierto]="verAbierto()"
+  ancho="lg"
+  [titulo]="aVer()?.ordenCompra ?? 'Incidencia'"
+  subtitulo="Detalle de la incidencia de inbound"
+  (cerrar)="cerrarVer()"
+>
+  @if (aVer(); as incidencia) {
+    <div class="detalle">
+      <div class="detalle__item">
+        <span class="detalle__label">Orden de compra</span>
+        <span class="detalle__valor u-mono">{{ incidencia.ordenCompra }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">SKU</span>
+        <span class="detalle__valor u-mono">{{ incidencia.skuProducto }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Proveedor</span>
+        <span class="detalle__valor">{{ incidencia.proveedor ?? '—' }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Tipo de incidencia</span>
+        <span class="detalle__valor">{{ incidencia.tipoIncidencia ?? '—' }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Unidades</span>
+        <span class="detalle__valor u-mono">{{ incidencia.nUnidades }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Creado</span>
+        <span class="detalle__valor">{{ incidencia.creadoEn | date: 'dd/MM/yyyy HH:mm' }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Creado por</span>
+        <span class="detalle__valor">{{ incidencia.creadoPor | actorLabel }}</span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Actualizado</span>
+        <span class="detalle__valor">
+          {{ incidencia.actualizadoEn ? (incidencia.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—' }}
+        </span>
+      </div>
+      <div class="detalle__item">
+        <span class="detalle__label">Actualizado por</span>
+        <span class="detalle__valor">{{ incidencia.actualizadoPor | actorLabel }}</span>
+      </div>
+    </div>
+  }
+
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--primary" (click)="cerrarVer()">Cerrar</button>
+  </div>
+</ui-modal>
+
+<ui-modal [abierto]="eliminarAbierto()" ancho="sm" [compacto]="true" titulo="Eliminar incidencia" (cerrar)="eliminarAbierto.set(false)">
+  @if (aEliminar(); as i) {
+    <div class="confirm">
+      <span class="confirm__icon"><ui-icon name="trash" [size]="22" /></span>
+      <div class="confirm__text">
+        <p class="confirm__title">¿Eliminar la incidencia <span class="u-mono">{{ i.ordenCompra }}</span>?</p>
+        <p class="confirm__desc">Esta acción no se puede deshacer.</p>
+      </div>
+    </div>
+  }
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--ghost" (click)="eliminarAbierto.set(false)">Cancelar</button>
+    <button type="button" class="ui-btn ui-btn--danger" (click)="eliminar()" [disabled]="eliminando()">
+      @if (eliminando()) { <span class="ui-spinner" style="width:16px;height:16px"></span> }
+      Eliminar
+    </button>
+  </div>
+</ui-modal>

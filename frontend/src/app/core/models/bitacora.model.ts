@@ -122,3 +122,37 @@ export interface IncidenciaCrearRequest {
 }
 
 export type IncidenciaActualizarRequest = IncidenciaCrearRequest;
+
+export interface Pagina<T> {
+  contenido: T[];
+  total: number;
+  pagina: number;
+  tamano: number;
+  totalPaginas: number;
+}
+
+export interface IncidenciaFiltros {
+  centro?: number | null;
+  sistema?: number | null;
+  area?: number | null;
+  responsable?: number | null;
+  tipo?: number | null;
+  desde?: string;
+  hasta?: string;
+  texto?: string;
+}
+
+export interface GrupoEstadistica {
+  etiqueta: string;
+  count: number;
+  segundos: number;
+}
+
+export interface EstadisticaIncidencia {
+  total: number;
+  segundosTotales: number;
+  sistemas: GrupoEstadistica[];
+  tipos: GrupoEstadistica[];
+  centros: GrupoEstadistica[];
+  areas: GrupoEstadistica[];
+}

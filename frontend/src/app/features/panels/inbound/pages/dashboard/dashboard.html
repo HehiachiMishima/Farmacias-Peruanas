@@ -1,0 +1,146 @@
+<header class="page-head">
+  <div>
+    <h1 class="page-head__title">Dashboard Inbound</h1>
+    <p class="page-head__sub">Indicadores de incidencias de inbound.</p>
+  </div>
+</header>
+
+<div class="toolbar toolbar--end">
+  <button type="button" class="ui-btn ui-btn--secondary" (click)="cargar()" [disabled]="cargando()">
+    <ui-icon name="refresh" [size]="16" />
+    Actualizar
+  </button>
+  <button
+    type="button"
+    class="ui-btn ui-btn--secondary"
+    [attr.aria-expanded]="filtrosAbierto()"
+    aria-controls="dashboard-filtros"
+    (click)="alternarFiltros()"
+  >
+    <ui-icon name="filtro" [size]="18" />
+    Filtros
+    @if (filtrosActivos() > 0) {
+      <span class="filtros-badge">{{ filtrosActivos() }}</span>
+    }
+  </button>
+</div>
+
+<ui-panel-filtros
+  id="dashboard-filtros"
+  [abierto]="filtrosAbierto()"
+  titulo="Filtros"
+  (cerrar)="filtrosAbierto.set(false)"
+>
+  <div class="filtros">
+    <div class="ui-field">
+      <label class="ui-label">Proveedor</label>
+      <select class="ui-select" [value]="filtroProveedor() ?? ''" (change)="setFiltroProveedor($event)">
+        <option value="">Todos</option>
+        @for (p of proveedores(); track p.id) {
+          <option [value]="p.id">{{ p.proveedor }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Tipo</label>
+      <select class="ui-select" [value]="filtroTipo() ?? ''" (change)="setFiltroTipo($event)">
+        <option value="">Todos</option>
+        @for (t of tipos(); track t.id) {
+          <option [value]="t.id">{{ t.incidenciaInbound }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Desde</label>
+      <input type="date" class="ui-input" [value]="filtroDesde()" (input)="setFiltroDesde($event)" />
+    </div>
+
+    <div class="ui-field">
+      <label class="ui-label">Hasta</label>
+      <input type="date" class="ui-input" [value]="filtroHasta()" (input)="setFiltroHasta($event)" />
+    </div>
+
+    <div class="filtros__pie">
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--block" (click)="limpiarFiltros()">
+        <ui-icon name="close" [size]="16" />
+        Limpiar filtros
+      </button>
+    </div>
+  </div>
+</ui-panel-filtros>
+
+@if (error()) {
+  <div class="table-card">
+    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!">
+      <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()">
+        <ui-icon name="refresh" [size]="16" /> Reintentar
+      </button>
+    </ui-empty>
+  </div>
+} @else {
+  <section class="metrics">
+    <article class="metric metric--brand">
+      <div class="metric__top">
+        <span class="metric__icon"><ui-icon name="incidencias" [size]="20" /></span>
+        <span class="metric__label">Total de incidencias</span>
+      </div>
+      @if (cargando()) {
+        <span class="metric__skeleton ui-skeleton"></span>
+      } @else {
+        <span class="metric__value">{{ totalIncidencias() | number }}</span>
+      }
+      <span class="metric__detail">Según los filtros aplicados</span>
+    </article>
+
+    <article class="metric metric--success">
+      <div class="metric__top">
+        <span class="metric__icon"><ui-icon name="layers" [size]="20" /></span>
+        <span class="metric__label">Total de unidades</span>
+      </div>
+      @if (cargando()) {
+        <span class="metric__skeleton ui-skeleton"></span>
+      } @else {
+        <span class="metric__value">{{ totalUnidades() | number }}</span>
+      }
+      <span class="metric__detail">Suma de unidades afectadas</span>
+    </article>
+  </section>
+
+  <section class="charts">
+    <div class="charts__grid">
+      <article class="chart-card">
+        <header class="chart-card__head">
+          <div>
+            <h3 class="chart-card__title">Proveedores con más incidencias</h3>
+            <p class="chart-card__sub">Top 5 · nº de incidencias registradas</p>
+          </div>
+        </header>
+        <div class="chart-card__body">
+          @if (barrasProveedores().length > 0) {
+            <ui-bars [datos]="barrasProveedores()" [horizontal]="true" />
+          } @else {
+            <p class="chart-card__empty">Sin datos para los filtros aplicados.</p>
+          }
+        </div>
+      </article>
+
+      <article class="chart-card">
+        <header class="chart-card__head">
+          <div>
+            <h3 class="chart-card__title">Tipos de incidencia</h3>
+            <p class="chart-card__sub">Top 5 · nº de incidencias registradas</p>
+          </div>
+        </header>
+        <div class="chart-card__body">
+          @if (barrasTipos().length > 0) {
+            <ui-bars [datos]="barrasTipos()" [horizontal]="true" />
+          } @else {
+            <p class="chart-card__empty">Sin datos para los filtros aplicados.</p>
+          }
+        </div>
+      </article>
+    </div>
+  </section>
+}

@@ -1,9 +1,11 @@
 package oracle.services;
 
+import jakarta.persistence.criteria.Predicate;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -20,12 +22,19 @@ import oracle.repository.DataCentroRepository;
 import oracle.repository.DataIncidenciaRepository;
 import oracle.repository.DataResponsableRepository;
 import oracle.repository.DataSistemaRepository;
+import oracle.repository.EstadisticaIncidenciaRepository;
 import oracle.repository.IncidenciaRepository;
+import oracle.request.FiltroIncidencia;
 import oracle.request.IncidenciaActualizarRequest;
 import oracle.request.IncidenciaCrearRequest;
 import oracle.response.ApiResponse;
+import oracle.response.EstadisticaResponse;
 import oracle.response.IncidenciaResponse;
+import oracle.response.PaginaResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -35,10 +44,19 @@ import reactor.core.scheduler.Schedulers;
  * Registro (bitácora) de incidencias. Valida las FK compuestas del esquema,
  * compone creado_en con la fecha indicada + hora de inicio y calcula el
  * tiempo de solución cuando hay hora de fin.
+ *
+ * El listado se pagina y filtra en el servidor: solo se devuelve la página
+ * solicitada y los agregados del dashboard se calculan con SQL (GROUP BY),
+ * de modo que el cliente nunca descarga la tabla completa.
  */
 @Slf4j
 @Service
 public class IncidenciaService {
+
+    /** Tope de filas por página que acepta el servidor. */
+    private static final int MAX_TAMANO_PAGINA = 200;
+    /** Tope de filas para una exportación completa (protege la memoria del JVM). */
+    private static final int MAX_FILAS_EXPORT = 100_000;
 
     private final IncidenciaRepository incidenciaRepository;
     private final DataCentroRepository dataCentroRepository;
@@ -46,46 +64,62 @@ public class IncidenciaService {
     private final DataIncidenciaRepository dataIncidenciaRepository;
     private final DataAreaRepository dataAreaRepository;
     private final DataResponsableRepository dataResponsableRepository;
+    private final EstadisticaIncidenciaRepository estadisticaRepository;
 
     public IncidenciaService(IncidenciaRepository incidenciaRepository,
             DataCentroRepository dataCentroRepository,
             DataSistemaRepository dataSistemaRepository,
             DataIncidenciaRepository dataIncidenciaRepository,
             DataAreaRepository dataAreaRepository,
-            DataResponsableRepository dataResponsableRepository) {
+            DataResponsableRepository dataResponsableRepository,
+            EstadisticaIncidenciaRepository estadisticaRepository) {
         this.incidenciaRepository = incidenciaRepository;
         this.dataCentroRepository = dataCentroRepository;
         this.dataSistemaRepository = dataSistemaRepository;
         this.dataIncidenciaRepository = dataIncidenciaRepository;
         this.dataAreaRepository = dataAreaRepository;
         this.dataResponsableRepository = dataResponsableRepository;
+        this.estadisticaRepository = estadisticaRepository;
     }
 
-    public Mono<ApiResponse<List<IncidenciaResponse>>> listar() {
+    public Mono<ApiResponse<PaginaResponse<IncidenciaResponse>>> listar(FiltroIncidencia filtro, int pagina,
+            int tamano) {
+        int paginaSegura = Math.max(1, pagina);
+        int tamanoSeguro = Math.min(Math.max(1, tamano), MAX_TAMANO_PAGINA);
+        Sort orden = Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id"));
         return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.listar", () -> {
-                    Map<Long, String> centros = dataCentroRepository.findAll().stream()
-                            .collect(Collectors.toMap(DataCentro::getId, DataCentro::getCentro));
-                    Map<Long, String> sistemas = dataSistemaRepository.findAll().stream()
-                            .collect(Collectors.toMap(DataSistema::getId, DataSistema::getSistema));
-                    Map<Long, String> tipos = dataIncidenciaRepository.findAll().stream()
-                            .collect(Collectors.toMap(DataIncidencia::getId, DataIncidencia::getIncidencia));
-                    Map<Long, String> areas = dataAreaRepository.findAll().stream()
-                            .collect(Collectors.toMap(DataArea::getId, DataArea::getArea));
-                    Map<Long, String> responsables = dataResponsableRepository.findAll().stream()
-                            .collect(Collectors.toMap(DataResponsable::getId, DataResponsable::getResponsable));
-
-                    Sort orden = Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id"));
-                    return incidenciaRepository.findAll(orden).stream()
-                            .map(i -> IncidenciaResponse.of(i,
-                                    centros.get(i.getIdDataCentro()),
-                                    sistemas.get(i.getIdDataSistema()),
-                                    tipos.get(i.getIdDataIncidencia()),
-                                    areas.get(i.getIdDataArea()),
-                                    responsables.get(i.getIdDataResponsable())))
-                            .toList();
+                    Page<Incidencia> resultado = incidenciaRepository.findAll(
+                            especificacion(filtro), PageRequest.of(paginaSegura - 1, tamanoSeguro, orden));
+                    List<IncidenciaResponse> contenido = resolverLista(resultado.getContent());
+                    return ApiResponse.ok("Incidencias listadas.",
+                            PaginaResponse.de(resultado, contenido));
                 }))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(lista -> ApiResponse.ok("Incidencias listadas.", lista));
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /** Todas las filas que cumplen el filtro, acotadas, para exportar. */
+    public Mono<ApiResponse<List<IncidenciaResponse>>> listarParaExportar(FiltroIncidencia filtro) {
+        Sort orden = Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id"));
+        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.listarParaExportar", () -> {
+                    List<Incidencia> filas = incidenciaRepository
+                            .findAll(especificacion(filtro), PageRequest.of(0, MAX_FILAS_EXPORT, orden))
+                            .getContent();
+                    return ApiResponse.ok("Incidencias exportadas.", resolverLista(filas));
+                }))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    public Mono<ApiResponse<EstadisticaResponse>> estadisticas(FiltroIncidencia filtro) {
+        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.estadisticas", () -> {
+                    long[] totales = estadisticaRepository.totales(filtro);
+                    return ApiResponse.ok("Estadísticas calculadas.", new EstadisticaResponse(
+                            totales[0], totales[1],
+                            estadisticaRepository.porSistema(filtro),
+                            estadisticaRepository.porTipo(filtro),
+                            estadisticaRepository.porCentro(filtro),
+                            estadisticaRepository.porArea(filtro)));
+                }))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<IncidenciaResponse>> obtenerPorId(Long id) {
@@ -146,6 +180,75 @@ public class IncidenciaService {
                 }))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(Mono.fromSupplier(() -> ApiResponse.<Void>ok("Incidencia eliminada.", null)));
+    }
+
+    /**
+     * Construye el WHERE dinámico del listado. Solo añade las condiciones
+     * informadas y respeta el orden de los índices (id_data_* antes de
+     * creado_en) para que MySQL los aproveche.
+     */
+    private Specification<Incidencia> especificacion(FiltroIncidencia filtro) {
+        return (root, query, cb) -> {
+            List<Predicate> condiciones = new ArrayList<>();
+            if (filtro != null) {
+                if (filtro.centro() != null) {
+                    condiciones.add(cb.equal(root.get("idDataCentro"), filtro.centro()));
+                }
+                if (filtro.sistema() != null) {
+                    condiciones.add(cb.equal(root.get("idDataSistema"), filtro.sistema()));
+                }
+                if (filtro.area() != null) {
+                    condiciones.add(cb.equal(root.get("idDataArea"), filtro.area()));
+                }
+                if (filtro.responsable() != null) {
+                    condiciones.add(cb.equal(root.get("idDataResponsable"), filtro.responsable()));
+                }
+                if (filtro.tipo() != null) {
+                    condiciones.add(cb.equal(root.get("idDataIncidencia"), filtro.tipo()));
+                }
+                if (filtro.desde() != null) {
+                    condiciones.add(cb.greaterThanOrEqualTo(root.get("creadoEn"),
+                            filtro.desde().atStartOfDay()));
+                }
+                if (filtro.hasta() != null) {
+                    condiciones.add(cb.lessThan(root.get("creadoEn"),
+                            filtro.hasta().plusDays(1).atStartOfDay()));
+                }
+                if (filtro.texto() != null && !filtro.texto().isBlank()) {
+                    String patron = "%" + filtro.texto().trim().toLowerCase() + "%";
+                    condiciones.add(cb.or(
+                            cb.like(cb.lower(root.get("ticket")), patron),
+                            cb.like(cb.lower(root.get("descripcion")), patron)));
+                }
+            }
+            return condiciones.isEmpty() ? cb.conjunction() : cb.and(condiciones.toArray(new Predicate[0]));
+        };
+    }
+
+    /** Resuelve los nombres de catálogo de una página en un solo lote de consultas. */
+    private List<IncidenciaResponse> resolverLista(List<Incidencia> incidencias) {
+        if (incidencias.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, String> centros = dataCentroRepository.findAll().stream()
+                .collect(Collectors.toMap(DataCentro::getId, DataCentro::getCentro));
+        Map<Long, String> sistemas = dataSistemaRepository.findAll().stream()
+                .collect(Collectors.toMap(DataSistema::getId, DataSistema::getSistema));
+        Map<Long, String> tipos = dataIncidenciaRepository.findAll().stream()
+                .collect(Collectors.toMap(DataIncidencia::getId, DataIncidencia::getIncidencia));
+        Map<Long, String> areas = dataAreaRepository.findAll().stream()
+                .collect(Collectors.toMap(DataArea::getId, DataArea::getArea));
+        Map<Long, String> responsables = dataResponsableRepository.findAll().stream()
+                .collect(Collectors.toMap(DataResponsable::getId, DataResponsable::getResponsable));
+
+        return incidencias.stream()
+                .map(i -> IncidenciaResponse.of(i,
+                        centros.get(i.getIdDataCentro()),
+                        sistemas.get(i.getIdDataSistema()),
+                        tipos.get(i.getIdDataIncidencia()),
+                        areas.get(i.getIdDataArea()),
+                        responsables.get(i.getIdDataResponsable())))
+                .toList();
     }
 
     private Incidencia obtenerIncidencia(Long id) {
