@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { PALETA_PROVEEDORES } from './ranking-proveedores';
+import { PALETA_PROVEEDORES } from './constantes';
 
 export interface DatoCol {
   etiqueta: string;

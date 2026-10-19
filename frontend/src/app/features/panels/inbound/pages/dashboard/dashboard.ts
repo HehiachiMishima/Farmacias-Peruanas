@@ -8,8 +8,6 @@ import { InboundIncidenciasApi } from '../../../../../core/services/inbound-inci
 import { Notificaciones } from '../../../../../core/services/notificaciones';
 import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
 import { ColumnasProveedores, DatoCol } from '../../../../../shared/ui/charts/cols-proveedores';
-import { DatoPareto, ParetoProveedores } from '../../../../../shared/ui/charts/pareto-proveedores';
-import { RankingProveedores } from '../../../../../shared/ui/charts/ranking-proveedores';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
@@ -25,8 +23,6 @@ const COLOR_OTROS = 'var(--color-graphite)';
     DecimalPipe,
     BarChart,
     ColumnasProveedores,
-    RankingProveedores,
-    ParetoProveedores,
     EmptyState,
     Icon,
     PanelFiltros,
@@ -68,28 +64,7 @@ export class InboundDashboard {
   readonly topProveedores = computed(() => this.proveedoresMensual().slice(0, TOP));
   readonly barrasTipos = computed(() => this.aBarras(this.estadistica()?.tipos ?? []));
 
-  readonly paretoDatos = computed<DatoPareto[]>(() =>
-    this.proveedoresMensual().map((p) => ({ etiqueta: p.proveedor, valor: p.total })),
-  );
-
-  readonly mensajeTop10 = computed(() => {
-    const lista = this.proveedoresMensual();
-    const suma = lista.reduce((t, p) => t + p.total, 0);
-    if (suma === 0) return 'Sin incidencias para los filtros aplicados.';
-    const pct = (lista.slice(0, TOP).reduce((t, p) => t + p.total, 0) / suma) * 100;
-    return `Ranking de los ${Math.min(TOP, lista.length)} proveedores con más incidencias · concentran el ${pct.toFixed(1)}% del total · incluye su evolución mes a mes`;
-  });
-
   readonly totalProveedores = computed(() => this.proveedoresMensual().length);
-
-  readonly pctTop10 = computed(() => {
-    const lista = this.proveedoresMensual();
-    const suma = lista.reduce((t, p) => t + p.total, 0);
-    if (suma === 0) return 0;
-    return (lista.slice(0, TOP).reduce((t, p) => t + p.total, 0) / suma) * 100;
-  });
-
-  readonly pctResto = computed(() => 100 - this.pctTop10());
 
   readonly colsTop = computed<DatoCol[]>(() =>
     this.proveedoresMensual()
