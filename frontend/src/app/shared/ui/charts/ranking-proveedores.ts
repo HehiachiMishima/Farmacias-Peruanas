@@ -4,7 +4,7 @@ import { ProveedorMensualEstadistica } from '../../../core/models';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
 
-const PALETA = [
+export const PALETA_PROVEEDORES = [
   '#6366f1',
   '#0ea5e9',
   '#10b981',
@@ -258,7 +258,7 @@ export class RankingProveedores {
       proveedor: d.proveedor,
       total: d.total,
       pct: (d.total / totalGeneral) * 100,
-      color: PALETA[i % PALETA.length],
+      color: PALETA_PROVEEDORES[i % PALETA_PROVEEDORES.length],
       meses: d.meses.map((m) => ({
         etiqueta: this.nombreMes(m.mes),
         valor: m.incidencias,

@@ -112,7 +112,46 @@
     <article class="chart-card chart-card--hero">
       <header class="chart-card__head">
         <div>
-          <h3 class="chart-card__title">Top 10 proveedores con más incidencias</h3>
+          <h3 class="chart-card__title">Proveedores con más incidencias</h3>
+          <p class="chart-card__sub">{{ mensajeColsTop() }}</p>
+        </div>
+        <div class="chart-card__chips">
+          <span class="chip chip--marca">{{ totalProveedores() | number }} proveedores</span>
+          <span class="chip">{{ totalIncidencias() | number }} incidencias</span>
+        </div>
+      </header>
+      <div class="chart-card__body chart-card__body--full">
+        @if (colsTop().length > 0) {
+          <ui-cols-prov [datos]="colsTop()" [altura]="500" />
+        } @else {
+          <p class="chart-card__empty">Sin datos para los filtros aplicados.</p>
+        }
+      </div>
+    </article>
+
+    <article class="chart-card">
+      <header class="chart-card__head">
+        <div>
+          <h3 class="chart-card__title">Resto de proveedores</h3>
+          <p class="chart-card__sub">{{ mensajeColsResto() }}</p>
+        </div>
+        <div class="chart-card__chips">
+          <span class="chip">{{ colsResto().length | number }} proveedores</span>
+        </div>
+      </header>
+      <div class="chart-card__body chart-card__body--full">
+        @if (colsResto().length > 0) {
+          <ui-cols-prov [datos]="colsResto()" [altura]="440" [scroll]="true" />
+        } @else {
+          <p class="chart-card__empty">No hay más proveedores con incidencias.</p>
+        }
+      </div>
+    </article>
+
+    <article class="chart-card">
+      <header class="chart-card__head">
+        <div>
+          <h3 class="chart-card__title">Top 10 · detalle mensual</h3>
           <p class="chart-card__sub">{{ mensajeTop10() }}</p>
         </div>
         <div class="chart-card__chips">

@@ -7,6 +7,7 @@ import { InboundControlApi } from '../../../../../core/services/inbound-control.
 import { InboundIncidenciasApi } from '../../../../../core/services/inbound-incidencias.api';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
 import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
+import { ColumnasProveedores, DatoCol } from '../../../../../shared/ui/charts/cols-proveedores';
 import { DatoPareto, ParetoProveedores } from '../../../../../shared/ui/charts/pareto-proveedores';
 import { RankingProveedores } from '../../../../../shared/ui/charts/ranking-proveedores';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
@@ -14,12 +15,22 @@ import { Icon } from '../../../../../shared/ui/icon/icon';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 
 const TOP = 10;
+const TOP_COLS = 15;
 const PALETA = ['var(--brand)', 'var(--success)', 'var(--warning)', 'var(--danger)', '#a855f7'];
 const COLOR_OTROS = 'var(--color-graphite)';
 
 @Component({
   selector: 'app-inbound-dashboard',
-  imports: [DecimalPipe, BarChart, RankingProveedores, ParetoProveedores, EmptyState, Icon, PanelFiltros],
+  imports: [
+    DecimalPipe,
+    BarChart,
+    ColumnasProveedores,
+    RankingProveedores,
+    ParetoProveedores,
+    EmptyState,
+    Icon,
+    PanelFiltros,
+  ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
@@ -79,6 +90,33 @@ export class InboundDashboard {
   });
 
   readonly pctResto = computed(() => 100 - this.pctTop10());
+
+  readonly colsTop = computed<DatoCol[]>(() =>
+    this.proveedoresMensual()
+      .slice(0, TOP_COLS)
+      .map((p) => ({ etiqueta: p.proveedor, valor: p.total })),
+  );
+
+  readonly colsResto = computed<DatoCol[]>(() =>
+    this.proveedoresMensual()
+      .slice(TOP_COLS)
+      .map((p) => ({ etiqueta: p.proveedor, valor: p.total })),
+  );
+
+  readonly mensajeColsTop = computed(() => {
+    const lista = this.proveedoresMensual();
+    const suma = lista.reduce((t, p) => t + p.total, 0);
+    if (suma === 0) return 'Sin incidencias para los filtros aplicados.';
+    const n = Math.min(TOP_COLS, lista.length);
+    const pct = (lista.slice(0, TOP_COLS).reduce((t, p) => t + p.total, 0) / suma) * 100;
+    return `Total de incidencias por proveedor · los ${n} con más incidencias concentran el ${pct.toFixed(1)}% del total`;
+  });
+
+  readonly mensajeColsResto = computed(() => {
+    const restantes = this.colsResto().length;
+    if (restantes === 0) return 'No hay más proveedores con incidencias.';
+    return `Los otros ${restantes} proveedores · total de incidencias de cada uno · desliza para recorrerlos →`;
+  });
 
   constructor() {
     this.cargarCatalogos();
