@@ -3,21 +3,60 @@
     <h1 class="page-head__title">Incidencias Inbound</h1>
     <p class="page-head__sub">Registro y seguimiento de incidencias de inbound.</p>
   </div>
-  <div class="page-head__actions">
-    <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()" [disabled]="cargando()">
-      <ui-icon name="refresh" [size]="16" /> Actualizar
-    </button>
-    <button *hasPermiso="permisos.CREAR_INCIDENCIAS_INBOUND" type="button" class="ui-btn ui-btn--primary" (click)="abrirCrear()">
-      <ui-icon name="plus" [size]="18" /> Nueva incidencia
-    </button>
-    <button *hasPermiso="permisos.VER_INCIDENCIAS_INBOUND" type="button" class="ui-btn ui-btn--secondary" (click)="exportar()" [disabled]="cargando() || exportando() || total() === 0">
-      <ui-icon name="descargar" [size]="16" /> {{ exportando() ? 'Exportando…' : 'Exportar' }}
-    </button>
-  </div>
 </header>
 
-<ui-panel-filtros [abierto]="filtrosAbierto()" (alternar)="alternarFiltros()">
-  <div class="filtros-grid">
+<div class="toolbar">
+  <div class="ui-search toolbar__grow">
+    <ui-icon name="search" [size]="18" />
+    <input
+      type="search"
+      class="ui-input"
+      placeholder="Buscar por OC o SKU…"
+      [value]="filtroBusqueda()"
+      (input)="buscar($any($event.target).value)"
+    />
+  </div>
+  <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()" [disabled]="cargando()">
+    <ui-icon name="refresh" [size]="16" />
+    Actualizar
+  </button>
+  <button
+    *hasPermiso="permisos.VER_INCIDENCIAS_INBOUND"
+    type="button"
+    class="ui-btn ui-btn--secondary ui-btn--sm"
+    title="Exportar a Excel (CSV)"
+    (click)="exportar()"
+    [disabled]="cargando() || exportando() || total() === 0"
+  >
+    <ui-icon name="descargar" [size]="16" />
+    {{ exportando() ? 'Exportando…' : 'Exportar' }}
+  </button>
+  <button
+    type="button"
+    class="ui-btn ui-btn--secondary"
+    [attr.aria-expanded]="filtrosAbierto()"
+    aria-controls="incidencias-filtros"
+    (click)="alternarFiltros()"
+  >
+    <ui-icon name="filtro" [size]="18" />
+    Filtros
+    @if (filtrosActivos() > 0) {
+      <span class="filtros-badge">{{ filtrosActivos() }}</span>
+    }
+  </button>
+  <button *hasPermiso="permisos.CREAR_INCIDENCIAS_INBOUND" type="button" class="ui-btn ui-btn--primary" (click)="abrirCrear()">
+    <ui-icon name="plus" [size]="18" />
+    Nueva incidencia
+  </button>
+</div>
+
+<ui-panel-filtros
+  id="incidencias-filtros"
+  [abierto]="filtrosAbierto()"
+  titulo="Filtros"
+  (cerrar)="filtrosAbierto.set(false)"
+>
+  <div class="filtros">
     <div class="ui-field">
       <label class="ui-label">Proveedor</label>
       <select class="ui-select" [value]="filtroProveedor() ?? ''" (change)="setFiltroProveedor($event)">
@@ -44,16 +83,14 @@
       <label class="ui-label">Hasta</label>
       <input type="date" class="ui-input" [value]="filtroHasta()" (change)="setFiltroHasta($event)" />
     </div>
-  </div>
-  <div class="filtros-actions">
-    <button type="button" class="ui-btn ui-btn--ghost ui-btn--sm" (click)="limpiarFiltros()">Limpiar</button>
+    <div class="filtros__pie">
+      <button type="button" class="ui-btn ui-btn--ghost ui-btn--block" (click)="limpiarFiltros()">
+        <ui-icon name="close" [size]="16" />
+        Limpiar filtros
+      </button>
+    </div>
   </div>
 </ui-panel-filtros>
-
-<div class="ui-search" style="margin-bottom:12px">
-  <ui-icon name="search" [size]="18" />
-  <input type="search" class="ui-input" placeholder="Buscar por OC o SKU…" [value]="filtroBusqueda()" (input)="buscar($any($event.target).value)" />
-</div>
 
 <div class="table-card">
   @if (cargando()) {
