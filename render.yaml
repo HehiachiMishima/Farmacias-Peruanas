@@ -49,7 +49,6 @@ services:
         fromService:
           name: farmacias-peruanas
           type: web
-          name: farmacias-peruanas
           envVarKey: RENDER_EXTERNAL_URL
 
       # --- Usuario administrador semilla ---
