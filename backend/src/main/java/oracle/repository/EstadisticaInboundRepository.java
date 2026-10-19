@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 import oracle.request.FiltroIncidenciaInbound;
 import oracle.response.GrupoEstadisticaInbound;
+import oracle.response.MesIncidenciaProveedor;
+import oracle.response.ProveedorMensualEstadistica;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -59,6 +61,46 @@ public class EstadisticaInboundRepository {
                 + " GROUP BY t." + columna
                 + " ORDER BY count DESC, etiqueta ASC";
         return jdbc.query(sql, GRUPO, condicion.args().toArray());
+    }
+
+    public List<ProveedorMensualEstadistica> porProveedorMensual(FiltroIncidenciaInbound filtro) {
+        Condicion condicion = condicion(filtro);
+        String sql = "SELECT i.id_data_proveedor AS id_proveedor, "
+                + "COALESCE(t.proveedor, '—') AS proveedor, "
+                + "DATE_FORMAT(i.creado_en, '%Y-%m') AS mes, "
+                + "COUNT(*) AS count "
+                + "FROM incidencias_inbound i "
+                + "LEFT JOIN data_proveedor t ON t.id = i.id_data_proveedor "
+                + condicion.where()
+                + " GROUP BY i.id_data_proveedor, t.proveedor, mes "
+                + "ORDER BY i.id_data_proveedor ASC, mes ASC";
+
+        record Fila(long idProveedor, String proveedor, String mes, long count) {}
+        List<Fila> filas = jdbc.query(sql, (rs, fila) -> new Fila(
+                rs.getLong("id_proveedor"),
+                rs.getString("proveedor"),
+                rs.getString("mes"),
+                rs.getLong("count")),
+                condicion.args().toArray());
+
+        record Acumulado(long idProveedor, String proveedor, List<MesIncidenciaProveedor> meses) {}
+        List<Acumulado> acumulados = new ArrayList<>();
+        long idActual = Long.MIN_VALUE;
+        for (Fila f : filas) {
+            if (f.idProveedor() != idActual) {
+                idActual = f.idProveedor();
+                acumulados.add(new Acumulado(f.idProveedor(), f.proveedor(), new ArrayList<>()));
+            }
+            acumulados.get(acumulados.size() - 1).meses().add(new MesIncidenciaProveedor(f.mes(), f.count()));
+        }
+
+        List<ProveedorMensualEstadistica> resultado = new ArrayList<>();
+        for (Acumulado a : acumulados) {
+            long total = a.meses().stream().mapToLong(MesIncidenciaProveedor::incidencias).sum();
+            resultado.add(new ProveedorMensualEstadistica(a.idProveedor(), a.proveedor(), total, a.meses()));
+        }
+        resultado.sort((a, b) -> Long.compare(b.total(), a.total()));
+        return resultado;
     }
 
     private Condicion condicion(FiltroIncidenciaInbound filtro) {

@@ -7,6 +7,7 @@ import {
   IncidenciaInboundCrearRequest,
   IncidenciaInboundFiltros,
   PaginaInbound,
+  ProveedorMensualEstadistica,
 } from '../models';
 import { Api } from './api';
 
@@ -20,6 +21,13 @@ export class InboundIncidenciasApi {
 
   estadisticas(filtros: IncidenciaInboundFiltros = {}): Observable<EstadisticaInbound> {
     return this.api.get<EstadisticaInbound>('/inbound/incidencias/estadisticas', filtros as Record<string, unknown>);
+  }
+
+  estadisticaProveedoresMensual(filtros: IncidenciaInboundFiltros = {}): Observable<ProveedorMensualEstadistica[]> {
+    return this.api.get<ProveedorMensualEstadistica[]>(
+      '/inbound/incidencias/estadisticas/proveedores-mensual',
+      filtros as Record<string, unknown>,
+    );
   }
 
   exportar(filtros: IncidenciaInboundFiltros = {}): Observable<IncidenciaInbound[]> {

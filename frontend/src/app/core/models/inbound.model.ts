@@ -77,6 +77,18 @@ export interface EstadisticaInbound {
   tipos: GrupoEstadisticaInbound[];
 }
 
+export interface MesIncidenciaProveedor {
+  mes: string;
+  incidencias: number;
+}
+
+export interface ProveedorMensualEstadistica {
+  idProveedor: number;
+  proveedor: string;
+  total: number;
+  meses: MesIncidenciaProveedor[];
+}
+
 export interface PaginaInbound<T> {
   contenido: T[];
   total: number;

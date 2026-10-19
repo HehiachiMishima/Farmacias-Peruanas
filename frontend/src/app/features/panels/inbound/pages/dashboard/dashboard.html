@@ -109,38 +109,62 @@
   </section>
 
   <section class="charts">
-    <div class="charts__grid">
-      <article class="chart-card">
-        <header class="chart-card__head">
-          <div>
-            <h3 class="chart-card__title">Proveedores con más incidencias</h3>
-            <p class="chart-card__sub">Top 5 · nº de incidencias registradas</p>
-          </div>
-        </header>
-        <div class="chart-card__body">
-          @if (barrasProveedores().length > 0) {
-            <ui-bars [datos]="barrasProveedores()" [horizontal]="true" />
-          } @else {
-            <p class="chart-card__empty">Sin datos para los filtros aplicados.</p>
-          }
+    <article class="chart-card chart-card--hero">
+      <header class="chart-card__head">
+        <div>
+          <h3 class="chart-card__title">Top 10 proveedores con más incidencias</h3>
+          <p class="chart-card__sub">{{ mensajeTop10() }}</p>
         </div>
-      </article>
+        <div class="chart-card__chips">
+          <span class="chip chip--marca">{{ totalProveedores() | number }} proveedores</span>
+          <span class="chip">{{ totalIncidencias() | number }} incidencias</span>
+        </div>
+      </header>
+      <div class="chart-card__body chart-card__body--full">
+        @if (topProveedores().length > 0) {
+          <ui-rank-prov [datos]="topProveedores()" [totalGeneral]="totalIncidencias()" />
+        } @else {
+          <p class="chart-card__empty">Sin datos para los filtros aplicados.</p>
+        }
+      </div>
+    </article>
 
-      <article class="chart-card">
-        <header class="chart-card__head">
-          <div>
-            <h3 class="chart-card__title">Tipos de incidencia</h3>
-            <p class="chart-card__sub">Top 5 · nº de incidencias registradas</p>
-          </div>
-        </header>
-        <div class="chart-card__body">
-          @if (barrasTipos().length > 0) {
-            <ui-bars [datos]="barrasTipos()" [horizontal]="true" />
-          } @else {
-            <p class="chart-card__empty">Sin datos para los filtros aplicados.</p>
-          }
+    <article class="chart-card">
+      <header class="chart-card__head">
+        <div>
+          <h3 class="chart-card__title">Concentración de incidencias por proveedor</h3>
+          <p class="chart-card__sub">
+            Distribución de Pareto de los {{ totalProveedores() | number }} proveedores · dónde se concentra el problema
+          </p>
         </div>
-      </article>
-    </div>
+        <div class="chart-card__chips">
+          <span class="chip chip--marca">Top 10 = {{ pctTop10() | number: '1.1-1' }}%</span>
+          <span class="chip">Resto = {{ pctResto() | number: '1.1-1' }}%</span>
+        </div>
+      </header>
+      <div class="chart-card__body chart-card__body--full">
+        @if (paretoDatos().length > 1) {
+          <ui-pareto [datos]="paretoDatos()" />
+        } @else {
+          <p class="chart-card__empty">Se necesitan al menos dos proveedores con incidencias.</p>
+        }
+      </div>
+    </article>
+
+    <article class="chart-card">
+      <header class="chart-card__head">
+        <div>
+          <h3 class="chart-card__title">Tipos de incidencia</h3>
+          <p class="chart-card__sub">Top {{ barrasTipos().length }} · nº de incidencias registradas</p>
+        </div>
+      </header>
+      <div class="chart-card__body">
+        @if (barrasTipos().length > 0) {
+          <ui-bars [datos]="barrasTipos()" [horizontal]="true" />
+        } @else {
+          <p class="chart-card__empty">Sin datos para los filtros aplicados.</p>
+        }
+      </div>
+    </article>
   </section>
 }

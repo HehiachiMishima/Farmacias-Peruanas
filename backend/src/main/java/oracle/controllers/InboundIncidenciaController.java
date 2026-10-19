@@ -10,6 +10,7 @@ import oracle.response.ApiResponse;
 import oracle.response.EstadisticaInboundResponse;
 import oracle.response.IncidenciaInboundResponse;
 import oracle.response.PaginaResponse;
+import oracle.response.ProveedorMensualEstadistica;
 import oracle.services.IncidenciaInboundService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -58,6 +59,17 @@ public class InboundIncidenciaController {
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
       @RequestParam(required = false) String texto) {
     return service.estadisticas(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto));
+  }
+
+  @GetMapping("/estadisticas/proveedores-mensual")
+  @PreAuthorize("hasAuthority('VER_DASHBOARD_INBOUND')")
+  public Mono<ApiResponse<List<ProveedorMensualEstadistica>>> estadisticaProveedoresMensual(
+      @RequestParam(required = false) Long proveedor,
+      @RequestParam(required = false) Long tipo,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+      @RequestParam(required = false) String texto) {
+    return service.estadisticaProveedoresMensual(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto));
   }
 
   @GetMapping("/{id}")

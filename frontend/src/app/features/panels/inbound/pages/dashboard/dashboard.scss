@@ -97,14 +97,10 @@
 .metric--success .metric__icon { background: var(--success-soft); color: var(--success); }
 
 .charts {
-  margin-bottom: var(--space-8);
-}
-
-.charts__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(480px, 100%), 1fr));
+  display: flex;
+  flex-direction: column;
   gap: var(--space-6);
-  align-items: stretch;
+  margin-bottom: var(--space-8);
 }
 
 .chart-card {
@@ -150,6 +146,48 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.chart-card__body--full {
+  display: block;
+}
+
+.chart-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip--marca {
+  background: var(--brand-soft);
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--border));
+  color: var(--text);
+}
+
+.chart-card--hero {
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--border));
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--brand) 10%, transparent);
+
+  .chart-card__title {
+    color: var(--brand);
+  }
 }
 
 .chart-card__body ui-bars {

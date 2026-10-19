@@ -24,6 +24,7 @@ import oracle.response.ApiResponse;
 import oracle.response.EstadisticaInboundResponse;
 import oracle.response.IncidenciaInboundResponse;
 import oracle.response.PaginaResponse;
+import oracle.response.ProveedorMensualEstadistica;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -88,6 +89,13 @@ public class IncidenciaInboundService {
               estadisticasRepo.porProveedor(filtro),
               estadisticasRepo.porTipo(filtro));
         })
+        .subscribeOn(Schedulers.boundedElastic())
+        .map(d -> ApiResponse.ok("OK", d));
+  }
+
+  public Mono<ApiResponse<List<ProveedorMensualEstadistica>>> estadisticaProveedoresMensual(
+      FiltroIncidenciaInbound filtro) {
+    return Mono.fromCallable(() -> estadisticasRepo.porProveedorMensual(filtro))
         .subscribeOn(Schedulers.boundedElastic())
         .map(d -> ApiResponse.ok("OK", d));
   }
