@@ -20,3 +20,9 @@ export interface Sesion {
   usuario: Usuario;
   permisos: string[];
 }
+
+/** Sesión vigente según el servidor (GET /auth/sesion). */
+export interface SesionVigente {
+  usuario: Usuario;
+  permisos: string[];
+}

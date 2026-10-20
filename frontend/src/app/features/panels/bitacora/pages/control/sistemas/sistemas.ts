@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { PERMISOS } from '../../../../../../core/config/permisos';
 import { Notificaciones } from '../../../../../../core/services/notificaciones';
+import { BitacoraCatalogos } from '../../../../../../core/services/bitacora-catalogos';
 import { DirectorioUsuarios } from '../../../../../../core/services/directorio-usuarios';
 import { SistemasApi } from '../../../../../../core/services/sistemas.api';
 import { Sistema, TipoIncidencia } from '../../../../../../core/models';
@@ -36,6 +37,7 @@ export class Sistemas {
   private readonly fb = inject(FormBuilder);
   private readonly sistemasApi = inject(SistemasApi);
   private readonly notificaciones = inject(Notificaciones);
+  private readonly catalogos = inject(BitacoraCatalogos);
   private readonly directorio = inject(DirectorioUsuarios);
 
   readonly permisos = PERMISOS;
@@ -168,6 +170,7 @@ export class Sistemas {
 
     peticion$.pipe(finalize(() => this.guardando.set(false))).subscribe({
       next: (sistema) => {
+        this.catalogos.invalidar();
         this.notificaciones.exito(
           'Guardado',
           `Sistema ${sistema.sistema} ${editando ? 'actualizado' : 'creado'}.`,
@@ -196,6 +199,7 @@ export class Sistemas {
       .subscribe({
         next: () => {
           this.sistemasLista.update((lista) => lista.filter((item) => item.id !== sistema.id));
+          this.catalogos.invalidar();
           this.notificaciones.exito('Eliminado', `Sistema ${sistema.sistema} eliminado.`);
           this.eliminarAbierto.set(false);
           this.aEliminar.set(null);
@@ -271,6 +275,7 @@ export class Sistemas {
 
     peticion$.pipe(finalize(() => this.tipoGuardando.set(false))).subscribe({
       next: () => {
+        this.catalogos.invalidar();
         this.notificaciones.exito(
           'Guardado',
           `Tipo de incidencia ${editando ? 'actualizado' : 'creado'}.`,
@@ -300,6 +305,7 @@ export class Sistemas {
       .subscribe({
         next: () => {
           this.tiposLista.update((lista) => lista.filter((item) => item.id !== tipo.id));
+          this.catalogos.invalidar();
           this.notificaciones.exito('Eliminado', `Tipo de incidencia ${tipo.incidencia} eliminado.`);
           this.tipoEliminarAbierto.set(false);
           this.tipoAEliminar.set(null);

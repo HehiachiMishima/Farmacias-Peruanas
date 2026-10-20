@@ -1,23 +1,7 @@
 @use 'breakpoints' as bp;
 
-.page-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
-  margin-bottom: var(--space-6);
-  flex-wrap: wrap;
-}
 
-.page-head__title {
-  font-size: var(--fs-2xl);
-  letter-spacing: -0.02em;
-}
 
-.page-head__sub {
-  margin-top: var(--space-2);
-  color: var(--text-2);
-}
 
 .metrics {
   display: grid;
@@ -35,7 +19,15 @@
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   animation: ui-rise var(--transition-slow) both;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), transform var(--transition);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: var(--metric-accent, var(--brand));
+  }
 
   &:hover {
     border-color: color-mix(in srgb, var(--metric-accent, var(--brand)) 35%, var(--border));
@@ -69,8 +61,9 @@
 .metric__value {
   display: block;
   font-size: var(--fs-3xl);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.035em;
   line-height: 1.1;
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -93,7 +86,7 @@
 .metric--brand { --metric-accent: var(--brand); }
 .metric--success { --metric-accent: var(--success); }
 
-.metric--brand .metric__icon { background: var(--brand-soft); color: var(--text-2); }
+.metric--brand .metric__icon { background: var(--brand-soft); color: var(--brand); }
 .metric--success .metric__icon { background: var(--success-soft); color: var(--success); }
 
 .charts {
@@ -113,7 +106,15 @@
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   animation: ui-rise var(--transition-slow) both;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), transform var(--transition);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: var(--metric-accent, var(--brand));
+  }
 
   &:hover {
     border-color: var(--border-strong);

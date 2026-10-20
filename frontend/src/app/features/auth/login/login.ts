@@ -6,11 +6,10 @@ import { Auth } from '../../../core/services/auth';
 import { Carga } from '../../../core/services/carga';
 import { Notificaciones } from '../../../core/services/notificaciones';
 import { Icon } from '../../../shared/ui/icon/icon';
-import { LightPillar } from '../../../shared/ui/light-pillar/light-pillar';
 
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, Icon, LightPillar],
+  imports: [ReactiveFormsModule, Icon],
   templateUrl: './login.html',
   styleUrl: './login.scss',
 })
@@ -25,6 +24,11 @@ export class Login {
   readonly cargando = signal(false);
   readonly error = signal<string | null>(null);
   readonly verContrasena = signal(false);
+
+  /** Nodos (centros de distribución) dibujados sobre las rutas del fondo. */
+  readonly nodos: ReadonlyArray<readonly [number, number]> = [
+    [140, 362], [360, 380], [600, 268], [120, 236], [400, 200], [640, 330], [300, 525], [520, 440],
+  ];
 
   readonly formulario = this.fb.nonNullable.group({
     usuario: ['', [Validators.required]],

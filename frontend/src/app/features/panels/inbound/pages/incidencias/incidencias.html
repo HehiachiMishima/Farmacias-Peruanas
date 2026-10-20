@@ -93,7 +93,7 @@
 </ui-panel-filtros>
 
 <div class="table-card" [class.table-card--refrescando]="refrescando()">
-  @if (cargando() && items().length === 0) {
+  @if (cargaInicial()) {
     <div class="loading"><span class="ui-spinner"></span> Cargando incidencias…</div>
   } @else if (error()) {
     <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!">

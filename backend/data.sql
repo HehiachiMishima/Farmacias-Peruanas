@@ -1,4 +1,18 @@
 -- Active: 1791863596251@@mysql-hehiachi-mishima-servidor-local.g.aivencloud.com@25590@farmacias_peruanas
+-- ============================================================
+-- DATOS: permisos de los paneles Bitacora/Inbound, catalogos y
+-- registros de ejemplo.
+--
+-- REQUISITOS (ver README > Base de datos):
+--   1. schema.sql, panel.bitacora.sql y panel.inbound.sql ya aplicados.
+--   2. El backend arrancado UNA vez: crea al usuario semilla (id = 1),
+--      al que apuntan las columnas creado_por / actualizado_por (FK).
+--
+-- Los permisos y catalogos son idempotentes (ON DUPLICATE KEY). Las
+-- incidencias usan INSERT IGNORE (ticket unico); las incidencias inbound
+-- NO tienen clave natural: ejecuta este archivo una sola vez o se
+-- duplicaran los registros de ejemplo.
+-- ============================================================
 INSERT INTO
     permisos (
         nombre,
@@ -364,7 +378,7 @@ VALUES (1, 'CD PUNTA NEGRA', 1, 1),
 ON DUPLICATE KEY UPDATE
     actualizado_por = VALUES(actualizado_por);
 
-INSERT INTO
+INSERT IGNORE INTO
     incidencias (
         id_data_centro,
         id_data_sistema,

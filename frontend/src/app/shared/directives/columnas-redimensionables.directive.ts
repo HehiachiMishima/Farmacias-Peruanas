@@ -8,8 +8,12 @@ import { AfterViewInit, Directive, ElementRef, OnDestroy, inject } from '@angula
  * Los anchos se calculan después de pintarse las filas (los botones condicionados
  * con *hasPermiso se renderizan en un efecto, posterior a ngAfterViewInit).
  */
+const ANCHO_MINIMO = 56;
+const ANCHO_MAXIMO = 340;
+
 @Directive({ selector: 'table[appColumnasRedimensionables]' })
 export class ColumnasRedimensionables implements AfterViewInit, OnDestroy {
+  private destruida = false;
   private readonly tabla = inject<ElementRef<HTMLTableElement>>(ElementRef);
   private readonly limpiezas: (() => void)[] = [];
   private temporizador: number | null = null;
@@ -19,9 +23,17 @@ export class ColumnasRedimensionables implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     this.temporizador = window.setTimeout(() => {
       this.temporizador = null;
-      this.marco = requestAnimationFrame(() => {
-        this.marco = null;
-        this.fijarAnchos();
+      // Medir con las fuentes web ya cargadas: si se mide con la fuente de
+      // respaldo, las columnas quedan estrechas y truncan el contenido.
+      const fuentes = document.fonts?.ready ?? Promise.resolve();
+      void fuentes.then(() => {
+        if (this.destruida) {
+          return;
+        }
+        this.marco = requestAnimationFrame(() => {
+          this.marco = null;
+          this.fijarAnchos();
+        });
       });
     }, 0);
   }
@@ -38,8 +50,20 @@ export class ColumnasRedimensionables implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // Medir con el layout automático (ancho natural según el contenido).
-    const anchos = celdas.map((celda) => Math.round(celda.getBoundingClientRect().width));
+    // Medir el ancho NATURAL de cada columna (sin comprimir al contenedor),
+    // con un tope para que un texto largo no acapare la tabla.
+    const anchoPrevio = tabla.style.width;
+    tabla.style.width = 'max-content';
+    const naturales = celdas.map((celda) =>
+      Math.min(ANCHO_MAXIMO, Math.max(ANCHO_MINIMO, Math.ceil(celda.getBoundingClientRect().width))),
+    );
+    tabla.style.width = anchoPrevio;
+
+    // Si sobra espacio en el contenedor, se reparte proporcionalmente.
+    const disponible = tabla.parentElement?.clientWidth ?? 0;
+    const natural = naturales.reduce((acumulado, ancho) => acumulado + ancho, 0);
+    const factor = natural > 0 && disponible > natural ? disponible / natural : 1;
+    const anchos = naturales.map((ancho) => Math.floor(ancho * factor));
     const total = anchos.reduce((acumulado, ancho) => acumulado + ancho, 0);
     if (total <= 0) {
       return;
@@ -126,6 +150,7 @@ export class ColumnasRedimensionables implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destruida = true;
     if (this.temporizador !== null) {
       window.clearTimeout(this.temporizador);
     }

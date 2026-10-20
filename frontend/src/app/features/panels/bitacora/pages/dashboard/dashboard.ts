@@ -1,28 +1,25 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { finalize, forkJoin } from 'rxjs';
+import { finalize } from 'rxjs';
+import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import {
-  Area,
-  Centro,
   EstadisticaIncidencia,
   GrupoEstadistica,
   IncidenciaFiltros,
   Responsable,
-  Sistema,
 } from '../../../../../core/models';
 import { AreasApi } from '../../../../../core/services/areas.api';
-import { CentrosApi } from '../../../../../core/services/centros.api';
+import { BitacoraCatalogos } from '../../../../../core/services/bitacora-catalogos';
 import { IncidenciasApi } from '../../../../../core/services/incidencias.api';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
-import { SistemasApi } from '../../../../../core/services/sistemas.api';
 import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 
 const TOP = 5;
-const PALETA = ['var(--brand)', 'var(--success)', 'var(--warning)', 'var(--danger)', '#a855f7'];
-const COLOR_OTROS = 'var(--color-graphite)';
+const PALETA = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
+const COLOR_OTROS = 'var(--chart-otros)';
 
 @Component({
   selector: 'app-bitacora-dashboard',
@@ -32,18 +29,20 @@ const COLOR_OTROS = 'var(--color-graphite)';
 })
 export class DashboardBitacora {
   private readonly incidenciasApi = inject(IncidenciasApi);
-  private readonly centrosApi = inject(CentrosApi);
-  private readonly sistemasApi = inject(SistemasApi);
+  private readonly catalogos = inject(BitacoraCatalogos);
   private readonly areasApi = inject(AreasApi);
   private readonly notificaciones = inject(Notificaciones);
 
-  readonly cargando = signal(true);
-  readonly error = signal<string | null>(null);
-  readonly estadistica = signal<EstadisticaIncidencia | null>(null);
+  private readonly recurso = new RecursoRemoto<EstadisticaIncidencia>(() =>
+    this.incidenciasApi.estadisticas(this.filtros()),
+  );
+  readonly cargando = this.recurso.cargando;
+  readonly error = this.recurso.error;
+  readonly estadistica = this.recurso.valor;
 
-  readonly centros = signal<Centro[]>([]);
-  readonly sistemas = signal<Sistema[]>([]);
-  readonly areas = signal<Area[]>([]);
+  readonly centros = this.catalogos.centros;
+  readonly sistemas = this.catalogos.sistemas;
+  readonly areas = this.catalogos.areas;
 
   readonly filtroCentro = signal<number | null>(null);
   readonly filtroSistema = signal<number | null>(null);
@@ -81,31 +80,11 @@ export class DashboardBitacora {
   }
 
   cargarCatalogos(): void {
-    forkJoin({
-      centros: this.centrosApi.listar(),
-      sistemas: this.sistemasApi.listar(),
-      areas: this.areasApi.listar(),
-    }).subscribe({
-      next: ({ centros, sistemas, areas }) => {
-        this.centros.set(centros);
-        this.sistemas.set(sistemas);
-        this.areas.set(areas);
-      },
-      error: (err: unknown) =>
-        this.notificaciones.error('No se pudieron cargar los catálogos', mensajeDeError(err)),
-    });
+    this.catalogos.cargar();
   }
 
   cargar(): void {
-    this.cargando.set(true);
-    this.error.set(null);
-    this.incidenciasApi
-      .estadisticas(this.filtros())
-      .pipe(finalize(() => this.cargando.set(false)))
-      .subscribe({
-        next: (estadistica) => this.estadistica.set(estadistica),
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
-      });
+    this.recurso.recargar();
   }
 
   private filtros(): IncidenciaFiltros {

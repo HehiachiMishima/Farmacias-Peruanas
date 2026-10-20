@@ -39,3 +39,10 @@ export interface UsuarioFiltro {
   email?: string;
   activo?: boolean;
 }
+
+/** Roles y permisos efectivos de un usuario (GET /usuarios/resumen). */
+export interface UsuarioResumen {
+  usuarioId: number;
+  roles: string[];
+  permisos: string[];
+}

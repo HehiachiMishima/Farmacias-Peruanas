@@ -23,6 +23,20 @@ export class SesionStore {
     }
   }
 
+  /** Actualiza usuario y permisos conservando el token vigente. */
+  actualizar(usuario: Sesion['usuario'], permisos: string[]): void {
+    const actual = this._sesion();
+    if (!actual) {
+      return;
+    }
+    const mismos =
+      actual.permisos.length === permisos.length && actual.permisos.every((p, i) => p === permisos[i]);
+    if (mismos && JSON.stringify(actual.usuario) === JSON.stringify(usuario)) {
+      return;
+    }
+    this.guardar({ ...actual, usuario, permisos });
+  }
+
   limpiar(): void {
     this._sesion.set(null);
     try {

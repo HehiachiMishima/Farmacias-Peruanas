@@ -1,43 +1,56 @@
-<div class="shell" [class.shell--open]="menuAbierto()">
-  <span class="shell__veil shell__veil--1" aria-hidden="true"></span>
-  <span class="shell__veil shell__veil--2" aria-hidden="true"></span>
-
-  <aside id="shell-nav" class="shell__sidebar" [attr.inert]="menuAbierto() ? null : ''">
+<div
+  class="shell"
+  [class.shell--escritorio]="escritorio()"
+  [class.shell--riel]="escritorio() && !expandido()"
+  [class.shell--drawer]="!escritorio() && drawerAbierto()"
+>
+  <aside
+    id="shell-nav"
+    class="shell__sidebar"
+    aria-label="Navegación del panel"
+    [attr.inert]="!escritorio() && !drawerAbierto() ? '' : null"
+  >
     <div class="shell__brand">
-      <span class="shell__brand-mark"><img src="logo_web.png" alt="Ingeniería Logística" width="22" height="22"></span>
+      <span class="shell__brand-mark"><img src="logo_web.png" alt="" width="26" height="26" /></span>
       <span class="shell__brand-text">
+        <span class="shell__brand-kicker">Control Tower</span>
         <span class="shell__brand-title">{{ panel().nombre }}</span>
-        <span class="shell__brand-sub">Hehiachi Mishima</span>
       </span>
     </div>
 
     <nav class="shell__nav">
-      <p class="shell__nav-label" [style.--i]="0">Módulos</p>
-      @for (modulo of modulos(); track modulo.id; let i = $index) {
+      <p class="shell__nav-label">Módulos</p>
+      @for (modulo of modulos(); track modulo.id) {
         <a
           class="shell__nav-item"
-          [style.--i]="i + 1"
           [routerLink]="modulo.ruta"
           routerLinkActive="shell__nav-item--active"
-          (click)="cerrarMenu()"
+          [attr.title]="escritorio() && !expandido() ? modulo.nombre : null"
         >
-          <span class="shell__nav-itemInner">
-            <ui-icon [name]="modulo.icono" [size]="18" />
-            <span>{{ modulo.nombre }}</span>
+          <span class="shell__nav-icon"><ui-icon [name]="modulo.icono" [size]="18" /></span>
+          <span class="shell__nav-text">
+            <span class="shell__nav-name">{{ modulo.nombre }}</span>
+            <span class="shell__nav-desc">{{ modulo.descripcion }}</span>
           </span>
         </a>
       }
     </nav>
 
-    <div class="shell__sidebar-foot" [style.--i]="modulos().length + 2">
-      <button type="button" class="shell__panel-btn" (click)="irAPaneles()">
-        <ui-icon name="panel" [size]="18" />
-        Cambiar de panel
+    <div class="shell__sidebar-foot">
+      <button
+        type="button"
+        class="shell__panel-btn"
+        (click)="irAPaneles()"
+        [attr.title]="escritorio() && !expandido() ? 'Cambiar de panel' : null"
+      >
+        <span class="shell__nav-icon"><ui-icon name="panel" [size]="18" /></span>
+        <span class="shell__nav-text"><span class="shell__nav-name">Cambiar de panel</span></span>
       </button>
+      <p class="shell__foot-meta">Ingeniería Logística · Farmacias Peruanas</p>
     </div>
   </aside>
 
-  <div class="shell__overlay" (click)="cerrarMenu()"></div>
+  <div class="shell__overlay" (click)="cerrarDrawer()" aria-hidden="true"></div>
 
   <div class="shell__body">
     <header class="shell__topbar">
@@ -45,20 +58,27 @@
         type="button"
         class="ui-icon-btn shell__menu-btn"
         (click)="alternarMenu()"
-        aria-label="Menú"
-        [attr.aria-expanded]="menuAbierto()"
+        [attr.aria-label]="escritorio() ? (expandido() ? 'Contraer menú' : 'Expandir menú') : 'Abrir menú'"
+        [attr.aria-expanded]="escritorio() ? expandido() : drawerAbierto()"
         aria-controls="shell-nav"
       >
-        <span class="shell__menu-icon" aria-hidden="true">
-          <ui-icon class="shell__menu-icon-open" name="menu" [size]="20" />
-          <ui-icon class="shell__menu-icon-close" name="close" [size]="20" />
-        </span>
+        <ui-icon [name]="!escritorio() && drawerAbierto() ? 'close' : 'menu'" [size]="20" />
       </button>
 
       <div class="shell__topbar-title">
-        <span class="shell__crumb">Panel</span>
-        <span class="shell__crumb-sep">/</span>
-        <span class="shell__crumb-current">{{ panel().nombre }}</span>
+        <span class="shell__crumb">{{ panel().nombre }}</span>
+        @if (moduloActual(); as modulo) {
+          <ui-icon class="shell__crumb-sep" name="chevronRight" [size]="14" />
+          <span class="shell__crumb-current">{{ modulo.nombre }}</span>
+        }
+      </div>
+
+      <div class="shell__status" aria-hidden="true">
+        <span class="ct-live"><span class="ct-live__dot"></span>En línea</span>
+        <span class="shell__clock">
+          <span class="shell__clock-time">{{ hora() }}</span>
+          <span class="shell__clock-date">{{ fecha() }}</span>
+        </span>
       </div>
 
       <div class="shell__topbar-actions">
@@ -76,7 +96,7 @@
           </div>
         }
 
-        <button type="button" class="ui-icon-btn" (click)="cerrarSesion()" aria-label="Cerrar sesión">
+        <button type="button" class="ui-icon-btn shell__logout" (click)="cerrarSesion()" aria-label="Cerrar sesión">
           <ui-icon name="logout" [size]="18" />
         </button>
       </div>

@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { PERMISOS } from '../../../../../../core/config/permisos';
 import { Notificaciones } from '../../../../../../core/services/notificaciones';
+import { BitacoraCatalogos } from '../../../../../../core/services/bitacora-catalogos';
 import { DirectorioUsuarios } from '../../../../../../core/services/directorio-usuarios';
 import { AreasApi } from '../../../../../../core/services/areas.api';
 import { Area, Responsable } from '../../../../../../core/models';
@@ -36,6 +37,7 @@ export class Areas {
   private readonly fb = inject(FormBuilder);
   private readonly areasApi = inject(AreasApi);
   private readonly notificaciones = inject(Notificaciones);
+  private readonly catalogos = inject(BitacoraCatalogos);
   private readonly directorio = inject(DirectorioUsuarios);
 
   readonly permisos = PERMISOS;
@@ -168,6 +170,7 @@ export class Areas {
 
     peticion$.pipe(finalize(() => this.guardando.set(false))).subscribe({
       next: (area) => {
+        this.catalogos.invalidar();
         this.notificaciones.exito(
           'Guardado',
           `Área ${area.area} ${editando ? 'actualizada' : 'creada'}.`,
@@ -196,6 +199,7 @@ export class Areas {
       .subscribe({
         next: () => {
           this.areasLista.update((lista) => lista.filter((item) => item.id !== area.id));
+          this.catalogos.invalidar();
           this.notificaciones.exito('Eliminado', `Área ${area.area} eliminada.`);
           this.eliminarAbierto.set(false);
           this.aEliminar.set(null);
@@ -271,6 +275,7 @@ export class Areas {
 
     peticion$.pipe(finalize(() => this.hijoGuardando.set(false))).subscribe({
       next: () => {
+        this.catalogos.invalidar();
         this.notificaciones.exito('Guardado', `Responsable ${editando ? 'actualizado' : 'creado'}.`);
         this.cerrarHijoForm();
         this.cargarHijos();
@@ -297,6 +302,7 @@ export class Areas {
       .subscribe({
         next: () => {
           this.hijosLista.update((lista) => lista.filter((item) => item.id !== responsable.id));
+          this.catalogos.invalidar();
           this.notificaciones.exito('Eliminado', `Responsable ${responsable.responsable} eliminado.`);
           this.hijoEliminarAbierto.set(false);
           this.hijoAEliminar.set(null);

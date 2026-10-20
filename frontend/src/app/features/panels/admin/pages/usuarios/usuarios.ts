@@ -141,31 +141,18 @@ export class Usuarios {
       return;
     }
     this.cargandoResumen.set(true);
-    forkJoin({
-      catalogo: this.permisosApi.listar(),
-      porUsuario: forkJoin(
-        lista.map((usuario) =>
-          forkJoin({
-            roles: this.usuariosApi.roles(usuario.id),
-            finales: this.usuariosApi.resolucionFinales(usuario.id),
-          }),
-        ),
-      ),
-    })
+    this.usuariosApi
+      .resumen()
       .pipe(finalize(() => this.cargandoResumen.set(false)))
       .subscribe({
-        next: ({ catalogo, porUsuario }) => {
-          const nombrePorId = new Map(catalogo.map((permiso) => [permiso.id, permiso.nombre]));
+        next: (filas) => {
           const mapa = new Map<number, ResumenUsuario>();
-          lista.forEach((usuario, indice) => {
-            const info = porUsuario[indice];
-            mapa.set(usuario.id, {
-              roles: info.roles.map((rol) => rol.nombre),
-              permisos: info.finales
-                .filter((fila) => fila.permitido)
-                .map((fila) => nombrePorId.get(fila.permisoId) ?? `#${fila.permisoId}`),
-            });
-          });
+          for (const usuario of lista) {
+            mapa.set(usuario.id, { roles: [], permisos: [] });
+          }
+          for (const fila of filas) {
+            mapa.set(fila.usuarioId, { roles: fila.roles, permisos: fila.permisos });
+          }
           this.resumen.set(mapa);
         },
         error: () => this.resumen.set(new Map()),

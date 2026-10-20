@@ -2,22 +2,20 @@ import { DatePipe, formatDate } from '@angular/common';
 import { Component, LOCALE_ID, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Subject, debounceTime, distinctUntilChanged, finalize, forkJoin, switchMap } from 'rxjs';
+import { Subject, debounceTime, finalize } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { exportarCsv } from '../../../../../core/utils/csv.util';
+import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
 import {
-  Area,
-  Centro,
   Incidencia,
   IncidenciaCrearRequest,
   IncidenciaFiltros,
   Responsable,
-  Sistema,
   TipoIncidencia,
 } from '../../../../../core/models';
 import { AreasApi } from '../../../../../core/services/areas.api';
-import { CentrosApi } from '../../../../../core/services/centros.api';
+import { BitacoraCatalogos } from '../../../../../core/services/bitacora-catalogos';
 import { DirectorioUsuarios } from '../../../../../core/services/directorio-usuarios';
 import { IncidenciasApi } from '../../../../../core/services/incidencias.api';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
@@ -79,7 +77,7 @@ const CABECERAS_EXPORT = [
 export class Incidencias {
   private readonly fb = inject(FormBuilder);
   private readonly incidenciasApi = inject(IncidenciasApi);
-  private readonly centrosApi = inject(CentrosApi);
+  private readonly catalogos = inject(BitacoraCatalogos);
   private readonly sistemasApi = inject(SistemasApi);
   private readonly areasApi = inject(AreasApi);
   private readonly notificaciones = inject(Notificaciones);
@@ -88,14 +86,23 @@ export class Incidencias {
 
   readonly permisos = PERMISOS;
 
-  readonly cargando = signal(true);
-  readonly error = signal<string | null>(null);
-  readonly items = signal<Incidencia[]>([]);
-  readonly total = signal(0);
+  readonly pagina = signal(1);
+  readonly porPagina = signal(10);
 
-  readonly centros = signal<Centro[]>([]);
-  readonly sistemas = signal<Sistema[]>([]);
-  readonly areas = signal<Area[]>([]);
+  private readonly listado = new ListadoRemoto<Incidencia>(
+    () => this.incidenciasApi.listar(this.filtros(), this.pagina(), this.porPagina()),
+    (ultima) => this.pagina.set(ultima),
+  );
+  readonly items = this.listado.items;
+  readonly total = this.listado.total;
+  readonly cargando = this.listado.cargando;
+  readonly cargaInicial = this.listado.cargaInicial;
+  readonly refrescando = this.listado.refrescando;
+  readonly error = this.listado.error;
+
+  readonly centros = this.catalogos.centros;
+  readonly sistemas = this.catalogos.sistemas;
+  readonly areas = this.catalogos.areas;
 
   readonly filtroBusqueda = signal('');
   readonly filtroCentro = signal<number | null>(null);
@@ -122,9 +129,6 @@ export class Incidencias {
   });
 
   readonly hayFiltros = computed(() => this.filtrosActivos() > 0 || this.filtroBusqueda().trim() !== '');
-
-  readonly pagina = signal(1);
-  readonly porPagina = signal(10);
 
   readonly totalPaginas = computed(() => Math.max(1, Math.ceil(this.total() / this.porPagina())));
   readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
@@ -167,24 +171,15 @@ export class Incidencias {
     this.cargar();
 
     this.busqueda$
-      .pipe(
-        debounceTime(300),
-        distinctUntilChanged(),
-        takeUntilDestroyed(),
-        switchMap((valor: string) => {
-          this.filtroBusqueda.set(valor);
-          this.pagina.set(1);
-          this.cargando.set(true);
-          this.error.set(null);
-          return this.incidenciasApi.listar(this.filtros(), 1, this.porPagina()).pipe(finalize(() => this.cargando.set(false)));
-        })
-      )
-      .subscribe({
-        next: (pagina: any) => {
-          this.items.set(pagina.contenido);
-          this.total.set(pagina.total);
-        },
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
+      .pipe(debounceTime(300), takeUntilDestroyed())
+      .subscribe((valor) => {
+        // Se compara contra el filtro vigente (no contra la última emisión):
+        // así «Limpiar filtros» + volver a escribir lo mismo sí recarga.
+        if (valor.trim() === this.filtroBusqueda().trim()) {
+          return;
+        }
+        this.filtroBusqueda.set(valor);
+        this.cargarDesde(1);
       });
 
     this.formulario.controls.idDataSistema.valueChanges.subscribe((sistemaId) => {
@@ -198,38 +193,11 @@ export class Incidencias {
   }
 
   cargarCatalogos(): void {
-    forkJoin({
-      centros: this.centrosApi.listar(),
-      sistemas: this.sistemasApi.listar(),
-      areas: this.areasApi.listar(),
-    }).subscribe({
-      next: ({ centros, sistemas, areas }) => {
-        this.centros.set(centros);
-        this.sistemas.set(sistemas);
-        this.areas.set(areas);
-      },
-      error: (err: unknown) =>
-        this.notificaciones.error('No se pudieron cargar los catálogos', mensajeDeError(err)),
-    });
+    this.catalogos.cargar();
   }
 
   cargar(): void {
-    this.cargando.set(true);
-    this.error.set(null);
-    this.incidenciasApi
-      .listar(this.filtros(), this.pagina(), this.porPagina())
-      .pipe(finalize(() => this.cargando.set(false)))
-      .subscribe({
-        next: (pagina) => {
-          this.items.set(pagina.contenido);
-          this.total.set(pagina.total);
-          if (pagina.contenido.length === 0 && pagina.total > 0 && this.pagina() > 1) {
-            this.pagina.set(Math.max(1, pagina.totalPaginas));
-            this.cargar();
-          }
-        },
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
-      });
+    this.listado.recargar();
   }
 
   private cargarDesde(pagina: number): void {

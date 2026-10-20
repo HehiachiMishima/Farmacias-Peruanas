@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { PERMISOS } from '../../../../../../core/config/permisos';
 import { Notificaciones } from '../../../../../../core/services/notificaciones';
+import { BitacoraCatalogos } from '../../../../../../core/services/bitacora-catalogos';
 import { DirectorioUsuarios } from '../../../../../../core/services/directorio-usuarios';
 import { CentrosApi } from '../../../../../../core/services/centros.api';
 import { Centro } from '../../../../../../core/models';
@@ -36,6 +37,7 @@ export class Centros {
   private readonly fb = inject(FormBuilder);
   private readonly centrosApi = inject(CentrosApi);
   private readonly notificaciones = inject(Notificaciones);
+  private readonly catalogos = inject(BitacoraCatalogos);
   private readonly directorio = inject(DirectorioUsuarios);
 
   readonly permisos = PERMISOS;
@@ -151,6 +153,7 @@ export class Centros {
 
     peticion$.pipe(finalize(() => this.guardando.set(false))).subscribe({
       next: (centro) => {
+        this.catalogos.invalidar();
         this.notificaciones.exito(
           'Guardado',
           `Centro ${centro.centro} ${editando ? 'actualizado' : 'creado'}.`,
@@ -179,6 +182,7 @@ export class Centros {
       .subscribe({
         next: () => {
           this.centrosLista.update((lista) => lista.filter((item) => item.id !== centro.id));
+          this.catalogos.invalidar();
           this.notificaciones.exito('Eliminado', `Centro ${centro.centro} eliminado.`);
           this.eliminarAbierto.set(false);
           this.aEliminar.set(null);

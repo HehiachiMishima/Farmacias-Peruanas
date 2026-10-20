@@ -175,7 +175,7 @@ export interface BarraDato {
     }
 
     .hrow__track {
-      height: 44px;
+      height: 14px;
       border-radius: var(--radius-pill);
       background: var(--surface-2);
       overflow: hidden;

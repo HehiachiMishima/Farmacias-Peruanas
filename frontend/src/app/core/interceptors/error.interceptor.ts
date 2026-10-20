@@ -1,4 +1,4 @@
-import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
+import { HttpContextToken, HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { throwError } from 'rxjs';
@@ -7,6 +7,12 @@ import { CONFIG } from '../config/configuracion';
 import { mensajeDeError } from '../errors/error.util';
 import { Notificaciones } from '../services/notificaciones';
 import { SesionStore } from '../services/sesion';
+
+/**
+ * Marca una petición de segundo plano: sus errores no muestran toasts
+ * (un 401 sigue cerrando la sesión).
+ */
+export const PETICION_SILENCIOSA = new HttpContextToken<boolean>(() => false);
 
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const notificaciones = inject(Notificaciones);
@@ -20,6 +26,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         return throwError(() => err);
       }
 
+      const silenciosa = req.context.get(PETICION_SILENCIOSA);
+
       if (err.status === 401) {
         const teniaSesion = sesionStore.sesion() !== null;
         sesionStore.limpiar();
@@ -27,6 +35,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
           notificaciones.advertencia('Sesión expirada', 'Vuelve a iniciar sesión para continuar.');
         }
         redirigirAlLogin(router);
+      } else if (silenciosa) {
+        // Petición de fondo: sin toasts.
       } else if (err.status === 403) {
         notificaciones.error('Acceso denegado', mensajeDeError(err));
       } else if (err.status !== 0) {

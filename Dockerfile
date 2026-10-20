@@ -14,14 +14,14 @@
 #                    NO se publica nunca; solo nginx lo usa por dentro.
 #
 # El archivo backend/.env NO se copia: las credenciales entran como
-# variables de entorno (Render las inyecta).
+# variables de entorno (Render las inyecta, docker run -e / --env-file).
 # ============================================================
 
 # ---------- Etapa 1: build del frontend ----------
 FROM node:22-alpine AS frontend
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build -- --configuration production
 
@@ -45,9 +45,30 @@ COPY --from=frontend /app/dist/frontend/browser /usr/share/nginx/html
 
 # --- Config de nginx: sirve el SPA y proxifica /api al backend ---
 RUN cat > /etc/nginx/http.d/default.conf.template <<'NGINX'
+# Protocolo original del cliente: Render termina TLS antes de nginx y envia
+# X-Forwarded-Proto=https. Se reenvia tal cual al backend; sin esto Spring
+# veria "http" y trataria las peticiones del propio dominio como CORS.
+map $http_x_forwarded_proto $proto_cliente {
+    default $http_x_forwarded_proto;
+    ''      $scheme;
+}
+
+# Solo se pide "upgrade" cuando el cliente lo solicita (WebSocket); el
+# resto de peticiones reutiliza conexiones keep-alive hacia el backend.
+map $http_upgrade $conexion_backend {
+    default upgrade;
+    ''      '';
+}
+
+upstream backend {
+    server 127.0.0.1:${BACKEND_PORT};
+    keepalive 64;
+}
+
 server {
     listen ${PORT};
     server_name _;
+    server_tokens off;
 
     root /usr/share/nginx/html;
     index index.html;
@@ -60,24 +81,39 @@ server {
     gzip_vary on;
     gzip_types text/plain text/css text/javascript application/javascript application/json application/xml image/svg+xml font/woff2;
 
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+
     location /api/ {
-        proxy_pass http://127.0.0.1:${BACKEND_PORT};
+        proxy_pass http://backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $proto_cliente;
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection $conexion_backend;
         proxy_connect_timeout 15s;
         proxy_read_timeout 60s;
         proxy_send_timeout 60s;
+        # Exportaciones en flujo (chunked): entregar al cliente sin acumular.
+        proxy_buffering off;
     }
 
+    # Assets con hash en el nombre (Angular outputHashing=all): cache larga.
     location ~* \.(?:js|css|woff2?|ttf|eot|png|jpe?g|gif|svg|webp|ico)$ {
-        expires 30d;
-        add_header Cache-Control "public, immutable";
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header X-Content-Type-Options "nosniff" always;
         try_files $uri =404;
+    }
+
+    # index.html nunca se cachea: asi cada deploy se ve al instante.
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
     }
 
     location / {
@@ -90,6 +126,10 @@ NGINX
 RUN printf '#!/bin/sh\nexec nginx -g "daemon off;"\n' > /usr/local/bin/run-nginx \
     && chmod +x /usr/local/bin/run-nginx
 
+# --- Wrapper del backend: JAVA_OPTS permite ajustar la JVM sin rebuild ---
+RUN printf '#!/bin/sh\nexec java $JAVA_OPTS -jar /app/app.jar --server.port="$BACKEND_PORT"\n' > /usr/local/bin/run-backend \
+    && chmod +x /usr/local/bin/run-backend
+
 # --- Supervisord: arranca backend y nginx en el mismo contenedor ---
 RUN cat > /etc/supervisord.conf <<'SUPERVISORD'
 [supervisord]
@@ -99,10 +139,11 @@ logfile_maxbytes=0
 pidfile=/run/supervisord.pid
 
 [program:backend]
-command=java -XX:MaxRAMPercentage=70 -XX:+UseContainerSupport -jar /app/app.jar --server.port=%(ENV_BACKEND_PORT)s
+command=/usr/local/bin/run-backend
 directory=/app
 autorestart=true
 startsecs=5
+stopwaitsecs=35
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
@@ -125,6 +166,7 @@ set -e
 
 PORT="${PORT:-10000}"
 BACKEND_PORT="${BACKEND_PORT:-2003}"
+export PORT BACKEND_PORT
 
 if [ "$PORT" = "$BACKEND_PORT" ]; then
   echo "ERROR: PORT y BACKEND_PORT no pueden coincidir (=$PORT):" >&2
@@ -142,8 +184,15 @@ RUN chmod +x /entrypoint.sh
 
 # PORT = publico (Render lo inyecta; por defecto 10000).
 # BACKEND_PORT = interno del backend (por defecto 2003). Deben ser distintos.
-ENV PORT=10000
-ENV BACKEND_PORT=2003
+# SPRING_PROFILES_ACTIVE=prod activa application-prod.properties (logs JSON).
+ENV PORT=10000 \
+    BACKEND_PORT=2003 \
+    SPRING_PROFILES_ACTIVE=prod \
+    JAVA_OPTS="-XX:MaxRAMPercentage=70 -XX:+UseContainerSupport -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/urandom"
 EXPOSE 10000
+
+# Sano = nginx responde y el backend contesta /api/health (204).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+  CMD wget -q --spider "http://127.0.0.1:${PORT}/api/health" || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]

@@ -18,3 +18,13 @@
 
 # Documentacion.
 **/*.md
+
+# Scripts SQL y certificados: se aplican fuera de la imagen.
+backend/*.sql
+backend/certs
+**/*.pem
+
+# Herramientas locales.
+.claude
+**/.DS_Store
+docker-compose.yml

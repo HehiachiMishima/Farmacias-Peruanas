@@ -2,9 +2,10 @@ import { DatePipe, formatDate } from '@angular/common';
 import { Component, LOCALE_ID, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Subject, debounceTime, distinctUntilChanged, finalize, switchMap } from 'rxjs';
+import { Subject, debounceTime, finalize } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
+import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
 import { exportarCsv } from '../../../../../core/utils/csv.util';
 import {
   IncidenciaInbound,
@@ -60,12 +61,7 @@ export class InboundIncidencias {
 
   readonly permisos = PERMISOS;
 
-  readonly cargando = signal(true);
-  readonly error = signal<string | null>(null);
-  readonly items = signal<IncidenciaInbound[]>([]);
-  readonly total = signal(0);
 
-  readonly refrescando = computed(() => this.cargando() && this.items().length > 0);
 
   readonly proveedores = this.catalogos.proveedores;
   readonly tipos = this.catalogos.tipos;
@@ -96,6 +92,17 @@ export class InboundIncidencias {
   readonly pagina = signal(1);
   readonly porPagina = signal(10);
 
+  private readonly listado = new ListadoRemoto<IncidenciaInbound>(
+    () => this.api.listar(this.filtros(), this.pagina(), this.porPagina()),
+    (ultima) => this.pagina.set(ultima),
+  );
+  readonly items = this.listado.items;
+  readonly total = this.listado.total;
+  readonly cargando = this.listado.cargando;
+  readonly cargaInicial = this.listado.cargaInicial;
+  readonly refrescando = this.listado.refrescando;
+  readonly error = this.listado.error;
+
   readonly totalPaginas = computed(() => Math.max(1, Math.ceil(this.total() / this.porPagina())));
   readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
 
@@ -124,45 +131,17 @@ export class InboundIncidencias {
     this.catalogos.cargar();
     this.cargar();
 
-    this.busqueda$
-      .pipe(
-        debounceTime(300),
-        distinctUntilChanged(),
-        takeUntilDestroyed(),
-        switchMap((valor: string) => {
-          this.filtroBusqueda.set(valor);
-          this.pagina.set(1);
-          this.cargando.set(true);
-          this.error.set(null);
-          return this.api.listar(this.filtros(), 1, this.porPagina()).pipe(finalize(() => this.cargando.set(false)));
-        })
-      )
-      .subscribe({
-        next: (pagina) => {
-          this.items.set(pagina.contenido);
-          this.total.set(pagina.total);
-        },
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
-      });
+    this.busqueda$.pipe(debounceTime(300), takeUntilDestroyed()).subscribe((valor) => {
+      if (valor.trim() === this.filtroBusqueda().trim()) {
+        return;
+      }
+      this.filtroBusqueda.set(valor);
+      this.cargarDesde(1);
+    });
   }
 
   cargar(): void {
-    this.cargando.set(true);
-    this.error.set(null);
-    this.api
-      .listar(this.filtros(), this.pagina(), this.porPagina())
-      .pipe(finalize(() => this.cargando.set(false)))
-      .subscribe({
-        next: (pagina) => {
-          this.items.set(pagina.contenido);
-          this.total.set(pagina.total);
-          if (pagina.contenido.length === 0 && pagina.total > 0 && this.pagina() > 1) {
-            this.pagina.set(Math.max(1, pagina.totalPaginas));
-            this.cargar();
-          }
-        },
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
-      });
+    this.listado.recargar();
   }
 
   private cargarDesde(pagina: number): void {

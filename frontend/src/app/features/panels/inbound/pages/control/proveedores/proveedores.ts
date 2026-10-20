@@ -2,10 +2,12 @@ import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Subject, debounceTime, distinctUntilChanged, finalize, switchMap } from 'rxjs';
+import { Subject, debounceTime, finalize } from 'rxjs';
 import { mensajeDeError } from '../../../../../../core/errors/error.util';
+import { ListadoRemoto } from '../../../../../../core/utils/listado-remoto';
 import { PERMISOS } from '../../../../../../core/config/permisos';
 import { Notificaciones } from '../../../../../../core/services/notificaciones';
+import { InboundCatalogos } from '../../../../../../core/services/inbound-catalogos';
 import { DirectorioUsuarios } from '../../../../../../core/services/directorio-usuarios';
 import { InboundControlApi } from '../../../../../../core/services/inbound-control.api';
 import { Proveedor, ProveedorCrearRequest } from '../../../../../../core/models';
@@ -27,22 +29,29 @@ export class ProveedoresInbound {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(InboundControlApi);
   private readonly notificaciones = inject(Notificaciones);
+  private readonly catalogos = inject(InboundCatalogos);
   private readonly directorio = inject(DirectorioUsuarios);
 
   readonly permisos = PERMISOS;
 
-  readonly cargando = signal(true);
-  readonly error = signal<string | null>(null);
-  readonly items = signal<Proveedor[]>([]);
-  readonly total = signal(0);
   readonly busqueda = signal('');
 
-  readonly refrescando = computed(() => this.cargando() && this.items().length > 0);
 
   private readonly busqueda$ = new Subject<string>();
 
   readonly pagina = signal(1);
   readonly porPagina = signal(10);
+
+  private readonly listado = new ListadoRemoto<Proveedor>(
+    () => this.api.listarProveedoresPaginado(this.pagina(), this.porPagina(), this.busqueda()),
+    (ultima) => this.pagina.set(ultima),
+  );
+  readonly items = this.listado.items;
+  readonly total = this.listado.total;
+  readonly cargando = this.listado.cargando;
+  readonly cargaInicial = this.listado.cargaInicial;
+  readonly refrescando = this.listado.refrescando;
+  readonly error = this.listado.error;
 
   readonly totalPaginas = computed(() => Math.max(1, Math.ceil(this.total() / this.porPagina())));
   readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
@@ -62,45 +71,17 @@ export class ProveedoresInbound {
     this.directorio.cargar();
     this.cargar();
 
-    this.busqueda$
-      .pipe(
-        debounceTime(300),
-        distinctUntilChanged(),
-        takeUntilDestroyed(),
-        switchMap((valor: string) => {
-          this.busqueda.set(valor);
-          this.pagina.set(1);
-          this.cargando.set(true);
-          this.error.set(null);
-          return this.api.listarProveedoresPaginado(1, this.porPagina(), this.busqueda()).pipe(finalize(() => this.cargando.set(false)));
-        })
-      )
-      .subscribe({
-        next: (pagina) => {
-          this.items.set(pagina.contenido);
-          this.total.set(pagina.total);
-        },
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
-      });
+    this.busqueda$.pipe(debounceTime(300), takeUntilDestroyed()).subscribe((valor) => {
+      if (valor.trim() === this.busqueda().trim()) {
+        return;
+      }
+      this.busqueda.set(valor);
+      this.cargarDesde(1);
+    });
   }
 
   cargar(): void {
-    this.cargando.set(true);
-    this.error.set(null);
-    this.api
-      .listarProveedoresPaginado(this.pagina(), this.porPagina(), this.busqueda())
-      .pipe(finalize(() => this.cargando.set(false)))
-      .subscribe({
-        next: (pagina) => {
-          this.items.set(pagina.contenido);
-          this.total.set(pagina.total);
-          if (pagina.contenido.length === 0 && pagina.total > 0 && this.pagina() > 1) {
-            this.pagina.set(Math.max(1, pagina.totalPaginas));
-            this.cargar();
-          }
-        },
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
-      });
+    this.listado.recargar();
   }
 
   private cargarDesde(pagina: number): void {
@@ -141,6 +122,7 @@ export class ProveedoresInbound {
     const req$ = editando ? this.api.actualizarProveedor(editando.id, peticion) : this.api.crearProveedor(peticion);
     req$.pipe(finalize(() => this.guardando.set(false))).subscribe({
       next: (p) => {
+        this.catalogos.refrescar();
         this.notificaciones.exito('Guardado', `Proveedor ${p.proveedor} ${editando ? 'actualizado' : 'creado'}.`);
         this.cerrarForm();
         this.cargar();
@@ -156,6 +138,7 @@ export class ProveedoresInbound {
     this.eliminando.set(true);
     this.api.eliminarProveedor(p.id).pipe(finalize(() => this.eliminando.set(false))).subscribe({
       next: () => {
+        this.catalogos.refrescar();
         this.notificaciones.exito('Eliminado', `Proveedor ${p.proveedor} eliminado.`);
         this.eliminarAbierto.set(false);
         this.aEliminar.set(null);

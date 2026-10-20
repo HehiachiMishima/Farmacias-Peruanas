@@ -11,6 +11,7 @@ import {
   UsuarioFiltro,
   UsuarioPermisoDetalle,
   UsuarioPermisoOverride,
+  UsuarioResumen,
 } from '../models';
 import { Api } from './api';
 
@@ -20,6 +21,11 @@ export class UsuariosApi {
 
   listar(): Observable<Usuario[]> {
     return this.api.get<Usuario[]>('/usuarios');
+  }
+
+  /** Roles y permisos efectivos de todos los usuarios en una sola petición. */
+  resumen(): Observable<UsuarioResumen[]> {
+    return this.api.get<UsuarioResumen[]>('/usuarios/resumen');
   }
 
   buscar(filtro: UsuarioFiltro): Observable<Usuario[]> {

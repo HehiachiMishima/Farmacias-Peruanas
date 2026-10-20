@@ -4,7 +4,21 @@
 --   - No se puede eliminar.
 --   - No se puede modificar NINGÚN campo.
 --   - usuarios_roles: no se puede agregar ni quitar.
+--
+-- ORDEN: ejecutar DESPUES de arrancar el backend una vez (el arranque
+-- crea al usuario semilla USER_ADMIN=@admin). Es re-ejecutable: primero
+-- elimina los triggers si ya existen.
+-- El backend replica estas reglas (Protecciones.USUARIOS_PROTEGIDOS) para
+-- responder 403 limpio antes de llegar al SIGNAL de MySQL.
 -- ------------------------------------------------------------
+DROP TRIGGER IF EXISTS trg_usuarios_admin_update;
+DROP TRIGGER IF EXISTS trg_usuarios_admin_delete;
+DROP TRIGGER IF EXISTS trg_usuarios_roles_admin_insert;
+DROP TRIGGER IF EXISTS trg_usuarios_roles_admin_delete;
+DROP TRIGGER IF EXISTS trg_usuarios_permisos_admin_insert;
+DROP TRIGGER IF EXISTS trg_usuarios_permisos_admin_update;
+DROP TRIGGER IF EXISTS trg_usuarios_permisos_admin_delete;
+
 DELIMITER $$
 
 CREATE TRIGGER trg_usuarios_admin_update

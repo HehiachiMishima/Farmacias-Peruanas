@@ -1,25 +1,28 @@
-# Plataforma de Control de Accesos
+# Control Tower · Ingeniería Logística (Farmacias Peruanas)
 
-Sistema para el gobierno de identidades, roles y permisos y para el registro y
-seguimiento de incidencias (Bitacora e Inbound), con acceso por paneles segun
-los permisos de cada usuario.
+Plataforma de control operativo: gobierno de identidades, roles y permisos, y
+registro/seguimiento de incidencias (Bitácora e Inbound), con acceso por
+paneles según los permisos de cada usuario.
 
-- **Frontend**: Angular 22 (standalone, zoneless, signals) + SCSS.
-- **Backend**: Spring Boot 4.1.1 (Java 21), API REST stateless con JWT (HS256).
-- **Base de datos**: MySQL (Aiven en produccion).
+- **Frontend**: Angular 22 (standalone, zoneless, signals) + SCSS. Diseño
+  "Control Tower": cromo navy, rojo de marca y paleta de señales, modo claro/oscuro.
+- **Backend**: Spring Boot 4.1 (Java 21), API REST stateless con JWT (HS256),
+  organizado **por paneles**.
+- **Base de datos**: MySQL 8 (Aiven en producción).
 
 ---
 
 ## Paneles
 
-| Panel | Ruta | Modulos | Permiso de entrada |
+| Panel | Ruta | Módulos | Permiso de entrada |
 | --- | --- | --- | --- |
-| Administracion | `/admin` | Dashboard, Usuarios, Roles, Permisos | `PANEL_ADMIN` |
-| Bitacora | `/bitacora` | Incidencias, Control (centros, sistemas, areas, responsables), Dashboard | `PANEL_BITACORA` |
+| Administración | `/admin` | Dashboard, Usuarios, Roles, Permisos | `PANEL_ADMIN` |
+| Bitácora | `/bitacora` | Incidencias, Control (centros, sistemas, áreas, responsables), Dashboard | `PANEL_BITACORA` |
 | Inbound | `/inbound` | Incidencias, Control (proveedores, tipos de incidencia), Dashboard | `PANEL_INBOUND` |
 
-El *launcher* (`/`) muestra unicamente los paneles y modulos habilitados por los
-permisos del usuario. Cada ruta protegida valida su permiso con `permisoGuard`.
+El *launcher* (`/`) muestra los paneles y, en cada uno, los módulos habilitados
+para el usuario. Cada ruta protegida valida su permiso con `permisoGuard`, y
+cada endpoint con `@PreAuthorize`.
 
 ---
 
@@ -27,103 +30,94 @@ permisos del usuario. Cada ruta protegida valida su permiso con `permisoGuard`.
 
 ```
 .
-├── Dockerfile                  # Imagen unica: frontend + backend + nginx
-├── render.yaml                 # Blueprint de Render (1 solo servicio web)
-├── backend/                    # API Spring Boot
+├── Dockerfile                  # Imagen única: frontend + backend + nginx
+├── docker-compose.yml          # Stack local opcional (MySQL + imagen)
+├── render.yaml                 # Blueprint de Render (1 servicio web)
+├── backend/
 │   ├── .env.example            # Plantilla de variables (el .env real no se sube)
-│   ├── certs/ca.pem            # CA TLS de Aiven (LOCAL: ignorada por Git)
-│   ├── schema.sql              # Esquema de la base de datos
-│   ├── data.sql                # Datos iniciales
-│   ├── panel.bitacora.sql      # Catalogos del panel Bitacora
-│   ├── panel.inbound.sql       # Catalogos del panel Inbound
-│   ├── protection.admin.sql    # Proteccion del usuario administrador
-│   └── src/
-└── frontend/                   # SPA Angular
-    └── src/
+│   ├── schema.sql              # 1) RBAC: usuarios, roles, permisos, vistas, triggers
+│   ├── panel.bitacora.sql      # 2) Tablas del panel Bitácora
+│   ├── panel.inbound.sql       # 3) Tablas del panel Inbound
+│   ├── protection.admin.sql    # 4) Protección del usuario @admin (triggers)
+│   ├── data.sql                # 5) Permisos de paneles, catálogos y datos de ejemplo
+│   └── src/main/java/oracle/
+│       ├── auth/               # Login y sesión vigente
+│       ├── admin/              # Panel Administración (usuarios, roles, permisos, resolución)
+│       ├── bitacora/           # Panel Bitácora (incidencias + catálogos de control)
+│       ├── inbound/            # Panel Inbound (incidencias + proveedores/tipos)
+│       └── common/             # Transversal: config, security, exception, support, web
+└── frontend/src/app/
+    ├── core/                   # config, guards, interceptors, models, services, utils
+    ├── features/               # auth, launcher, panels/{admin,bitacora,inbound}
+    └── shared/                 # directivas, pipes y UI (icon, modal, charts, …)
 ```
 
-> Los archivos `.sql` y `backend/certs/` **no** entran en la imagen: el
-> `Dockerfile` solo copia `backend/pom.xml` y `backend/src`. El esquema y los
-> datos de la base se aplican de forma manual; la aplicacion **no** ejecuta
-> scripts SQL al arrancar (no hay `schema.sql`/`data.sql` en `resources`).
+Cada panel del backend tiene sus propias capas:
+`controller / service / repository / model / request / response`.
 
 ---
 
-## Arquitectura de la imagen (todo en uno)
+## Base de datos
 
-Un **unico contenedor / un unico servicio**:
+> Los `.sql` **no** se ejecutan automáticamente ni entran en la imagen: se
+> aplican a mano (o con `docker compose`, ver más abajo). Hibernate no toca el
+> esquema (`ddl-auto=none`).
 
+**Orden de ejecución** (mismo para local y Aiven):
+
+| Paso | Archivo | Notas |
+| --- | --- | --- |
+| 1 | `schema.sql` | Crea la BD `farmacias_peruanas`, RBAC, vistas de resolución y triggers. Re-ejecutable. |
+| 2 | `panel.bitacora.sql` | Catálogos e `incidencias`. `CREATE TABLE IF NOT EXISTS`. |
+| 3 | `panel.inbound.sql` | Proveedores, tipos e `incidencias_inbound`. |
+| 4 | **Arrancar el backend una vez** | Crea el usuario semilla `USER_ADMIN` (id = 1) con BCrypt y le asigna `USER_ROL`. |
+| 5 | `protection.admin.sql` | Triggers que blindan a `@admin`. Re-ejecutable. |
+| 6 | `data.sql` | Permisos de Bitácora/Inbound, catálogos y registros de ejemplo. Requiere el usuario id = 1 (FK de `creado_por`). |
+
+Con el cliente `mysql` (respeta `DELIMITER`):
+
+```bash
+mysql -h <host> -P <puerto> -u <usuario> -p < backend/schema.sql
 ```
-        navegador
-            │  (HTTP : PORT = puerto publico)
-            ▼
-      ┌───────────────────────────────┐
-      │  nginx  (puerto PORT)          │  sirve el SPA Angular
-      │    /            -> SPA         │
-      │    /api/*       -> backend     │
-      └───────────────┬───────────────┘
-                      ▼  (127.0.0.1:BACKEND_PORT, interno)
-                Spring Boot (JWT)  ──►  MySQL (Aiven)
-```
 
-- `PORT` (por defecto `10000`) es el **unico puerto publicado**; `BACKEND_PORT`
-  (por defecto `2003`) es **interno** y no sale del contenedor.
-- nginx sirve el SPA y hace de proxy inverso de `/api` hacia el backend.
-- `supervisord` arranca **nginx + backend** en el mismo contenedor.
-- En produccion el SPA usa `apiUrl: '/api'` (mismo origen): **no hay CORS**
-  entre el navegador y la API. En desarrollo si lo hay (Angular en
-  `http://localhost:4200` -> backend en `http://localhost:2003`).
+> `data.sql`: permisos y catálogos son idempotentes; las incidencias de
+> Bitácora usan `INSERT IGNORE` (ticket único). Las de Inbound no tienen clave
+> natural: ejecútalo **una sola vez** o se duplicarán los registros de ejemplo.
 
 ---
 
-## Requisitos
+## Configuración del entorno
 
-- Java 21 y Node 22 (para desarrollo sin Docker).
-- Un MySQL accesible (Aiven en produccion).
-- Docker (solo para construir/verificar la imagen de despliegue).
-
----
-
-## Configuracion del entorno
-
-El backend lee sus credenciales de `backend/.env` (que **no se sube al
-repositorio**). Es un **unico archivo conmutable**: contiene los dos bloques de
-conexion (MySQL local y Aiven) y para alternar basta con comentar uno y
-descomentar el otro. No hace falta copiar nada encima.
-
-Para empezar, parte de la plantilla:
+El backend lee sus credenciales de `backend/.env` (no se sube al repositorio).
+Es un **único archivo conmutable**: contiene los bloques de conexión (MySQL
+local y Aiven) y para alternar basta con comentar uno y descomentar el otro.
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-Luego edita `backend/.env`, rellena los secretos y deja activo el bloque de
-conexion que corresponda (local para desarrollo, Aiven para produccion).
+Render **no usa ese archivo**: inyecta las variables desde el dashboard.
 
-Render **no usa ese archivo**: inyecta las variables desde el dashboard
-(ver `render.yaml`).
-
-| Variable | Descripcion |
+| Variable | Descripción |
 | --- | --- |
-| `PORT` | Puerto **publico** del contenedor (nginx). Es el unico expuesto. Render lo inyecta (`10000`). |
-| `BACKEND_PORT` | Puerto **interno** del backend Java (no se publica). Debe ser **distinto** de `PORT`. |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PARAMS` | Conexion MySQL. En Aiven `DB_PARAMS` incluye `sslMode=REQUIRED&serverTimezone=UTC`. |
-| `JWT_SECRET` | Firma JWT. **Minimo 32 bytes** (`openssl rand -hex 32`). |
-| `JWT_ISSUER` | Emisor del token (claim `iss`). Debe coincidir entre emision y validacion. |
+| `PORT` | Puerto **público** del contenedor (nginx). Render lo inyecta (`10000`). |
+| `BACKEND_PORT` | Puerto **interno** del backend Java. Debe ser **distinto** de `PORT`. |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PARAMS` | Conexión MySQL. En Aiven `DB_PARAMS` incluye `sslMode=REQUIRED&serverTimezone=UTC`. |
+| `JWT_SECRET` | Firma JWT. **Mínimo 32 bytes** (`openssl rand -hex 32`). |
+| `JWT_ISSUER` | Emisor del token (`iss`). |
 | `JWT_EXPIRATION_MS` | Vida del token en ms (opcional, por defecto `3600000`). |
-| `CORS_ALLOWED_ORIGINS` | Origenes permitidos del frontend, separados por comas. |
+| `CORS_ALLOWED_ORIGINS` | Orígenes permitidos (solo si el SPA se sirve desde otro dominio). |
 | `USER_ADMIN`, `USER_PASSWORD`, `USER_EMAIL` | **Obligatorios** para crear el administrador semilla. |
-| `USER_NAME`, `USER_LASTNAME`, `USER_PHONE`, `USER_ACTIVO`, `USER_ROL` | Datos del administrador semilla (opcionales). |
+| `USER_NAME`, `USER_LASTNAME`, `USER_PHONE`, `USER_ACTIVO`, `USER_ROL` | Datos opcionales del administrador semilla. |
+| `JAVA_OPTS` | (Solo Docker) flags de la JVM. |
 
-> El usuario semilla se crea **una sola vez** al arrancar si no existe
-> (idempotente). La contrasena se guarda cifrada con BCrypt.
+> El usuario `@admin` está protegido en la BD (`protection.admin.sql`) **y** en
+> el backend (`Protecciones.USUARIOS_PROTEGIDOS`): no se puede editar, borrar
+> ni cambiar sus roles/permisos. Si usas otro `USER_ADMIN`, ajusta ambos.
 
 ---
 
-## Desarrollo local
-
-> Requiere `backend/.env` con el bloque de conexion **local** activo.
-> El backend escucha en `BACKEND_PORT` (`2003`), que es lo que usa el frontend.
+## Desarrollo local (sin Docker)
 
 ### Backend
 
@@ -142,89 +136,98 @@ npm install
 npm start
 ```
 
-SPA en `http://localhost:4200` (usa `environment.development.ts`, que apunta al
-backend local).
+SPA en `http://localhost:4200` (usa `environment.development.ts`, que apunta a
+`http://localhost:2003/api`).
+
+### Tests del backend
+
+```bash
+cd backend
+./mvnw test -Dtest='!BackendApplicationTests' -Dsurefire.failIfNoSpecifiedTests=false
+```
+
+(`BackendApplicationTests` levanta el contexto completo y necesita una BD.)
 
 ---
 
-## Docker (solo despliegue)
+## Docker
 
-El `Dockerfile` existe **unicamente** para empaquetar y desplegar en Render (un
-solo contenedor: nginx + Spring Boot). En local se trabaja **sin Docker**,
-corriendo backend y frontend por separado (ver *Desarrollo local*).
+La imagen es **100 % producción**: compila el SPA con `apiUrl: '/api'`, no
+copia `backend/.env`, los `.sql` ni los certificados, y activa el perfil
+`prod` (logs JSON). Todas las credenciales entran por variables de entorno.
 
-La imagen es **100% produccion**: no copia `backend/.env`, no incluye los `.sql`
-ni los certificados, y compila el SPA con la configuracion de produccion
-(`apiUrl: '/api'`). Todas las credenciales entran por variables de entorno.
-
-Para construir y verificar la imagen exactamente como lo hara Render:
+### Imagen sola (igual que Render)
 
 ```bash
-# Construir
 docker build -t farmacias-peruanas:local .
-
-# Probar (solo variables de entorno; nunca backend/.env)
-docker run --rm -p 10000:10000 \
-  -e PORT=10000 -e BACKEND_PORT=2003 \
-  -e DB_HOST=<host> -e DB_PORT=<puerto> -e DB_NAME=<bd> \
-  -e DB_USER=<usuario> -e DB_PASSWORD=<clave> \
-  -e DB_PARAMS='sslMode=REQUIRED&serverTimezone=UTC' \
-  -e JWT_SECRET=<32+ caracteres> -e JWT_ISSUER=farmacias-peruanas \
-  farmacias-peruanas:local
 ```
 
-La app queda en `http://localhost:10000`; el health check responde en
-`http://localhost:10000/api/health`.
+```bash
+docker run --rm -p 10000:10000 --env-file backend/.env -e PORT=10000 -e BACKEND_PORT=2003 farmacias-peruanas:local
+```
 
-> `PORT` y `BACKEND_PORT` deben ser **distintos**: si coinciden, el entrypoint
-> aborta con un error claro.
+App en `http://localhost:10000`; health check en `/api/health` (204). La
+imagen trae `HEALTHCHECK` propio.
+
+> Si tu `.env` apunta a un MySQL en `127.0.0.1`, dentro del contenedor usa
+> `-e DB_HOST=host.docker.internal`.
+
+### Stack completo con MySQL (`docker compose`)
+
+```bash
+docker compose up --build
+```
+
+- MySQL 8.4 en `localhost:3307`; al crear el volumen aplica `schema.sql`,
+  `panel.bitacora.sql` y `panel.inbound.sql`.
+- La app arranca, crea `@admin` y queda en `http://localhost:10000`.
+- Luego aplica `protection.admin.sql` y `data.sql`:
+
+```bash
+docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" farmacias_peruanas' < backend/protection.admin.sql
+```
+
+```bash
+docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" farmacias_peruanas' < backend/data.sql
+```
+
+Los secretos (`JWT_SECRET`, `USER_*`) se leen de `backend/.env` si existe.
 
 ---
 
 ## Despliegue en Render
 
-`render.yaml` crea **un solo servicio web** llamado `farmacias-peruanas`
-(`runtime: docker`, `plan: free`, `region: oregon`) a partir del `Dockerfile`
-de la raiz.
+`render.yaml` crea **un solo servicio web** `farmacias-peruanas`
+(`runtime: docker`, `plan: free`, `region: oregon`, rama `farmacias_peruanas`,
+`autoDeploy`).
 
-Pasos:
-
-1. Sube el repositorio a GitHub/GitLab (rama por defecto `farmacias_peruanas`).
-2. En Render: **New + > Blueprint** y selecciona el repositorio.
-3. Render pedira los valores marcados con `sync: false` (credenciales de la
-   base de datos y datos del administrador). Completalos.
-4. Al terminar, abre `https://farmacias-peruanas.onrender.com`.
+1. Sube el repositorio a GitHub/GitLab.
+2. Render: **New + → Blueprint** y selecciona el repositorio.
+3. Completa los valores `sync: false`: `DB_*`, `USER_*` y (opcional)
+   `CORS_ALLOWED_ORIGINS`.
+4. Aplica los `.sql` en Aiven siguiendo el orden de **Base de datos** (el paso 4
+   es el primer deploy).
+5. Abre `https://farmacias-peruanas.onrender.com`.
 
 Notas:
 
-- La imagen escucha en `PORT` (`10000`); el backend queda en el puerto interno
-  `2003`.
-- El health check es `GET /api/health` (publico, responde `204`). Cualquier
-  `2xx`/`3xx` cuenta como sano para Render.
-- `CORS_ALLOWED_ORIGINS` se toma del propio servicio (`RENDER_EXTERNAL_URL`),
-  asi que no hay que escribirlo a mano.
-- En `plan: free` el servicio se suspende tras ~15 min de inactividad y el
-  primer arranque en frio tarda ~1 min.
-
-### Variables que Render pide al crear el Blueprint (`sync: false`)
-
-`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PARAMS`,
-`USER_ADMIN`, `USER_PASSWORD`, `USER_NAME`, `USER_LASTNAME`, `USER_EMAIL`,
-`USER_PHONE`.
-
-`JWT_SECRET` se **genera** automaticamente (`generateValue: true`); `PORT`,
-`JWT_ISSUER`, `USER_ACTIVO`, `USER_ROL` y `CORS_ALLOWED_ORIGINS` vienen fijados
-en el `render.yaml`.
+- `JWT_SECRET` se genera automáticamente (`generateValue: true`).
+- nginx reenvía `X-Forwarded-Proto` original (Render termina TLS), así Spring
+  reconoce el propio dominio y no aplica CORS a las peticiones del SPA.
+- En `plan: free` el servicio se suspende tras ~15 min sin tráfico; el primer
+  arranque en frío tarda ~1 min. Para miles de usuarios usa un plan con RAM
+  ≥ 1 GB y sube `spring.datasource.hikari.maximum-pool-size` según el límite
+  de conexiones de tu plan de Aiven.
 
 ### Si el deploy falla
 
-| Sintoma | Causa probable |
+| Síntoma | Causa probable |
 | --- | --- |
-| El sync del Blueprint da error de YAML | Claves duplicadas o mal escritas en `render.yaml`. |
-| Deploy en rojo, health check `502` | El backend no arranca: falta alguna variable `DB_*` o la base no es alcanzable. |
-| `Could not resolve placeholder 'DB_HOST'` | Falta una variable de conexion en el dashboard. |
+| Error de YAML al sincronizar el Blueprint | Claves duplicadas o mal escritas en `render.yaml`. |
+| Deploy en rojo, health check `502` | El backend no arranca: falta alguna `DB_*` o la base no es alcanzable. |
+| `Could not resolve placeholder 'DB_HOST'` | Falta una variable de conexión en el dashboard. |
 | `JWT_SECRET ... al menos 32 bytes` | `JWT_SECRET` demasiado corto. |
-| Build larga / agota memoria | La construccion compila Angular + Maven; en `free` conviene reintentar. |
+| Build larga / sin memoria | La build compila Angular + Maven; en `free` conviene reintentar. |
 
 ---
 
@@ -232,41 +235,44 @@ en el `render.yaml`.
 
 Base: `/api`
 
-| Metodo | Ruta | Acceso |
+| Método | Ruta | Acceso |
 | --- | --- | --- |
-| `POST` | `/api/auth/login` | Publico |
-| `GET` | `/api/health` | Publico |
-| `GET/POST` | `/api/usuarios`, `/api/roles`, `/api/permisos` | Requiere JWT + permiso |
-| `GET/POST` | `/api/centros`, `/api/areas`, `/api/sistemas` | Requiere JWT + permiso |
-| `GET/POST` | `/api/incidencias` | Requiere JWT + permiso |
-| `GET/POST` | `/api/inbound/incidencias`, `/api/inbound/control/*` | Requiere JWT + permiso |
-| Resto | `/api/**` | Requiere JWT (`Authorization: Bearer ...`) |
-
-La autorizacion fina vive en los `@PreAuthorize` de cada endpoint; el
-`SecurityFilterChain` solo exige autenticacion salvo en las rutas publicas.
+| `POST` | `/auth/login` | Público (rate limit por IP e IP+usuario) |
+| `GET` | `/auth/sesion` | JWT — usuario y permisos vigentes |
+| `GET` | `/health` | Público |
+| `GET/POST/PUT/DELETE` | `/usuarios`, `/roles`, `/permisos` | JWT + permiso |
+| `GET` | `/usuarios/resumen` | Roles y permisos de todos los usuarios (2 consultas) |
+| `GET/POST/PUT/DELETE` | `/centros`, `/areas`, `/sistemas` | JWT + `*_CONTROL` |
+| `GET/POST/PUT/DELETE` | `/incidencias` (+ `/exportar`, `/estadisticas`) | JWT + `*_INCIDENCIAS` / `VER_DASHBOARD` |
+| `GET/POST/PUT/DELETE` | `/inbound/incidencias`, `/inbound/control/*` | JWT + permisos `*_INBOUND` |
 
 ---
 
 ## Rendimiento y escalado
 
-- **Frontend**: busqueda con debounce (300ms), `distinctUntilChanged` y
-  `switchMap` (cancela respuestas fuera de orden). Componentes con `@for` +
-  `trackBy` (id). Lazy loading por rutas y por panel.
-- **Backend**: cache en memoria de catalogos (TTL 10 min) compartido entre
-  servicios para evitar `findAll()` por pagina. Vistas + JdbcTemplate para
-  resolucion de permisos, `open-in-view=false`, virtual threads habilitados,
-  timeouts y pool de conexiones configurados.
-- **API**: respuestas estructuradas, manejo global de errores
-  (`@RestControllerAdvice`), CORS configurable y rate limiting de login por
-  IP/ventana.
+- **Listados del frontend** (`ListadoRemoto` / `RecursoRemoto`): un único flujo
+  con `switchMap` cancela la petición anterior, los errores no rompen la
+  búsqueda y la tabla conserva las filas mientras refresca (sin parpadeo).
+- **Catálogos cacheados** en el navegador (`BitacoraCatalogos`,
+  `InboundCatalogos`) y en el servidor (`CatalogoBitacora`, `CatalogoInbound`,
+  invalidados en cada CRUD): resolver una página de incidencias no hace
+  consultas por fila.
+- **Permisos**: caché Caffeine por usuario (invalidada al cambiar roles,
+  permisos o estado); el frontend resincroniza la sesión al volver a la pestaña.
+- **Usuarios**: el listado obtiene roles/permisos de todos con
+  `/usuarios/resumen` en lugar de 2 peticiones por usuario.
+- **Dashboards**: agregados SQL (`GROUP BY`) cacheados con TTL e invalidados al
+  escribir incidencias o catálogos.
+- **Infra**: virtual threads, `open-in-view=false`, timeouts JDBC, apagado
+  ordenado, nginx con gzip, keep-alive al backend y cache inmutable de assets.
 
 ---
 
 ## Seguridad
 
-- `backend/.env` y `backend/certs/` estan ignorados por Git; **no** los subas.
-- Rota `JWT_SECRET` y las credenciales de la base de datos periodicamente.
-- En Render los secretos se piden al crear el Blueprint y nunca se escriben en
-  `render.yaml`.
-- El backend corre detras de nginx con `server.forward-headers-strategy=native`
-  para que la IP real del cliente llegue al rate limiter y a los logs.
+- `backend/.env` y `backend/certs/` están ignorados por Git; **no** los subas.
+- Errores de triggers (`SQLSTATE 45000`) llegan como 403 con su mensaje; un
+  borrado bloqueado por FK llega como 409 claro.
+- nginx añade `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`
+  y `Permissions-Policy`.
+- Rota `JWT_SECRET` y las credenciales de la base periódicamente.

@@ -1,0 +1,56 @@
+# ============================================================
+# Stack LOCAL completo (opcional): MySQL 8.4 + la misma imagen que Render.
+#
+#   docker compose up --build
+#   -> app en http://localhost:10000  (health: /api/health)
+#
+# - MySQL aplica al crearse el volumen: schema.sql, panel.bitacora.sql y
+#   panel.inbound.sql (en ese orden). protection.admin.sql y data.sql se
+#   ejecutan DESPUES del primer arranque (ver README > Base de datos).
+# - Secretos (JWT_SECRET, USER_*) se leen de backend/.env si existe; las
+#   variables DB_* de abajo lo sobrescriben para apuntar al MySQL del compose.
+# ============================================================
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: farmacias_peruanas
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-local}
+      TZ: UTC
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./backend/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./backend/panel.bitacora.sql:/docker-entrypoint-initdb.d/02-panel.bitacora.sql:ro
+      - ./backend/panel.inbound.sql:/docker-entrypoint-initdb.d/03-panel.inbound.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD:-root-local}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  app:
+    build: .
+    depends_on:
+      mysql:
+        condition: service_healthy
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      PORT: "10000"
+      BACKEND_PORT: "2003"
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_NAME: farmacias_peruanas
+      DB_USER: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-local}
+      DB_PARAMS: useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      CORS_ALLOWED_ORIGINS: http://localhost:10000
+    ports:
+      - "10000:10000"
+
+volumes:
+  mysql-data:

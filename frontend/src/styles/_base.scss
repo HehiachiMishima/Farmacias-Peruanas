@@ -1,7 +1,7 @@
 /**
- * Base — Apple (DESIGN.md)
- * Lienzo plano "fog" (#f5f5f7) sin gradientes ni sombras. La tipografía y el
- * espacio negativo hacen todo el trabajo emocional.
+ * Base — Control Tower
+ * Lienzo gris-azulado frío, tipografía Inter con cifras tabulares (las tablas
+ * y KPIs alinean dígitos) y foco visible de alto contraste.
  */
 *,
 *::before,
@@ -19,7 +19,9 @@ body {
   font-family: var(--font-sf-pro-text);
   font-size: var(--fs-base);
   line-height: var(--lh-normal);
-  letter-spacing: -0.019em;
+  letter-spacing: -0.006em;
+  font-feature-settings: 'cv11', 'ss01';
+  font-variant-numeric: tabular-nums;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
@@ -36,15 +38,15 @@ h5,
 h6 {
   margin: 0;
   font-family: var(--font-sf-pro-display);
-  font-weight: 600;
+  font-weight: 700;
   line-height: var(--lh-tight);
-  letter-spacing: -0.012em;
+  letter-spacing: -0.02em;
   color: var(--text);
   overflow-wrap: break-word;
   text-wrap: balance;
 }
 
-h1 { letter-spacing: -0.015em; }
+h1 { letter-spacing: -0.025em; }
 
 p {
   margin: 0;
@@ -87,7 +89,7 @@ svg {
 }
 
 ::selection {
-  background: rgba(0, 113, 227, 0.24);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 ::-webkit-scrollbar {

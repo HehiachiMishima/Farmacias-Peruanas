@@ -1,6 +1,8 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { finalize, forkJoin } from 'rxjs';
+import { forkJoin } from 'rxjs';
+import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
+import { InboundCatalogos } from '../../../../../core/services/inbound-catalogos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { EstadisticaInbound, GrupoEstadisticaInbound, IncidenciaInboundFiltros, ProveedorMensualEstadistica } from '../../../../../core/models';
 import { InboundControlApi } from '../../../../../core/services/inbound-control.api';
@@ -14,8 +16,8 @@ import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtr
 
 const TOP = 10;
 const TOP_COLS = 15;
-const PALETA = ['var(--brand)', 'var(--success)', 'var(--warning)', 'var(--danger)', '#a855f7'];
-const COLOR_OTROS = 'var(--color-graphite)';
+const PALETA = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
+const COLOR_OTROS = 'var(--chart-otros)';
 
 @Component({
   selector: 'app-inbound-dashboard',
@@ -35,13 +37,24 @@ export class InboundDashboard {
   private readonly controlApi = inject(InboundControlApi);
   private readonly notificaciones = inject(Notificaciones);
 
-  readonly cargando = signal(true);
-  readonly error = signal<string | null>(null);
-  readonly estadistica = signal<EstadisticaInbound | null>(null);
-  readonly proveedoresMensual = signal<ProveedorMensualEstadistica[]>([]);
+  private readonly catalogos = inject(InboundCatalogos);
 
-  readonly proveedores = signal<{ id: number; proveedor: string }[]>([]);
-  readonly tipos = signal<{ id: number; incidenciaInbound: string }[]>([]);
+  private readonly recurso = new RecursoRemoto<{
+    estadistica: EstadisticaInbound;
+    proveedoresMensual: ProveedorMensualEstadistica[];
+  }>(() =>
+    forkJoin({
+      estadistica: this.incidenciasApi.estadisticas(this.filtros()),
+      proveedoresMensual: this.incidenciasApi.estadisticaProveedoresMensual(this.filtros()),
+    }),
+  );
+  readonly cargando = this.recurso.cargando;
+  readonly error = this.recurso.error;
+  readonly estadistica = computed(() => this.recurso.valor()?.estadistica ?? null);
+  readonly proveedoresMensual = computed(() => this.recurso.valor()?.proveedoresMensual ?? []);
+
+  readonly proveedores = this.catalogos.proveedores;
+  readonly tipos = this.catalogos.tipos;
 
   readonly filtroProveedor = signal<number | null>(null);
   readonly filtroTipo = signal<number | null>(null);
@@ -99,34 +112,11 @@ export class InboundDashboard {
   }
 
   cargarCatalogos(): void {
-    forkJoin({
-      proveedores: this.controlApi.listarProveedores(),
-      tipos: this.controlApi.listarTipos(),
-    }).subscribe({
-      next: ({ proveedores, tipos }) => {
-        this.proveedores.set(proveedores);
-        this.tipos.set(tipos);
-      },
-      error: (err: unknown) =>
-        this.notificaciones.error('No se pudieron cargar los catálogos', mensajeDeError(err)),
-    });
+    this.catalogos.cargar();
   }
 
   cargar(): void {
-    this.cargando.set(true);
-    this.error.set(null);
-    forkJoin({
-      estadistica: this.incidenciasApi.estadisticas(this.filtros()),
-      proveedoresMensual: this.incidenciasApi.estadisticaProveedoresMensual(this.filtros()),
-    })
-      .pipe(finalize(() => this.cargando.set(false)))
-      .subscribe({
-        next: ({ estadistica, proveedoresMensual }) => {
-          this.estadistica.set(estadistica);
-          this.proveedoresMensual.set(proveedoresMensual);
-        },
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
-      });
+    this.recurso.recargar();
   }
 
   private filtros(): IncidenciaInboundFiltros {

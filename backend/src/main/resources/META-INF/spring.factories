@@ -1,2 +1,2 @@
 org.springframework.boot.env.EnvironmentPostProcessor=\
-oracle.config.DotenvEnvironmentPostProcessor
+oracle.common.config.DotenvEnvironmentPostProcessor

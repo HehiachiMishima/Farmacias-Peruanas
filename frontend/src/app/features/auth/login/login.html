@@ -1,75 +1,164 @@
 <div class="login">
-  <section class="login__brand">
-    <div class="login__brand-inner">
-      <h1 class="login__brand-title">Hehiachi Mishima</h1>
-      <p class="login__brand-text">
-        Plataforma de control de accesos. Administra identidades, roles y permisos desde un solo lugar.
+  <!-- Escena de fondo: malla de color + rejilla + radar + rutas (CSS/SVG, sin WebGL). -->
+  <div class="login__scene" aria-hidden="true">
+    <span class="login__blob login__blob--1"></span>
+    <span class="login__blob login__blob--2"></span>
+    <span class="login__blob login__blob--3"></span>
+    <span class="login__grid"></span>
+    <span class="login__radar"><span class="login__radar-sweep"></span></span>
+    <svg class="login__routes" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="ruta-a" x1="0" x2="1">
+          <stop offset="0" stop-color="#ff3b4e" stop-opacity="0" />
+          <stop offset=".5" stop-color="#ff3b4e" />
+          <stop offset="1" stop-color="#ff3b4e" stop-opacity="0" />
+        </linearGradient>
+        <linearGradient id="ruta-b" x1="0" x2="1">
+          <stop offset="0" stop-color="#4c8dff" stop-opacity="0" />
+          <stop offset=".5" stop-color="#4c8dff" />
+          <stop offset="1" stop-color="#4c8dff" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <path class="login__route login__route--a" d="M-20 420 C 140 360, 220 470, 360 380 S 600 250, 820 300" />
+      <path class="login__route login__route--b" d="M-20 180 C 120 240, 260 120, 400 200 S 640 360, 820 220" />
+      <path class="login__route login__route--c" d="M80 620 C 160 500, 300 540, 420 460 S 620 420, 760 -20" />
+      @for (nodo of nodos; track $index) {
+        <circle class="login__node" [attr.cx]="nodo[0]" [attr.cy]="nodo[1]" r="4" [style.--d]="$index" />
+      }
+    </svg>
+  </div>
+
+  <section class="login__hero">
+    <div class="login__hero-inner">
+      <div class="login__logo">
+        <span class="login__logo-mark"><img src="logo_web.png" alt="" width="40" height="40" /></span>
+        <span class="login__logo-text">
+          <span class="login__kicker">Control Tower</span>
+          <span class="login__org">Farmacias Peruanas</span>
+        </span>
+      </div>
+
+      <h1 class="login__title">
+        Ingeniería <span class="login__title-accent">Logística</span>
+      </h1>
+      <p class="login__lead">
+        Centro de control operativo: registra incidencias, gobierna accesos y mide cada cadena de
+        abastecimiento en tiempo real.
       </p>
-      <ul class="login__features">
-        <li><ui-icon name="check" [size]="16" /> Control de acceso basado en permisos</li>
-        <li><ui-icon name="check" [size]="16" /> Gestión de usuarios y roles</li>
-        <li><ui-icon name="check" [size]="16" /> Interfaz responsiva y accesible</li>
+
+      <ul class="login__modules">
+        <li class="login__module" style="--c: #ff3b4e">
+          <span class="login__module-icon"><ui-icon name="bitacora" [size]="20" /></span>
+          <span>
+            <strong>Bitácora</strong>
+            <small>Incidencias por centro y sistema</small>
+          </span>
+        </li>
+        <li class="login__module" style="--c: #4c8dff">
+          <span class="login__module-icon"><ui-icon name="truck" [size]="20" /></span>
+          <span>
+            <strong>Inbound</strong>
+            <small>Recepción y proveedores</small>
+          </span>
+        </li>
+        <li class="login__module" style="--c: #34d399">
+          <span class="login__module-icon"><ui-icon name="shieldCheck" [size]="20" /></span>
+          <span>
+            <strong>Accesos</strong>
+            <small>Usuarios, roles y permisos</small>
+          </span>
+        </li>
       </ul>
+
+      <div class="login__ticker">
+        <span class="ct-live"><span class="ct-live__dot"></span>Sistema operativo</span>
+        <span class="login__ticker-item"><ui-icon name="servidor" [size]="14" /> API segura JWT</span>
+        <span class="login__ticker-item"><ui-icon name="rayo" [size]="14" /> Tiempo real</span>
+      </div>
     </div>
   </section>
 
   <section class="login__panel">
     <div class="login__card">
       <header class="login__header">
-        <h2>Iniciar sesión</h2>
-        <p>Ingresa tus credenciales para continuar.</p>
+        <span class="login__header-icon"><ui-icon name="lock" [size]="20" /></span>
+        <div>
+          <h2>Iniciar sesión</h2>
+          <p>Accede con tu usuario corporativo o tu email.</p>
+        </div>
       </header>
 
       @if (error()) {
-      <div class="login__alert" role="alert">
-        <ui-icon name="alertTriangle" [size]="18" />
-        <span>{{ error() }}</span>
-      </div>
+        <div class="login__alert" role="alert">
+          <ui-icon name="alertTriangle" [size]="18" />
+          <span>{{ error() }}</span>
+        </div>
       }
 
       <form class="login__form" [formGroup]="formulario" (ngSubmit)="enviar()" novalidate>
         <div class="ui-field">
-          <label class="ui-label" for="usuario">Usuario</label>
+          <label class="ui-label" for="usuario">Usuario o email</label>
           <div class="login__control">
             <ui-icon name="user" [size]="18" class="login__control-icon" />
-            <input id="usuario" type="text" class="ui-input" [class.ui-input--invalid]="campoInvalido('usuario')"
-              formControlName="usuario" autocomplete="username" placeholder="tu.usuario" autofocus />
+            <input
+              id="usuario"
+              type="text"
+              class="ui-input"
+              [class.ui-input--invalid]="campoInvalido('usuario')"
+              formControlName="usuario"
+              autocomplete="username"
+              placeholder="@usuario"
+              autofocus
+            />
           </div>
           @if (campoInvalido('usuario')) {
-          <span class="ui-error">Ingresa tu usuario.</span>
+            <span class="ui-error">Ingresa tu usuario.</span>
           }
         </div>
 
         <div class="ui-field">
           <label class="ui-label" for="contrasena">Contraseña</label>
           <div class="login__control">
-            <ui-icon name="permisos" [size]="18" class="login__control-icon" />
-            <input id="contrasena" [type]="verContrasena() ? 'text' : 'password'" class="ui-input"
-              [class.ui-input--invalid]="campoInvalido('contrasena')" formControlName="contrasena"
-              autocomplete="current-password" placeholder="••••••••" />
-            <button type="button" class="login__toggle" (click)="toggleContrasena()"
-              [attr.aria-label]="verContrasena() ? 'Ocultar contraseña' : 'Mostrar contraseña'">
-              <ui-icon [name]="verContrasena() ? 'xCircle' : 'search'" [size]="18" />
+            <ui-icon name="key" [size]="18" class="login__control-icon" />
+            <input
+              id="contrasena"
+              [type]="verContrasena() ? 'text' : 'password'"
+              class="ui-input"
+              [class.ui-input--invalid]="campoInvalido('contrasena')"
+              formControlName="contrasena"
+              autocomplete="current-password"
+              placeholder="••••••••"
+            />
+            <button
+              type="button"
+              class="login__toggle"
+              (click)="toggleContrasena()"
+              [attr.aria-label]="verContrasena() ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+              [attr.aria-pressed]="verContrasena()"
+            >
+              <ui-icon [name]="verContrasena() ? 'ojoOff' : 'ojo'" [size]="18" />
             </button>
           </div>
           @if (campoInvalido('contrasena')) {
-          <span class="ui-error">Ingresa tu contraseña.</span>
+            <span class="ui-error">Ingresa tu contraseña.</span>
           }
         </div>
 
-        <button type="submit" class="ui-btn ui-btn--primary ui-btn--lg ui-btn--block" [disabled]="cargando()">
+        <button type="submit" class="ui-btn ui-btn--primary ui-btn--lg ui-btn--block login__submit" [disabled]="cargando()">
           @if (cargando()) {
-          <span class="ui-spinner"
-            style="width:18px;height:18px;border-color:rgba(255,255,255,.4);border-top-color:#fff"></span>
-          Verificando…
+            <span class="ui-spinner login__spinner"></span>
+            Verificando…
           } @else {
-          Ingresar
-          <ui-icon name="login" [size]="18" />
+            Ingresar al Control Tower
+            <ui-icon name="flecha" [size]="18" />
           }
         </button>
       </form>
+
+      <footer class="login__foot">
+        <ui-icon name="shield" [size]="14" />
+        Acceso restringido. Cada operación queda registrada con tu usuario.
+      </footer>
     </div>
   </section>
-
-  <ui-light-pillar aria-hidden="true" />
 </div>

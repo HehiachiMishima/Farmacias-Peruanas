@@ -212,7 +212,7 @@ BEGIN
     END IF;
 END$$
 
-DELIMITER;
+DELIMITER ;
 
 -- ============================================================
 -- DATOS INICIALES
@@ -444,4 +444,4 @@ BEGIN
     END IF;
 END$$
 
-DELIMITER;
+DELIMITER ;

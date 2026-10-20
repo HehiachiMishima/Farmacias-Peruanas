@@ -1,0 +1,47 @@
+package oracle.admin.controller;
+
+import oracle.common.response.ApiResponse;
+import oracle.admin.response.PermisoEfectivoResponse;
+import oracle.admin.response.PermisoFinalResponse;
+import oracle.admin.service.ResolucionPermisosService;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
+
+import java.util.List;
+
+/** Vista de resolucion de permisos: como se calcula lo efectivo/final. */
+@RestController
+@RequestMapping("/api/resolucion/usuarios/{usuarioId}")
+@PreAuthorize("hasAuthority('VER_USUARIOS') and hasAuthority('VER_PERMISOS')")
+public class ResolucionController {
+
+    private final ResolucionPermisosService resolucionPermisosService;
+
+    public ResolucionController(ResolucionPermisosService resolucionPermisosService) {
+        this.resolucionPermisosService = resolucionPermisosService;
+    }
+
+    @GetMapping("/efectivos")
+    public Mono<ApiResponse<List<PermisoEfectivoResponse>>> efectivos(@PathVariable Long usuarioId) {
+        return resolucionPermisosService.efectivos(usuarioId);
+    }
+
+    @GetMapping("/finales")
+    public Mono<ApiResponse<List<PermisoFinalResponse>>> finales(@PathVariable Long usuarioId) {
+        return resolucionPermisosService.finales(usuarioId);
+    }
+
+    @GetMapping("/permitidos")
+    public Mono<ApiResponse<List<PermisoFinalResponse>>> permitidos(@PathVariable Long usuarioId) {
+        return resolucionPermisosService.permitidos(usuarioId);
+    }
+
+    @GetMapping("/{permisoId}/tiene")
+    public Mono<ApiResponse<Boolean>> tiene(@PathVariable Long usuarioId, @PathVariable Long permisoId) {
+        return resolucionPermisosService.tienePermiso(usuarioId, permisoId);
+    }
+}

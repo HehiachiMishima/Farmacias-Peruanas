@@ -16,6 +16,7 @@ export interface PanelDef {
   icono: string;
   ruta: string;
   permiso: string;
+  /** Color de señal del panel (CSS): tarjeta del launcher y detalles del panel. */
   acento: string;
   modulos: ModuloPanel[];
 }
@@ -27,7 +28,7 @@ export const PANEL_ADMIN: PanelDef = {
   icono: 'shield',
   ruta: '/admin',
   permiso: PERMISOS.PANEL_ADMIN,
-  acento: 'brand',
+  acento: 'var(--violet)',
   modulos: [
     {
       id: 'dashboard',
@@ -71,7 +72,7 @@ export const PANEL_BITACORA: PanelDef = {
   icono: 'bitacora',
   ruta: '/bitacora',
   permiso: PERMISOS.PANEL_BITACORA,
-  acento: 'brand',
+  acento: 'var(--brand)',
   modulos: [
     {
       id: 'incidencias',
@@ -104,10 +105,10 @@ export const PANEL_INBOUND: PanelDef = {
   id: 'inbound',
   nombre: 'Inbound',
   descripcion: 'Incidencias de inbound, catálogos de control y métricas operativas.',
-  icono: 'inbound',
+  icono: 'truck',
   ruta: '/inbound',
   permiso: PERMISOS.PANEL_INBOUND,
-  acento: 'brand',
+  acento: 'var(--accent)',
   modulos: [
     {
       id: 'incidencias',

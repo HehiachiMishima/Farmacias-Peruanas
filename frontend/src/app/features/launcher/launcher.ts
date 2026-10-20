@@ -26,6 +26,23 @@ export class Launcher {
     () => this.paneles.filter((panel) => this.permisos().includes(panel.permiso)).length,
   );
 
+  readonly saludo = computed(() => {
+    const hora = new Date().getHours();
+    return hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
+  });
+
+  readonly fecha = new Date().toLocaleDateString('es-PE', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  /** Módulos del panel a los que el usuario tiene acceso (chips de la tarjeta). */
+  modulosDe(panel: PanelDef) {
+    return panel.modulos.filter((modulo) => this.permisos().includes(modulo.permiso));
+  }
+
   readonly iniciales = computed(() => {
     const usuario = this.usuario();
     if (!usuario) {
