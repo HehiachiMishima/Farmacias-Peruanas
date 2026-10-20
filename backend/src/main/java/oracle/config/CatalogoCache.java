@@ -1,16 +1,25 @@
 package oracle.config;
 
-import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import oracle.model.*;
 import oracle.repository.*;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/**
+ * Cache en memoria de los catalogos (centros, sistemas, areas, responsables,
+ * tipos, proveedores) para resolver nombres sin una consulta por fila.
+ *
+ * El snapshot se refresca en segundo plano con un scheduler; las peticiones
+ * NUNCA recargan la cache, de modo que quede un unico cargador (sin thundering
+ * herd) y ninguna request pague el coste de 7 findAll. Si el refresco falla, se
+ * conserva el snapshot anterior.
+ */
+@Slf4j
 @Component
 public class CatalogoCache {
-
-    private static final Duration TTL = Duration.ofMinutes(10);
 
     private final AtomicReference<Snapshot> ref = new AtomicReference<>();
 
@@ -70,11 +79,23 @@ public class CatalogoCache {
 
     private Snapshot snap() {
         Snapshot s = ref.get();
-        if (s == null || System.currentTimeMillis() - s.ts > TTL.toMillis()) {
-            cargar();
-            s = ref.get();
+        if (s != null) {
+            return s;
         }
-        return s;
+        cargar();
+        return ref.get();
+    }
+
+    /** Refresco periodico en segundo plano (por defecto cada 5 min). */
+    @Scheduled(
+            fixedDelayString = "${app.catalogo.cache.refresh-ms:300000}",
+            initialDelayString = "${app.catalogo.cache.refresh-ms:300000}")
+    public void refrescar() {
+        try {
+            cargar();
+        } catch (RuntimeException ex) {
+            log.warn("No se pudo refrescar la cache de catalogos; se conserva el snapshot previo.", ex);
+        }
     }
 
     public java.util.Map<Long, String> getProveedores() { return snap().proveedores(); }

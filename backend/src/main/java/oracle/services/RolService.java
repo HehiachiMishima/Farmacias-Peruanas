@@ -33,8 +33,12 @@ public class RolService {
     }
 
     public Mono<ApiResponse<List<RolResponse>>> listar() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "RolService.listar", () ->
-                        rolRepository.findAll().stream().map(RolResponse::of).toList()))
+        return Mono.fromCallable(() -> Trazas.medir(log, "RolService.listar", () -> {
+                        List<RolResponse> lista = rolRepository.findAll(Listas.limitado()).stream()
+                                .map(RolResponse::of).toList();
+                        Listas.avisarSiCorto(log, lista.size(), "RolService.listar");
+                        return lista;
+                    }))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Roles listados.", lista));
     }

@@ -16,6 +16,8 @@ import oracle.response.ApiResponse;
 import oracle.response.RolResponse;
 import oracle.response.UsuarioResponse;
 import oracle.response.UsuarioRolResponse;
+import oracle.security.AutorizacionCache;
+import oracle.config.Transacciones;
 import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -29,14 +31,20 @@ public class UsuarioRolService {
     private final UsuarioRepository usuarioRepository;
     private final RolRepository rolRepository;
     private final UsuarioRolRepository usuarioRolRepository;
+    private final AutorizacionCache autorizacionCache;
+    private final Transacciones transacciones;
 
     public UsuarioRolService(
             UsuarioRepository usuarioRepository,
             RolRepository rolRepository,
-            UsuarioRolRepository usuarioRolRepository) {
+            UsuarioRolRepository usuarioRolRepository,
+            AutorizacionCache autorizacionCache,
+            Transacciones transacciones) {
         this.usuarioRepository = usuarioRepository;
         this.rolRepository = rolRepository;
         this.usuarioRolRepository = usuarioRolRepository;
+        this.autorizacionCache = autorizacionCache;
+        this.transacciones = transacciones;
     }
 
     /** Asignar un rol al usuario (unico por par). */
@@ -44,9 +52,10 @@ public class UsuarioRolService {
         Long actor = ActorActual.id();
         return Mono.fromCallable(() -> Trazas.medir(log,
                         "UsuarioRolService.asignar usuarioId=" + usuarioId + " rolId=" + peticion.rolId(),
-                        () -> {
+                        () -> transacciones.ejecutar(() -> {
                             Usuario usuario = obtenerUsuario(usuarioId);
                             verificarNoProtegido(usuario);
+                            Protecciones.verificarNoAutoGestion(usuarioId, actor);
                             Rol rol = rolRepository.findById(peticion.rolId())
                                     .orElseThrow(() -> new RecursoNoEncontradoException(
                                             "No existe el rol con id " + peticion.rolId() + "."));
@@ -62,26 +71,30 @@ public class UsuarioRolService {
                             asignacion.setCreadoPor(actor);
                             asignacion.setCreadoEn(LocalDateTime.now());
                             usuarioRolRepository.save(asignacion);
+                            autorizacionCache.invalidar(usuarioId);
 
                             return ApiResponse.ok("Rol asignado.", UsuarioRolResponse.of(asignacion));
-                        }))
+                        })))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     /** Quitar un rol al usuario. */
     public Mono<ApiResponse<Void>> quitar(Long usuarioId, Long rolId) {
+        Long actor = ActorActual.id();
         return Mono.<Void>fromRunnable(() -> Trazas.medir(log,
                         "UsuarioRolService.quitar usuarioId=" + usuarioId + " rolId=" + rolId,
-                        () -> {
+                        () -> transacciones.ejecutar(() -> {
                             Usuario usuario = obtenerUsuario(usuarioId);
+                            Protecciones.verificarNoAutoGestion(usuarioId, actor);
                             verificarNoProtegido(usuario);
                             if (!usuarioRolRepository.existsByUsuarioIdAndRolId(usuarioId, rolId)) {
                                 throw new RecursoNoEncontradoException("El usuario '" + usuario.getUsuario()
                                         + "' no tiene el rol con id " + rolId + ".");
                             }
                             usuarioRolRepository.eliminarPar(usuarioId, rolId);
+                            autorizacionCache.invalidar(usuarioId);
                             return null;
-                        }))
+                        })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(Mono.fromSupplier(() -> ApiResponse.<Void>ok("Rol quitado.", null)));
     }

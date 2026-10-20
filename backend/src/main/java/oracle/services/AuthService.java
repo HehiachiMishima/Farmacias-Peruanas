@@ -12,7 +12,7 @@ import oracle.response.ApiResponse;
 import oracle.response.AuthResponse;
 import oracle.response.UsuarioResponse;
 import oracle.security.LoginRateLimiter;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -27,35 +27,40 @@ public class AuthService {
     private final ResolucionRepository resolucionRepository;
     private final JwtService jwtService;
     private final LoginRateLimiter rateLimiter;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final PasswordEncoder passwordEncoder;
 
     /**
      * Hash descartable contra el que se compara cuando el usuario no existe,
      * para que el coste de BCrypt no delate la existencia de la cuenta.
      */
-    private final String hashFicticio = passwordEncoder.encode("oracle-hash-ficticio");
+    private final String hashFicticio;
 
     public AuthService(
             UsuarioRepository usuarioRepository,
             ResolucionRepository resolucionRepository,
             JwtService jwtService,
-            LoginRateLimiter rateLimiter) {
+            LoginRateLimiter rateLimiter,
+            PasswordEncoder passwordEncoder) {
         this.usuarioRepository = usuarioRepository;
         this.resolucionRepository = resolucionRepository;
         this.jwtService = jwtService;
         this.rateLimiter = rateLimiter;
+        this.passwordEncoder = passwordEncoder;
+        this.hashFicticio = passwordEncoder.encode("oracle-hash-ficticio");
     }
 
-    public Mono<ApiResponse<AuthResponse>> login(LoginRequest peticion, String clave) {
+    public Mono<ApiResponse<AuthResponse>> login(LoginRequest peticion, String claveUsuario, String claveIp) {
         return Mono.fromCallable(() -> Trazas.medir(log, "AuthService.login usuario=" + peticion.usuario(),
                         () -> autenticar(peticion)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(respuesta -> {
-                    rateLimiter.limpiar(clave);
+                    rateLimiter.limpiar(claveUsuario);
+                    rateLimiter.limpiar(claveIp);
                     return ApiResponse.ok("Autenticacion exitosa.", respuesta);
                 })
                 .onErrorResume(NoAutorizadoException.class, ex -> {
-                    rateLimiter.registrarFallo(clave);
+                    rateLimiter.registrarFallo(claveUsuario);
+                    rateLimiter.registrarFallo(claveIp);
                     return Mono.error(ex);
                 });
     }

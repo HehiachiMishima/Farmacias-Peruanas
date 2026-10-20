@@ -34,8 +34,12 @@ public class SistemaService {
     }
 
     public Mono<ApiResponse<List<SistemaResponse>>> listar() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.listar", () ->
-                        dataSistemaRepository.findAll().stream().map(SistemaResponse::of).toList()))
+        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.listar", () -> {
+                        List<SistemaResponse> lista = dataSistemaRepository.findAll(Listas.limitado()).stream()
+                                .map(SistemaResponse::of).toList();
+                        Listas.avisarSiCorto(log, lista.size(), "SistemaService.listar");
+                        return lista;
+                    }))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Sistemas listados.", lista));
     }

@@ -26,8 +26,12 @@ public class CentroService {
     }
 
     public Mono<ApiResponse<List<CentroResponse>>> listar() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.listar", () ->
-                        dataCentroRepository.findAll().stream().map(CentroResponse::of).toList()))
+        return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.listar", () -> {
+                        List<CentroResponse> lista = dataCentroRepository.findAll(Listas.limitado()).stream()
+                                .map(CentroResponse::of).toList();
+                        Listas.avisarSiCorto(log, lista.size(), "CentroService.listar");
+                        return lista;
+                    }))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Centros listados.", lista));
     }

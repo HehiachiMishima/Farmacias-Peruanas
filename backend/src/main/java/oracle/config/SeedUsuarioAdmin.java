@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -32,7 +32,7 @@ public class SeedUsuarioAdmin implements ApplicationRunner {
     private final UsuarioRepository usuarioRepository;
     private final RolRepository rolRepository;
     private final UsuarioRolRepository usuarioRolRepository;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final PasswordEncoder passwordEncoder;
 
     private final String usuario;
     private final String contrasena;
@@ -47,6 +47,7 @@ public class SeedUsuarioAdmin implements ApplicationRunner {
             UsuarioRepository usuarioRepository,
             RolRepository rolRepository,
             UsuarioRolRepository usuarioRolRepository,
+            PasswordEncoder passwordEncoder,
             @Value("${app.seed.usuario:}") String usuario,
             @Value("${app.seed.contrasena:}") String contrasena,
             @Value("${app.seed.nombre:Usuario}") String nombre,
@@ -58,6 +59,7 @@ public class SeedUsuarioAdmin implements ApplicationRunner {
         this.usuarioRepository = usuarioRepository;
         this.rolRepository = rolRepository;
         this.usuarioRolRepository = usuarioRolRepository;
+        this.passwordEncoder = passwordEncoder;
         this.usuario = usuario;
         this.contrasena = contrasena;
         this.nombre = nombre;

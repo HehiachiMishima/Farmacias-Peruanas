@@ -14,23 +14,44 @@ import org.springframework.stereotype.Component;
 public class LoginRateLimiter {
 
     private static final int MAX_INTENTOS = 10;
+    private static final int MAX_INTENTOS_POR_IP = 30;
     private static final long VENTANA_MS = 60_000L;
     private static final int MAX_CLAVES = 10_000;
 
     private final ConcurrentHashMap<String, Deque<Long>> intentos = new ConcurrentHashMap<>();
 
-    /** Lanza 429 si la clave ya supero el limite en la ventana actual. */
+    /** Limite por defecto (por IP+usuario). */
     public void verificar(String clave) {
+        verificar(clave, MAX_INTENTOS);
+    }
+
+    /** Lanza 429 si la clave ya alcanzo {@code maxIntentos} en la ventana actual. */
+    public void verificar(String clave, int maxIntentos) {
         Deque<Long> cola = intentos.get(clave);
         if (cola == null) {
             return;
         }
         synchronized (cola) {
             podar(cola);
-            if (cola.size() >= MAX_INTENTOS) {
+            if (cola.size() >= maxIntentos) {
                 throw new LimiteExcedidoException("Demasiados intentos de acceso. Intente de nuevo en un minuto.");
             }
         }
+    }
+
+    /** Limite por IP (mas holgado que el de IP+usuario para no bloquear NAT compartidos). */
+    public void verificarPorIp(String ip) {
+        verificar(claveIp(ip), MAX_INTENTOS_POR_IP);
+    }
+
+    /** Clave de cubo por usuario (IP + usuario, para no bloquear a todos desde una IP). */
+    public static String claveUsuario(String ip, String usuario) {
+        return ip + "|" + usuario.trim().toLowerCase();
+    }
+
+    /** Clave de cubo por IP. */
+    public static String claveIp(String ip) {
+        return "ip:" + ip;
     }
 
     /** Registra un intento fallido. */

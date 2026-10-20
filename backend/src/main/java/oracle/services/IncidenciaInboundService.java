@@ -6,7 +6,9 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import reactor.core.scheduler.Schedulers;
+import tools.jackson.databind.ObjectMapper;
 import oracle.exception.ConflictoException;
 import oracle.exception.RecursoNoEncontradoException;
 import oracle.model.DataIncidenciaInbound;
@@ -24,36 +26,50 @@ import oracle.response.EstadisticaInboundResponse;
 import oracle.response.IncidenciaInboundResponse;
 import oracle.response.PaginaResponse;
 import oracle.response.ProveedorMensualEstadistica;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import oracle.config.CacheRespuestas;
 import oracle.config.CatalogoCache;
+import oracle.config.Transacciones;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import reactor.core.publisher.Mono;
 
+@Slf4j
 @Service
 public class IncidenciaInboundService {
   private static final int MAX_TAMANO_PAGINA = 200;
-  private static final int MAX_FILAS_EXPORT = 100_000;
+  private static final int TAMANO_LOTE_EXPORT = 1_000;
 
   private final IncidenciaInboundRepository repo;
   private final DataProveedorRepository proveedorRepo;
   private final DataIncidenciaInboundRepository tipoRepo;
   private final EstadisticaInboundRepository estadisticasRepo;
   private final CatalogoCache catalogoCache;
+  private final CacheRespuestas cacheRespuestas;
+  private final Transacciones transacciones;
+  private final ObjectMapper json;
 
   public IncidenciaInboundService(
       IncidenciaInboundRepository repo,
       DataProveedorRepository proveedorRepo,
       DataIncidenciaInboundRepository tipoRepo,
       EstadisticaInboundRepository estadisticasRepo,
-      CatalogoCache catalogoCache) {
+      CatalogoCache catalogoCache,
+      CacheRespuestas cacheRespuestas,
+      Transacciones transacciones,
+      ObjectMapper json) {
     this.repo = repo;
     this.proveedorRepo = proveedorRepo;
     this.tipoRepo = tipoRepo;
     this.estadisticasRepo = estadisticasRepo;
     this.catalogoCache = catalogoCache;
+    this.cacheRespuestas = cacheRespuestas;
+    this.transacciones = transacciones;
+    this.json = json;
   }
 
   public Mono<ApiResponse<PaginaResponse<IncidenciaInboundResponse>>> listar(
@@ -72,33 +88,71 @@ public class IncidenciaInboundService {
         .map(d -> ApiResponse.ok("OK", d));
   }
 
-  public Mono<ApiResponse<List<IncidenciaInboundResponse>>> listarParaExportar(
-      FiltroIncidenciaInbound filtro) {
+  /**
+   * Exporta el filtro completo escribiendo el JSON directamente al flujo de
+   * respuesta: lee por lotes de {@value #TAMANO_LOTE_EXPORT} filas y nunca
+   * materializa la lista completa, así el pico de memoria queda acotado.
+   *
+   * Produce el mismo envoltorio que {@code ApiResponse&lt;List&lt;...&gt;&gt;}
+   * (exito, mensaje, datos, timestamp), así el contrato no cambia.
+   */
+  public StreamingResponseBody exportarEnFlujo(FiltroIncidenciaInbound filtro) {
     Specification<IncidenciaInbound> spec = especificacion(filtro);
-    Pageable pageable =
-        PageRequest.of(0, MAX_FILAS_EXPORT, Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id")));
-    return Mono.fromCallable(() -> repo.findAll(spec, pageable))
-        .map(page -> aRespuestas(page.getContent()))
-        .subscribeOn(Schedulers.boundedElastic())
-        .map(d -> ApiResponse.ok("OK", d));
+    Sort orden = Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id"));
+    return salida -> {
+      try {
+        ExportacionJson.escribir(json, salida, "OK", gen -> {
+          Map<Long, String> proveedores = catalogoCache.getProveedores();
+          Map<Long, String> tipos = catalogoCache.getTiposInbound();
+          int pagina = 0;
+          while (true) {
+            Page<IncidenciaInbound> lote =
+                repo.findAll(spec, PageRequest.of(pagina, TAMANO_LOTE_EXPORT, orden));
+            for (IncidenciaInbound i : lote.getContent()) {
+              json.writeValue(gen, new IncidenciaInboundResponse(
+                  i.getId(),
+                  i.getOrdenCompra(),
+                  i.getIdDataProveedor(),
+                  proveedores.get(i.getIdDataProveedor()),
+                  i.getIdDataIncidenciaInbound(),
+                  tipos.get(i.getIdDataIncidenciaInbound()),
+                  i.getSkuProducto(),
+                  i.getNUnidades(),
+                  i.getCreadoEn(),
+                  i.getActualizadoEn(),
+                  i.getCreadoPor(),
+                  i.getActualizadoPor()));
+            }
+            if (lote.getContent().size() < TAMANO_LOTE_EXPORT) {
+              break;
+            }
+            pagina++;
+          }
+        });
+      } catch (Exception e) {
+        log.error("Exportación de incidencias inbound interrumpida: {}", e.getMessage(), e);
+      }
+    };
   }
 
   public Mono<ApiResponse<EstadisticaInboundResponse>> estadisticas(FiltroIncidenciaInbound filtro) {
-    return Mono.fromCallable(() -> {
+    String clave = "inbound-stats:" + filtro;
+    return Mono.fromCallable(() -> cacheRespuestas.obtener(clave, () -> {
           long[] totales = estadisticasRepo.totales(filtro);
           return new EstadisticaInboundResponse(
               totales[0],
               totales[1],
               estadisticasRepo.porProveedor(filtro),
               estadisticasRepo.porTipo(filtro));
-        })
+        }))
         .subscribeOn(Schedulers.boundedElastic())
         .map(d -> ApiResponse.ok("OK", d));
   }
 
   public Mono<ApiResponse<List<ProveedorMensualEstadistica>>> estadisticaProveedoresMensual(
       FiltroIncidenciaInbound filtro) {
-    return Mono.fromCallable(() -> estadisticasRepo.porProveedorMensual(filtro))
+    String clave = "inbound-mensual:" + filtro;
+    return Mono.fromCallable(() -> cacheRespuestas.obtener(clave, () -> estadisticasRepo.porProveedorMensual(filtro)))
         .subscribeOn(Schedulers.boundedElastic())
         .map(d -> ApiResponse.ok("OK", d));
   }
@@ -113,7 +167,7 @@ public class IncidenciaInboundService {
 
   public Mono<ApiResponse<IncidenciaInboundResponse>> crear(IncidenciaInboundCrearRequest req) {
     Long actor = oracle.services.ActorActual.id();
-    return Mono.fromCallable(() -> {
+    return Mono.fromCallable(() -> transacciones.ejecutar(() -> {
       validarReferencias(req.idDataProveedor(), req.idDataIncidenciaInbound());
       String oc = req.ordenCompra().trim();
       String sku = req.skuProducto().trim();
@@ -124,13 +178,15 @@ public class IncidenciaInboundService {
       i.setSkuProducto(sku);
       i.setNUnidades(req.nUnidades());
       oracle.services.Auditoria.alCrear(i, actor);
-      return repo.save(i);
-    }).map(this::aRespuesta).subscribeOn(Schedulers.boundedElastic()).map(d -> ApiResponse.ok("OK", d));
+      IncidenciaInbound guardada = repo.save(i);
+      cacheRespuestas.invalidarTodo();
+      return guardada;
+    })).map(this::aRespuesta).subscribeOn(Schedulers.boundedElastic()).map(d -> ApiResponse.ok("OK", d));
   }
 
   public Mono<ApiResponse<IncidenciaInboundResponse>> actualizar(Long id, IncidenciaInboundActualizarRequest req) {
     Long actor = oracle.services.ActorActual.id();
-    return Mono.fromCallable(() -> {
+    return Mono.fromCallable(() -> transacciones.ejecutar(() -> {
       IncidenciaInbound i = repo.findById(id)
           .orElseThrow(() -> new RecursoNoEncontradoException("Incidencia inbound no encontrada"));
       validarReferencias(req.idDataProveedor(), req.idDataIncidenciaInbound());
@@ -140,16 +196,19 @@ public class IncidenciaInboundService {
       i.setSkuProducto(req.skuProducto().trim());
       i.setNUnidades(req.nUnidades());
       oracle.services.Auditoria.alActualizar(i, actor);
-      return repo.save(i);
-    }).map(this::aRespuesta).subscribeOn(Schedulers.boundedElastic()).map(d -> ApiResponse.ok("OK", d));
+      IncidenciaInbound guardada = repo.save(i);
+      cacheRespuestas.invalidarTodo();
+      return guardada;
+    })).map(this::aRespuesta).subscribeOn(Schedulers.boundedElastic()).map(d -> ApiResponse.ok("OK", d));
   }
 
   public Mono<ApiResponse<Void>> eliminar(Long id) {
-    return Mono.fromCallable(() -> {
+    return Mono.fromCallable(() -> transacciones.ejecutar(() -> {
       if (!repo.existsById(id)) throw new RecursoNoEncontradoException("Incidencia inbound no encontrada");
       repo.deleteById(id);
+      cacheRespuestas.invalidarTodo();
       return null;
-    }).subscribeOn(Schedulers.boundedElastic()).thenReturn(ApiResponse.ok("OK", null));
+    })).subscribeOn(Schedulers.boundedElastic()).thenReturn(ApiResponse.ok("OK", null));
   }
 
   private Specification<IncidenciaInbound> especificacion(FiltroIncidenciaInbound filtro) {

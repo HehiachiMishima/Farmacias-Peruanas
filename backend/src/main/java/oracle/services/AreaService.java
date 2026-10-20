@@ -34,8 +34,12 @@ public class AreaService {
     }
 
     public Mono<ApiResponse<List<AreaResponse>>> listar() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.listar", () ->
-                        dataAreaRepository.findAll().stream().map(AreaResponse::of).toList()))
+        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.listar", () -> {
+                        List<AreaResponse> lista = dataAreaRepository.findAll(Listas.limitado()).stream()
+                                .map(AreaResponse::of).toList();
+                        Listas.avisarSiCorto(log, lista.size(), "AreaService.listar");
+                        return lista;
+                    }))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Areas listadas.", lista));
     }

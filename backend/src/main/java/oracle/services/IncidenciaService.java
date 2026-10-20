@@ -1,6 +1,7 @@
 package oracle.services;
 
 import jakarta.persistence.criteria.Predicate;
+import tools.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -31,11 +32,14 @@ import oracle.response.ApiResponse;
 import oracle.response.EstadisticaResponse;
 import oracle.response.IncidenciaResponse;
 import oracle.response.PaginaResponse;
+import oracle.config.CacheRespuestas;
+import oracle.config.Transacciones;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -55,8 +59,8 @@ public class IncidenciaService {
 
     /** Tope de filas por página que acepta el servidor. */
     private static final int MAX_TAMANO_PAGINA = 200;
-    /** Tope de filas para una exportación completa (protege la memoria del JVM). */
-    private static final int MAX_FILAS_EXPORT = 100_000;
+    /** Filas por consulta al exportar en flujo: acota la memoria de la JVM. */
+    private static final int TAMANO_LOTE_EXPORT = 1_000;
 
     private final IncidenciaRepository incidenciaRepository;
     private final DataCentroRepository dataCentroRepository;
@@ -66,6 +70,9 @@ public class IncidenciaService {
     private final DataResponsableRepository dataResponsableRepository;
     private final EstadisticaIncidenciaRepository estadisticaRepository;
     private final CatalogoCache catalogoCache;
+    private final CacheRespuestas cacheRespuestas;
+    private final Transacciones transacciones;
+    private final ObjectMapper json;
 
     public IncidenciaService(IncidenciaRepository incidenciaRepository,
             DataCentroRepository dataCentroRepository,
@@ -74,7 +81,10 @@ public class IncidenciaService {
             DataAreaRepository dataAreaRepository,
             DataResponsableRepository dataResponsableRepository,
             EstadisticaIncidenciaRepository estadisticaRepository,
-        CatalogoCache catalogoCache) {
+        CatalogoCache catalogoCache,
+        CacheRespuestas cacheRespuestas,
+        Transacciones transacciones,
+        ObjectMapper json) {
         this.incidenciaRepository = incidenciaRepository;
         this.dataCentroRepository = dataCentroRepository;
         this.dataSistemaRepository = dataSistemaRepository;
@@ -83,6 +93,9 @@ public class IncidenciaService {
         this.dataResponsableRepository = dataResponsableRepository;
         this.estadisticaRepository = estadisticaRepository;
         this.catalogoCache = catalogoCache;
+        this.cacheRespuestas = cacheRespuestas;
+        this.transacciones = transacciones;
+        this.json = json;
     }
 
     public Mono<ApiResponse<PaginaResponse<IncidenciaResponse>>> listar(FiltroIncidencia filtro, int pagina,
@@ -100,29 +113,66 @@ public class IncidenciaService {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    /** Todas las filas que cumplen el filtro, acotadas, para exportar. */
-    public Mono<ApiResponse<List<IncidenciaResponse>>> listarParaExportar(FiltroIncidencia filtro) {
+    /**
+     * Exporta el filtro completo escribiendo el JSON directamente al flujo de
+     * respuesta: lee por lotes de {@value #TAMANO_LOTE_EXPORT} filas y nunca
+     * materializa la lista completa, así el pico de memoria queda acotado
+     * aunque el filtro devuelva cientos de miles de filas.
+     *
+     * Produce exactamente el mismo envoltorio que
+     * {@code ApiResponse&lt;List&lt;IncidenciaResponse&gt;&gt;} (exito, mensaje,
+     * datos, timestamp), así el contrato con el frontend no cambia.
+     */
+    public StreamingResponseBody exportarEnFlujo(FiltroIncidencia filtro) {
         Sort orden = Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id"));
-        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.listarParaExportar", () -> {
-                    List<Incidencia> filas = incidenciaRepository
-                            .findAll(especificacion(filtro), PageRequest.of(0, MAX_FILAS_EXPORT, orden))
-                            .getContent();
-                    return ApiResponse.ok("Incidencias exportadas.", resolverLista(filas));
-                }))
-                .subscribeOn(Schedulers.boundedElastic());
+        return salida -> {
+            try {
+                ExportacionJson.escribir(json, salida, "Incidencias exportadas.", gen -> {
+                    Map<Long, String> centros = catalogoCache.getCentros();
+                    Map<Long, String> sistemas = catalogoCache.getSistemas();
+                    Map<Long, String> tipos = catalogoCache.getTipos();
+                    Map<Long, String> areas = catalogoCache.getAreas();
+                    Map<Long, String> responsables = catalogoCache.getResponsables();
+                    int pagina = 0;
+                    while (true) {
+                        Page<Incidencia> lote = incidenciaRepository.findAll(especificacion(filtro),
+                                PageRequest.of(pagina, TAMANO_LOTE_EXPORT, orden));
+                        for (Incidencia incidencia : lote.getContent()) {
+                            json.writeValue(gen, IncidenciaResponse.of(incidencia,
+                                    centros.get(incidencia.getIdDataCentro()),
+                                    sistemas.get(incidencia.getIdDataSistema()),
+                                    tipos.get(incidencia.getIdDataIncidencia()),
+                                    areas.get(incidencia.getIdDataArea()),
+                                    responsables.get(incidencia.getIdDataResponsable())));
+                        }
+                        if (lote.getContent().size() < TAMANO_LOTE_EXPORT) {
+                            break;
+                        }
+                        pagina++;
+                    }
+                });
+            } catch (Exception e) {
+                log.error("Exportación de incidencias interrumpida: {}", e.getMessage(), e);
+            }
+        };
     }
 
     public Mono<ApiResponse<EstadisticaResponse>> estadisticas(FiltroIncidencia filtro) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.estadisticas", () -> {
-                    long[] totales = estadisticaRepository.totales(filtro);
-                    return ApiResponse.ok("Estadísticas calculadas.", new EstadisticaResponse(
-                            totales[0], totales[1],
-                            estadisticaRepository.porSistema(filtro),
-                            estadisticaRepository.porTipo(filtro),
-                            estadisticaRepository.porCentro(filtro),
-                            estadisticaRepository.porArea(filtro)));
-                }))
+        String clave = "incidencia:" + filtro;
+        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.estadisticas", () ->
+                        ApiResponse.ok("Estadísticas calculadas.",
+                                cacheRespuestas.obtener(clave, () -> calcularEstadisticas(filtro)))))
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private EstadisticaResponse calcularEstadisticas(FiltroIncidencia filtro) {
+        long[] totales = estadisticaRepository.totales(filtro);
+        return new EstadisticaResponse(
+                totales[0], totales[1],
+                estadisticaRepository.porSistema(filtro),
+                estadisticaRepository.porTipo(filtro),
+                estadisticaRepository.porCentro(filtro),
+                estadisticaRepository.porArea(filtro));
     }
 
     public Mono<ApiResponse<IncidenciaResponse>> obtenerPorId(Long id) {
@@ -135,7 +185,7 @@ public class IncidenciaService {
 
     public Mono<ApiResponse<IncidenciaResponse>> crear(IncidenciaCrearRequest peticion) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.crear ticket=" + peticion.ticket(), () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.crear ticket=" + peticion.ticket(), () -> transacciones.ejecutar(() -> {
             validarReferencias(peticion.idDataCentro(), peticion.idDataSistema(), peticion.idDataIncidencia(),
                     peticion.idDataArea(), peticion.idDataResponsable());
             if (incidenciaRepository.existsByTicket(peticion.ticket().trim())) {
@@ -149,14 +199,15 @@ public class IncidenciaService {
             Auditoria.alCrear(incidencia, actor);
             incidencia.setCreadoEn(componerCreadoEn(peticion.fechaCreacion(), peticion.horaInicio()));
             incidenciaRepository.save(incidencia);
+            cacheRespuestas.invalidarTodo();
 
             return ApiResponse.ok("Incidencia registrada.", resolver(incidencia));
-        })).subscribeOn(Schedulers.boundedElastic());
+        }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<IncidenciaResponse>> actualizar(Long id, IncidenciaActualizarRequest peticion) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.actualizar id=" + id, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.actualizar id=" + id, () -> transacciones.ejecutar(() -> {
             Incidencia incidencia = obtenerIncidencia(id);
             validarReferencias(peticion.idDataCentro(), peticion.idDataSistema(), peticion.idDataIncidencia(),
                     peticion.idDataArea(), peticion.idDataResponsable());
@@ -170,17 +221,19 @@ public class IncidenciaService {
             Auditoria.alActualizar(incidencia, actor);
             incidencia.setCreadoEn(componerCreadoEn(peticion.fechaCreacion(), peticion.horaInicio()));
             incidenciaRepository.save(incidencia);
+            cacheRespuestas.invalidarTodo();
 
             return ApiResponse.ok("Incidencia actualizada.", resolver(incidencia));
-        })).subscribeOn(Schedulers.boundedElastic());
+        }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<Void>> eliminar(Long id) {
-        return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "IncidenciaService.eliminar id=" + id, () -> {
+        return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "IncidenciaService.eliminar id=" + id, () -> transacciones.ejecutar(() -> {
                     Incidencia incidencia = obtenerIncidencia(id);
                     incidenciaRepository.delete(incidencia);
+                    cacheRespuestas.invalidarTodo();
                     return null;
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(Mono.fromSupplier(() -> ApiResponse.<Void>ok("Incidencia eliminada.", null)));
     }

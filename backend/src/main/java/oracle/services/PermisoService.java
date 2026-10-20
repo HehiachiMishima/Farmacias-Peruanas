@@ -34,8 +34,12 @@ public class PermisoService {
     }
 
     public Mono<ApiResponse<List<PermisoResponse>>> listar() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "PermisoService.listar", () ->
-                        permisoRepository.findAll().stream().map(PermisoResponse::of).toList()))
+        return Mono.fromCallable(() -> Trazas.medir(log, "PermisoService.listar", () -> {
+                        List<PermisoResponse> lista = permisoRepository.findAll(Listas.limitado()).stream()
+                                .map(PermisoResponse::of).toList();
+                        Listas.avisarSiCorto(log, lista.size(), "PermisoService.listar");
+                        return lista;
+                    }))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Permisos listados.", lista));
     }

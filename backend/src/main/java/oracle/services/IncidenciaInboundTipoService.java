@@ -12,9 +12,11 @@ import oracle.response.DataIncidenciaInboundResponse;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+@Slf4j
 @Service
 public class IncidenciaInboundTipoService {
   private final DataIncidenciaInboundRepository repo;
@@ -24,8 +26,12 @@ public class IncidenciaInboundTipoService {
   }
 
   public Mono<ApiResponse<java.util.List<DataIncidenciaInboundResponse>>> listarTodos() {
-    return Mono.fromCallable(() -> repo.findAll(Sort.by(Sort.Direction.ASC, "incidenciaInbound")))
+    return Mono.fromCallable(() -> repo.findAll(Listas.limitado(Sort.by(Sort.Direction.ASC, "incidenciaInbound"))))
         .map(list -> list.stream().map(this::aResponse).toList())
+        .map(d -> {
+          Listas.avisarSiCorto(log, d.size(), "IncidenciaInboundTipoService.listarTodos");
+          return d;
+        })
         .subscribeOn(Schedulers.boundedElastic())
         .map(d -> ApiResponse.ok("OK", d));
   }

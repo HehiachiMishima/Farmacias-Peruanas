@@ -14,6 +14,8 @@ import oracle.request.UsuarioPermisoOverrideRequest;
 import oracle.response.ApiResponse;
 import oracle.response.PermisoResponse;
 import oracle.response.UsuarioPermisoResponse;
+import oracle.security.AutorizacionCache;
+import oracle.config.Transacciones;
 import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -30,14 +32,20 @@ public class UsuarioPermisoService {
     private final UsuarioRepository usuarioRepository;
     private final PermisoRepository permisoRepository;
     private final UsuarioPermisoRepository usuarioPermisoRepository;
+    private final AutorizacionCache autorizacionCache;
+    private final Transacciones transacciones;
 
     public UsuarioPermisoService(
             UsuarioRepository usuarioRepository,
             PermisoRepository permisoRepository,
-            UsuarioPermisoRepository usuarioPermisoRepository) {
+            UsuarioPermisoRepository usuarioPermisoRepository,
+            AutorizacionCache autorizacionCache,
+            Transacciones transacciones) {
         this.usuarioRepository = usuarioRepository;
         this.permisoRepository = permisoRepository;
         this.usuarioPermisoRepository = usuarioPermisoRepository;
+        this.autorizacionCache = autorizacionCache;
+        this.transacciones = transacciones;
     }
 
     /** Crear o actualizar el override del permiso para el usuario. */
@@ -45,17 +53,17 @@ public class UsuarioPermisoService {
         Long actor = ActorActual.id();
         return Mono.fromCallable(() -> Trazas.medir(log,
                 "UsuarioPermisoService.otorgar usuarioId=" + usuarioId + " permisoId=" + peticion.permisoId(),
-                () -> {
+                () -> transacciones.ejecutar(() -> {
                     Usuario usuario = obtenerUsuario(usuarioId);
                     if (Protecciones.esUsuarioProtegido(usuario.getUsuario())) {
                         throw new OperacionNoPermitidaException(
                                 "El usuario '" + usuario.getUsuario() + "' es el usuario principal protegido: no se pueden conceder ni quitar permisos individuales.");
                     }
+                    Protecciones.verificarNoAutoGestion(usuarioId, actor);
                     Permiso permiso = permisoRepository.findById(peticion.permisoId())
                             .orElseThrow(() -> new RecursoNoEncontradoException(
                                     "No existe el permiso con id " + peticion.permisoId() + "."));
                     boolean otorgado = peticion.otorgado();
-
                     UsuarioPermiso override = usuarioPermisoRepository
                             .findByUsuarioIdAndPermisoId(usuarioId, peticion.permisoId())
                             .orElse(null);
@@ -80,29 +88,33 @@ public class UsuarioPermisoService {
                                 : "Override actualizado a deny (otorgado=FALSE).";
                     }
                     usuarioPermisoRepository.save(override);
+                    autorizacionCache.invalidar(usuarioId);
 
                     return ApiResponse.ok(mensaje, UsuarioPermisoResponse.of(override));
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     /** Eliminar el override y volver al calculo por rol. */
     public Mono<ApiResponse<Void>> eliminar(Long usuarioId, Long permisoId) {
+        Long actor = ActorActual.id();
         return Mono.<Void>fromRunnable(() -> Trazas.medir(log,
                 "UsuarioPermisoService.eliminar usuarioId=" + usuarioId + " permisoId=" + permisoId,
-                () -> {
+                () -> transacciones.ejecutar(() -> {
                     Usuario usuario = obtenerUsuario(usuarioId);
                     if (Protecciones.esUsuarioProtegido(usuario.getUsuario())) {
                         throw new OperacionNoPermitidaException(
                                 "El usuario '" + usuario.getUsuario() + "' es el usuario principal protegido: no se pueden conceder ni quitar permisos individuales.");
                     }
+                    Protecciones.verificarNoAutoGestion(usuarioId, actor);
                     if (!usuarioPermisoRepository.existsByUsuarioIdAndPermisoId(usuarioId, permisoId)) {
                         throw new RecursoNoEncontradoException(
                                 "El usuario no tiene un override para el permiso con id " + permisoId + ".");
                     }
                     usuarioPermisoRepository.eliminarPar(usuarioId, permisoId);
+                    autorizacionCache.invalidar(usuarioId);
                     return null;
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(Mono.fromSupplier(() -> ApiResponse.<Void>ok("Override eliminado.", null)));
     }

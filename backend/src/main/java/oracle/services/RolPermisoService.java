@@ -16,6 +16,8 @@ import oracle.response.ApiResponse;
 import oracle.response.PermisoResponse;
 import oracle.response.RolPermisoResponse;
 import oracle.response.RolResponse;
+import oracle.security.AutorizacionCache;
+import oracle.config.Transacciones;
 import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
@@ -32,14 +34,20 @@ public class RolPermisoService {
     private final RolRepository rolRepository;
     private final PermisoRepository permisoRepository;
     private final RolPermisoRepository rolPermisoRepository;
+    private final AutorizacionCache autorizacionCache;
+    private final Transacciones transacciones;
 
     public RolPermisoService(
             RolRepository rolRepository,
             PermisoRepository permisoRepository,
-            RolPermisoRepository rolPermisoRepository) {
+            RolPermisoRepository rolPermisoRepository,
+            AutorizacionCache autorizacionCache,
+            Transacciones transacciones) {
         this.rolRepository = rolRepository;
         this.permisoRepository = permisoRepository;
         this.rolPermisoRepository = rolPermisoRepository;
+        this.autorizacionCache = autorizacionCache;
+        this.transacciones = transacciones;
     }
 
     /** Agregar un permiso al rol (unico por par). */
@@ -47,7 +55,7 @@ public class RolPermisoService {
         Long actor = ActorActual.id();
         return Mono.fromCallable(() -> Trazas.medir(log,
                         "RolPermisoService.asignar rolId=" + rolId + " permisoId=" + peticion.permisoId(),
-                        () -> {
+                        () -> transacciones.ejecutar(() -> {
                             Rol rol = obtenerRol(rolId);
                             Permiso permiso = permisoRepository.findById(peticion.permisoId())
                                     .orElseThrow(() -> new RecursoNoEncontradoException(
@@ -64,9 +72,10 @@ public class RolPermisoService {
                             plantilla.setCreadoPor(actor);
                             plantilla.setCreadoEn(LocalDateTime.now());
                             rolPermisoRepository.save(plantilla);
+                            autorizacionCache.invalidarTodo();
 
                             return ApiResponse.ok("Permiso agregado al rol.", RolPermisoResponse.of(plantilla));
-                        }))
+                        })))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -74,7 +83,7 @@ public class RolPermisoService {
     public Mono<ApiResponse<Void>> quitar(Long rolId, Long permisoId) {
         return Mono.<Void>fromRunnable(() -> Trazas.medir(log,
                         "RolPermisoService.quitar rolId=" + rolId + " permisoId=" + permisoId,
-                        () -> {
+                        () -> transacciones.ejecutar(() -> {
                             Rol rol = obtenerRol(rolId);
                             if (Protecciones.esRolAdministrador(rol.getNombre())) {
                                 throw new OperacionNoPermitidaException(
@@ -85,8 +94,9 @@ public class RolPermisoService {
                                         + "' no tiene el permiso con id " + permisoId + ".");
                             }
                             rolPermisoRepository.eliminarPar(rolId, permisoId);
+                            autorizacionCache.invalidarTodo();
                             return null;
-                        }))
+                        })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(Mono.fromSupplier(() -> ApiResponse.<Void>ok("Permiso quitado del rol.", null)));
     }

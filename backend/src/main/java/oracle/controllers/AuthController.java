@@ -32,11 +32,13 @@ public class AuthController {
     public Mono<ApiResponse<AuthResponse>> login(
             @Valid @RequestBody LoginRequest peticion,
             HttpServletRequest http) {
-        // Clave compuesta IP + usuario: aun si el proxy colapsa la IP (mismo
-        // valor para todos), el cubo queda acotado por usuario, de modo que un
-        // atacante no puede bloquear el login de todo el mundo a la vez.
-        String clave = http.getRemoteAddr() + "|" + peticion.usuario().trim().toLowerCase();
-        rateLimiter.verificar(clave);
-        return authService.login(peticion, clave);
+        // Doble cubo: por IP (frena la rotacion de usuarios) y por IP+usuario
+        // (evita que un atacante bloquee el login de todos desde una misma IP).
+        String ip = http.getRemoteAddr();
+        String claveUsuario = LoginRateLimiter.claveUsuario(ip, peticion.usuario());
+        String claveIp = LoginRateLimiter.claveIp(ip);
+        rateLimiter.verificar(claveUsuario);
+        rateLimiter.verificarPorIp(ip);
+        return authService.login(peticion, claveUsuario, claveIp);
     }
 }

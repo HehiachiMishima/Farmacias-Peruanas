@@ -12,9 +12,11 @@ import oracle.response.DataProveedorResponse;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+@Slf4j
 @Service
 public class ProveedorService {
   private final DataProveedorRepository repo;
@@ -24,8 +26,12 @@ public class ProveedorService {
   }
 
   public Mono<ApiResponse<java.util.List<DataProveedorResponse>>> listarTodos() {
-    return Mono.fromCallable(() -> repo.findAll(Sort.by(Sort.Direction.ASC, "proveedor")))
+    return Mono.fromCallable(() -> repo.findAll(Listas.limitado(Sort.by(Sort.Direction.ASC, "proveedor"))))
         .map(list -> list.stream().map(this::aResponse).toList())
+        .map(d -> {
+          Listas.avisarSiCorto(log, d.size(), "ProveedorService.listarTodos");
+          return d;
+        })
         .subscribeOn(Schedulers.boundedElastic())
         .map(d -> ApiResponse.ok("OK", d));
   }

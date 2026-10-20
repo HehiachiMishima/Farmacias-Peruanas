@@ -2,7 +2,6 @@ package oracle.controllers;
 
 import jakarta.validation.Valid;
 import java.time.LocalDate;
-import java.util.List;
 import oracle.request.FiltroIncidencia;
 import oracle.request.IncidenciaActualizarRequest;
 import oracle.request.IncidenciaCrearRequest;
@@ -12,6 +11,8 @@ import oracle.response.IncidenciaResponse;
 import oracle.response.PaginaResponse;
 import oracle.services.IncidenciaService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import reactor.core.publisher.Mono;
 
 /** CRUD de incidencias (bitácora), con listado paginado y filtrado en el servidor. */
@@ -53,9 +55,14 @@ public class IncidenciaController {
                 pagina, tamano);
     }
 
+    /**
+     * Exporta en flujo (chunked) el JSON completo del filtro. El envoltorio es
+     * el mismo que el de una respuesta normal, pero las filas se escriben por
+     * lotes en vez de cargarse todas en memoria.
+     */
     @GetMapping("/exportar")
     @PreAuthorize("hasAuthority('VER_INCIDENCIAS')")
-    public Mono<ApiResponse<List<IncidenciaResponse>>> exportar(
+    public ResponseEntity<StreamingResponseBody> exportar(
             @RequestParam(required = false) Long centro,
             @RequestParam(required = false) Long sistema,
             @RequestParam(required = false) Long area,
@@ -64,8 +71,10 @@ public class IncidenciaController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
             @RequestParam(required = false) String texto) {
-        return incidenciaService.listarParaExportar(
-                new FiltroIncidencia(centro, sistema, area, responsable, tipo, desde, hasta, texto));
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(incidenciaService.exportarEnFlujo(
+                        new FiltroIncidencia(centro, sistema, area, responsable, tipo, desde, hasta, texto)));
     }
 
     @GetMapping("/estadisticas")

@@ -1,6 +1,7 @@
 package oracle.services;
 
 import java.util.Set;
+import oracle.exception.OperacionNoPermitidaException;
 
 /**
  * Reglas de proteccion espejo de los triggers de la base de datos.
@@ -40,6 +41,18 @@ final class Protecciones {
 
     static boolean esRolAdministrador(String nombre) {
         return ROL_ADMINISTRADOR.equalsIgnoreCase(nombre);
+    }
+
+    /**
+     * Bloquea la autoasignacion: un usuario no puede cambiar sus propios roles
+     * ni concederse/quitarse permisos individuales (evita la elevacion de
+     * privilegios). El actor 0 (sistema/seeding) queda exento.
+     */
+    static void verificarNoAutoGestion(Long usuarioAfectado, Long actor) {
+        if (usuarioAfectado != null && actor != null && actor != 0L && usuarioAfectado.equals(actor)) {
+            throw new OperacionNoPermitidaException(
+                    "No puede modificar sus propios roles o permisos.");
+        }
     }
 
     private Protecciones() {

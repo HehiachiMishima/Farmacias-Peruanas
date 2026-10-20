@@ -13,8 +13,11 @@ import oracle.response.PaginaResponse;
 import oracle.response.ProveedorMensualEstadistica;
 import oracle.services.IncidenciaInboundService;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -39,15 +42,22 @@ public class InboundIncidenciaController {
     return service.listar(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto), pagina, tamano);
   }
 
+  /**
+   * Exporta en flujo (chunked) el JSON completo del filtro: el envoltorio es el
+   * mismo que el de una respuesta normal, pero las filas se escriben por lotes
+   * en vez de cargarse todas en memoria.
+   */
   @GetMapping("/exportar")
   @PreAuthorize("hasAuthority('VER_INCIDENCIAS_INBOUND')")
-  public Mono<ApiResponse<List<IncidenciaInboundResponse>>> exportar(
+  public ResponseEntity<StreamingResponseBody> exportar(
       @RequestParam(required = false) Long proveedor,
       @RequestParam(required = false) Long tipo,
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
       @RequestParam(required = false) String texto) {
-    return service.listarParaExportar(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto));
+    return ResponseEntity.ok()
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(service.exportarEnFlujo(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto)));
   }
 
   @GetMapping("/estadisticas")
