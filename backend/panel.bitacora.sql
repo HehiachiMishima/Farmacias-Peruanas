@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS incidencias (
     id_data_area BIGINT NOT NULL COMMENT 'FK al catálogo de áreas.',
     descripcion VARCHAR(255) NOT NULL COMMENT 'Descripción detallada del problema o solución.',
     hora_inicio TIME NOT NULL DEFAULT(CURRENT_TIME) COMMENT 'Hora de inicio (auto al insertar).',
-    hora_fin TIME NULL COMMENT 'Hora de cierre. NULL mientras la incidencia esté abierta.',
+    hora_fin TIME NOT NULL COMMENT 'Hora de cierre (obligatoria).',
     tiempo_solucion TIME NULL COMMENT 'Tiempo total de solución (HH:MM:SS). Lo calcula el backend.',
     creado_por BIGINT NOT NULL COMMENT 'FK al usuario que creó la incidencia. 0 = sistema/seeding.',
     actualizado_por BIGINT NOT NULL COMMENT 'FK al usuario que modificó la incidencia. 0 = sistema/seeding.',
@@ -148,3 +148,14 @@ CREATE TABLE IF NOT EXISTS incidencias (
     INDEX idx_incidencias_creado_por (creado_por),
     INDEX idx_incidencias_actualizado_por (actualizado_por)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Bitácora de incidencias.';
+
+-- ------------------------------------------------------------
+-- MIGRACIÓN (solo si la tabla `incidencias` ya existía con
+-- hora_fin NULL). CREATE TABLE IF NOT EXISTS no altera tablas
+-- existentes. Ejecutar manualmente, en este orden:
+--
+-- UPDATE incidencias SET hora_fin = hora_inicio, tiempo_solucion = '00:00:00'
+--  WHERE hora_fin IS NULL;
+-- ALTER TABLE incidencias
+--   MODIFY hora_fin TIME NOT NULL COMMENT 'Hora de cierre (obligatoria).';
+-- ------------------------------------------------------------

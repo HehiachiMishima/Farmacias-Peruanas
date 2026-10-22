@@ -150,11 +150,11 @@
         <header class="dash-card__head">
           <div class="dash-card__titulos">
             <h2 class="dash-card__titulo"><ui-icon name="sistema" [size]="18" /> ¿Qué sistemas tienen más incidencias?</h2>
-            <p class="dash-card__sub">Pareto: en rojo, los sistemas que concentran el 80 % de los casos (con MTTR).</p>
+            <p class="dash-card__sub">El tamaño de cada bloque es su volumen; el punto marca a los que suman el 80 % de los casos.</p>
           </div>
         </header>
         <div class="dash-card__body">
-          <ui-pareto [items]="paretoSistemas()" [maximo]="10" />
+          <ui-treemap [items]="mapaSistemas()" [maximo]="10" titulo="Incidencias por sistema" />
         </div>
       </article>
 
@@ -166,7 +166,7 @@
           </div>
         </header>
         <div class="dash-card__body">
-          <ui-bars [datos]="barrasTipos()" [horizontal]="true" />
+          <ui-ranking [items]="rankingTipos()" [maximo]="6" />
         </div>
       </article>
 
@@ -226,12 +226,12 @@
         <header class="dash-card__head">
           <div class="dash-card__titulos">
             <h2 class="dash-card__titulo"><ui-icon name="activity" [size]="18" /> ¿Dónde tardamos más en resolver?</h2>
-            <p class="dash-card__sub">Tiempo medio de solución por sistema (minutos).</p>
+            <p class="dash-card__sub">MTTR de cada sistema frente al promedio general: verde dentro, ámbar por encima, rojo crítico.</p>
           </div>
         </header>
         <div class="dash-card__body">
-          @if (barrasMttr().length > 0) {
-            <ui-bars [datos]="barrasMttr()" [horizontal]="true" />
+          @if (bulletMttr().length > 0) {
+            <ui-bullet [items]="bulletMttr()" [referencia]="mttrGeneral()" [textoReferencia]="mttrGeneralTexto()" [maximo]="8" />
           } @else {
             <div class="dash-card__vacio">Aún no hay incidencias resueltas.</div>
           }
@@ -242,11 +242,11 @@
         <header class="dash-card__head">
           <div class="dash-card__titulos">
             <h2 class="dash-card__titulo"><ui-icon name="centro" [size]="18" /> Centros con más incidencias</h2>
-            <p class="dash-card__sub">Volumen por centro, con MTTR.</p>
+            <p class="dash-card__sub">Participación de cada centro; pasa el cursor para aislarlo.</p>
           </div>
         </header>
         <div class="dash-card__body">
-          <ui-bars [datos]="barrasCentros()" [horizontal]="true" />
+          <ui-anillo [items]="anilloCentros()" [maximo]="7" centro="Incidencias" titulo="Incidencias por centro" />
         </div>
       </article>
 
@@ -254,11 +254,11 @@
         <header class="dash-card__head">
           <div class="dash-card__titulos">
             <h2 class="dash-card__titulo"><ui-icon name="area" [size]="18" /> Áreas responsables</h2>
-            <p class="dash-card__sub">Incidencias asignadas por área.</p>
+            <p class="dash-card__sub">Cada celda es el 1 % de las incidencias asignadas.</p>
           </div>
         </header>
         <div class="dash-card__body">
-          <ui-bars [datos]="barrasAreas()" [horizontal]="true" />
+          <ui-waffle [items]="waffleAreas()" [maximo]="6" />
         </div>
       </article>
     </div>

@@ -58,20 +58,11 @@
 }
 
 .launcher__brand-mark {
-  display: inline-flex;
-  width: 38px;
-  height: 38px;
-  padding: 5px;
+  width: 50px;
+  height: 32px;
   flex: none;
-  border-radius: var(--radius-sm);
-  background: #fff;
-  box-shadow: 0 8px 22px -8px rgba(225, 29, 46, 0.9);
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
+  object-fit: contain;
+  filter: drop-shadow(0 8px 18px rgba(29, 99, 237, 0.5));
 }
 
 .launcher__brand-text {

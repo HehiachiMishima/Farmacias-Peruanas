@@ -3,13 +3,13 @@ import { AnaliticaInbound, IncidenciaInboundFiltros } from '../../../../../core/
 import { InboundCatalogos } from '../../../../../core/services/inbound-catalogos';
 import { InboundIncidenciasApi } from '../../../../../core/services/inbound-incidencias.api';
 import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
-import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
-import { SERIES, SERIE_OTROS, compacto, entero, porcentaje, variacion } from '../../../../../shared/ui/charts/formato';
+import { SERIES, compacto, entero, porcentaje, variacion } from '../../../../../shared/ui/charts/formato';
 import { CeldaCalor, Heatmap } from '../../../../../shared/ui/charts/heatmap';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
 import { LineChart, SerieLinea } from '../../../../../shared/ui/charts/line-chart';
-import { ItemPareto, ParetoChart } from '../../../../../shared/ui/charts/pareto-chart';
+import { ItemRanking, RankingTiles } from '../../../../../shared/ui/charts/ranking-tiles';
 import { GrupoApilado, StackedBars } from '../../../../../shared/ui/charts/stacked-bars';
+import { ItemTreemap, Treemap } from '../../../../../shared/ui/charts/treemap';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { ChipFiltro, FiltrosActivos, fechaChip } from '../../../../../shared/ui/panel-filtros/filtros-activos';
@@ -17,7 +17,6 @@ import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtr
 import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 
-const TOP_TIPOS = 8;
 
 /**
  * Dashboard Inbound: control de proveedores.
@@ -30,13 +29,13 @@ const TOP_TIPOS = 8;
 @Component({
   selector: 'app-inbound-dashboard',
   imports: [
-    BarChart,
     EmptyState,
     Heatmap,
     Icon,
     Kpi,
     LineChart,
-    ParetoChart,
+    RankingTiles,
+    Treemap,
     StackedBars,
     PanelFiltros,
     FiltrosActivos,
@@ -194,7 +193,8 @@ export class InboundDashboard {
   });
 
   // ---------------- Gráficos ----------------
-  readonly pareto = computed<ItemPareto[]>(() =>
+  /** Proveedores por volumen (treemap): área = incidencias. */
+  readonly mapaProveedores = computed<ItemTreemap[]>(() =>
     (this.datos()?.proveedores ?? []).map((p) => ({
       etiqueta: p.proveedor,
       valor: p.total,
@@ -202,25 +202,15 @@ export class InboundDashboard {
     })),
   );
 
-  readonly barrasTipos = computed<BarraDato[]>(() => {
-    const tipos = this.datos()?.tipos ?? [];
-    const barras = tipos.slice(0, TOP_TIPOS).map((t, i) => ({
+  /** Tipos más repetidos, con cuántos proveedores los presentan. */
+  readonly rankingTipos = computed<ItemRanking[]>(() =>
+    (this.datos()?.tipos ?? []).map((t) => ({
       etiqueta: t.tipo,
       valor: t.total,
-      color: SERIES[i % SERIES.length],
-      detalle: `${entero(t.proveedores)} prov. · ${compacto(t.unidades)} u`,
-    }));
-    const resto = tipos.slice(TOP_TIPOS);
-    if (resto.length) {
-      barras.push({
-        etiqueta: `Otros (${resto.length})`,
-        valor: resto.reduce((t, x) => t + x.total, 0),
-        color: SERIE_OTROS,
-        detalle: '',
-      });
-    }
-    return barras;
-  });
+      chip: `${entero(t.proveedores)} prov.`,
+      detalle: `${compacto(t.unidades)} unidades`,
+    })),
+  );
 
   readonly matriz = computed<CeldaCalor[]>(() => this.datos()?.proveedorTipo ?? []);
 

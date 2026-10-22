@@ -2,26 +2,28 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { finalize } from 'rxjs';
 import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
-import { AnaliticaBitacora, GrupoBitacora, IncidenciaFiltros, Responsable } from '../../../../../core/models';
+import { AnaliticaBitacora, IncidenciaFiltros, Responsable } from '../../../../../core/models';
 import { AreasApi } from '../../../../../core/services/areas.api';
 import { BitacoraCatalogos } from '../../../../../core/services/bitacora-catalogos';
 import { IncidenciasApi } from '../../../../../core/services/incidencias.api';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
-import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
+import { BulletChart, ItemBullet } from '../../../../../shared/ui/charts/bullet-chart';
 import { ColumnChart, Columna } from '../../../../../shared/ui/charts/column-chart';
-import { SERIES, SERIE_OTROS, duracion, entero, porcentaje, variacion } from '../../../../../shared/ui/charts/formato';
+import { duracion, entero, porcentaje, variacion } from '../../../../../shared/ui/charts/formato';
 import { CeldaCalor, Heatmap } from '../../../../../shared/ui/charts/heatmap';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
 import { LineChart, SerieLinea } from '../../../../../shared/ui/charts/line-chart';
-import { ItemPareto, ParetoChart } from '../../../../../shared/ui/charts/pareto-chart';
+import { ItemRanking, RankingTiles } from '../../../../../shared/ui/charts/ranking-tiles';
+import { RingChart, SegmentoAnillo } from '../../../../../shared/ui/charts/ring-chart';
 import { GrupoApilado, StackedBars } from '../../../../../shared/ui/charts/stacked-bars';
+import { ItemTreemap, Treemap } from '../../../../../shared/ui/charts/treemap';
+import { ItemWaffle, WaffleChart } from '../../../../../shared/ui/charts/waffle-chart';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { ChipFiltro, FiltrosActivos, fechaChip } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 
-const TOP = 8;
 
 /**
  * Dashboard Bitácora: sistemas y tipos de incidencia.
@@ -33,14 +35,17 @@ const TOP = 8;
 @Component({
   selector: 'app-bitacora-dashboard',
   imports: [
-    BarChart,
+    BulletChart,
     ColumnChart,
     EmptyState,
     Heatmap,
     Icon,
     Kpi,
     LineChart,
-    ParetoChart,
+    RankingTiles,
+    RingChart,
+    Treemap,
+    WaffleChart,
     StackedBars,
     PanelFiltros,
     FiltrosActivos,
@@ -203,7 +208,8 @@ export class DashboardBitacora {
   });
 
   // ---------------- Gráficos ----------------
-  readonly paretoSistemas = computed<ItemPareto[]>(() =>
+  /** Sistemas por volumen (treemap): área = casos, con su MTTR como detalle. */
+  readonly mapaSistemas = computed<ItemTreemap[]>(() =>
     (this.datos()?.sistemas ?? []).map((g) => ({
       etiqueta: g.etiqueta,
       valor: g.total,
@@ -211,20 +217,15 @@ export class DashboardBitacora {
     })),
   );
 
-  readonly barrasTipos = computed<BarraDato[]>(() => {
-    const tipos = this.datos()?.tipos ?? [];
-    const barras: BarraDato[] = tipos.slice(0, TOP).map((t, i) => ({
-      etiqueta: `${t.tipo} · ${t.sistema}`,
+  /** Tipos más repetidos, con el sistema al que pertenecen. */
+  readonly rankingTipos = computed<ItemRanking[]>(() =>
+    (this.datos()?.tipos ?? []).map((t) => ({
+      etiqueta: t.tipo,
       valor: t.total,
-      color: SERIES[i % SERIES.length],
+      chip: t.sistema,
       detalle: `MTTR ${duracion(t.mttrSegundos)}`,
-    }));
-    const resto = tipos.slice(TOP);
-    if (resto.length) {
-      barras.push({ etiqueta: `Otros (${resto.length})`, valor: resto.reduce((t, x) => t + x.total, 0), color: SERIE_OTROS });
-    }
-    return barras;
-  });
+    })),
+  );
 
   readonly matriz = computed<CeldaCalor[]>(() => this.datos()?.centroSistema ?? []);
 
@@ -239,22 +240,36 @@ export class DashboardBitacora {
     return [...grupos.entries()].map(([etiqueta, segmentos]) => ({ etiqueta, segmentos }));
   });
 
-  readonly barrasCentros = computed<BarraDato[]>(() => this.aBarras(this.datos()?.centros ?? [], 'var(--accent)'));
-  readonly barrasAreas = computed<BarraDato[]>(() => this.aBarras(this.datos()?.areas ?? [], 'var(--violet)'));
+  readonly anilloCentros = computed<SegmentoAnillo[]>(() =>
+    (this.datos()?.centros ?? []).map((g) => ({
+      etiqueta: g.etiqueta,
+      valor: g.total,
+      detalle: `MTTR ${duracion(g.mttrSegundos)}`,
+    })),
+  );
 
-  /** ¿Dónde tardamos más? MTTR por sistema (minutos), solo sistemas con incidencias resueltas. */
-  readonly barrasMttr = computed<BarraDato[]>(() =>
-    [...(this.datos()?.sistemas ?? [])]
+  readonly waffleAreas = computed<ItemWaffle[]>(() =>
+    (this.datos()?.areas ?? []).map((g) => ({
+      etiqueta: g.etiqueta,
+      valor: g.total,
+      detalle: `MTTR ${duracion(g.mttrSegundos)}`,
+    })),
+  );
+
+  /** ¿Dónde tardamos más? MTTR por sistema contra el MTTR general. */
+  readonly bulletMttr = computed<ItemBullet[]>(() =>
+    (this.datos()?.sistemas ?? [])
       .filter((g) => g.mttrSegundos > 0)
-      .sort((a, b) => b.mttrSegundos - a.mttrSegundos)
-      .slice(0, TOP)
-      .map((g, i) => ({
+      .map((g) => ({
         etiqueta: g.etiqueta,
-        valor: Math.round(g.mttrSegundos / 60),
-        color: i === 0 ? 'var(--brand)' : 'var(--warning)',
-        detalle: `${duracion(g.mttrSegundos)} · ${entero(g.total)} casos`,
+        valor: g.mttrSegundos,
+        texto: duracion(g.mttrSegundos),
+        detalle: `${entero(g.total)} casos`,
       })),
   );
+
+  readonly mttrGeneral = computed(() => this.kpis()?.mttrSegundos ?? 0);
+  readonly mttrGeneralTexto = computed(() => duracion(this.mttrGeneral()));
 
   readonly tendencia = computed(() => {
     const serie = this.datos()?.tendencia ?? [];
@@ -381,20 +396,6 @@ export class DashboardBitacora {
         error: (err: unknown) =>
           this.notificaciones.error('No se pudieron cargar los responsables', mensajeDeError(err)),
       });
-  }
-
-  private aBarras(grupos: GrupoBitacora[], color: string): BarraDato[] {
-    const barras: BarraDato[] = grupos.slice(0, TOP).map((g) => ({
-      etiqueta: g.etiqueta,
-      valor: g.total,
-      color,
-      detalle: `MTTR ${duracion(g.mttrSegundos)}`,
-    }));
-    const resto = grupos.slice(TOP);
-    if (resto.length) {
-      barras.push({ etiqueta: `Otros (${resto.length})`, valor: resto.reduce((t, g) => t + g.total, 0), color: SERIE_OTROS });
-    }
-    return barras;
   }
 
   private valorNumero(evento: Event): number | null {

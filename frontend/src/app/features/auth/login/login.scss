@@ -178,22 +178,24 @@
   gap: var(--space-3);
 }
 
-.login__logo-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 54px;
+.login__logo-nube {
+  width: 84px;
   height: 54px;
-  padding: 6px;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25), 0 14px 36px -10px rgba(225, 29, 46, 0.9);
+  flex: none;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 30px rgba(29, 99, 237, 0.55));
+  animation: login-flotar-logo 6s ease-in-out infinite alternate;
+}
 
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
+@keyframes login-flotar-logo {
+  to { transform: translateY(-4px); }
+}
+
+.login__wordmark {
+  display: block;
+  width: min(220px, 70%);
+  height: auto;
+  margin: 0 auto var(--space-5);
 }
 
 .login__logo-text {
@@ -468,20 +470,35 @@
 
 .login__foot {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   margin-top: var(--space-6);
   padding-top: var(--space-4);
   border-top: 1px solid var(--border);
   font-size: var(--fs-xs);
   color: var(--text-3);
+  text-align: center;
+}
+
+.login__foot-aviso {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.login__foot-fp {
+  width: 150px;
+  height: auto;
+  opacity: 0.95;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .login__blob,
   .login__radar-sweep,
   .login__route,
-  .login__node {
+  .login__node,
+  .login__logo-nube {
     animation: none !important;
   }
 }

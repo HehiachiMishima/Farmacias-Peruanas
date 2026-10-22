@@ -121,11 +121,11 @@
         <header class="dash-card__head">
           <div class="dash-card__titulos">
             <h2 class="dash-card__titulo"><ui-icon name="truck" [size]="18" /> ¿Qué proveedores generan más incidencias?</h2>
-            <p class="dash-card__sub">Pareto: en rojo, los pocos proveedores que concentran el 80 % de los casos.</p>
+            <p class="dash-card__sub">El tamaño de cada bloque es su volumen; el punto marca a los que suman el 80 % de los casos.</p>
           </div>
         </header>
         <div class="dash-card__body">
-          <ui-pareto [items]="pareto()" [maximo]="12" />
+          <ui-treemap [items]="mapaProveedores()" [maximo]="12" titulo="Incidencias por proveedor" />
         </div>
       </article>
 
@@ -137,7 +137,7 @@
           </div>
         </header>
         <div class="dash-card__body">
-          <ui-bars [datos]="barrasTipos()" [horizontal]="true" />
+          <ui-ranking [items]="rankingTipos()" [maximo]="6" />
         </div>
       </article>
 
