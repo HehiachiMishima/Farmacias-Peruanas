@@ -1766,110 +1766,35 @@ $pf-entrada: cubic-bezier(0.7, 0, 0.84, 0);
 }
 
 /* =====================================================================
- * Tablas responsive: en móvil cada fila es una tarjeta «etiqueta: valor».
- * Las etiquetas (data-label) las pone ColumnasRedimensionables.
+ * Tablas responsive: en móvil se conserva la tabla con scroll horizontal.
+ * La estructura (thead, filas, columnas) no cambia; solo se asegura que el
+ * contenedor pueda desplazarse y que el truncado no oculte información.
  * ===================================================================== */
 @include bp.down(sm) {
   .ui-table-wrap {
-    overflow-x: visible;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .ui-table,
   .ui-table.ui-table--rigid {
-    display: block;
-    width: 100% !important;
-    min-width: 0 !important;
+    /* Se mantiene el ancho natural de las columnas para que la tabla
+       desborde y el contenedor muestre la barra de scroll horizontal. */
+    width: max-content;
+    min-width: 100%;
     table-layout: auto;
 
-    colgroup,
-    thead {
-      display: none;
-    }
+    th { white-space: nowrap; }
+  }
 
-    tbody {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-3);
-      padding: var(--space-3);
-    }
+  .ui-table--rigid th,
+  .ui-table--rigid td {
+    overflow: visible;
+    text-overflow: clip;
+  }
 
-    tbody tr,
-    tbody tr:nth-child(even) {
-      display: block;
-      padding: var(--space-2) var(--space-3);
-      border: 1px solid var(--border);
-      border-left: 3px solid var(--accent);
-      border-radius: var(--radius-lg);
-      background: var(--surface);
-      box-shadow: var(--shadow-xs);
-    }
-
-    tbody tr:hover td:first-child {
-      box-shadow: none;
-    }
-
-    td,
-    &.ui-table--rigid td {
-      display: grid;
-      grid-template-columns: minmax(96px, 38%) minmax(0, 1fr);
-      align-items: center;
-      gap: var(--space-3);
-      padding: 7px 0;
-      border-bottom: 1px dashed var(--border);
-      white-space: normal;
-      overflow: visible;
-      text-overflow: clip;
-      overflow-wrap: anywhere;
-      text-align: left;
-    }
-
-    td > * {
-      justify-self: start;
-      max-width: 100%;
-    }
-
-    td::before {
-      content: attr(data-label);
-      font-size: 0.66rem;
-      font-weight: 800;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--text-3);
-    }
-
-    td:last-child {
-      border-bottom: 0;
-    }
-
-    /* Celda de acciones: sin etiqueta, botones a lo ancho. */
-    td:has(.row-actions) {
-      display: block;
-      padding-top: var(--space-3);
-
-      &::before {
-        display: none;
-      }
-    }
-
-    .row-actions {
-      justify-content: flex-end;
-
-      .ui-icon-btn {
-        width: 40px;
-        height: 40px;
-      }
-    }
-
-    .cell-sub,
-    td .ui-person > .ui-table__primary,
-    td .ui-stack > .ui-table__primary {
-      max-width: none;
-      white-space: normal;
-    }
-
-    .col-resize {
-      display: none;
-    }
+  .col-resize {
+    display: none;
   }
 }
 
