@@ -100,7 +100,7 @@ export interface Incidencia {
   responsable: string | null;
   descripcion: string;
   horaInicio: string;
-  horaFin: string | null;
+  horaFin: string;
   tiempoSolucion: string | null;
   creadoEn: string;
   actualizadoEn: string | null;
@@ -117,7 +117,7 @@ export interface IncidenciaCrearRequest {
   idDataResponsable: number;
   descripcion: string;
   horaInicio: string;
-  horaFin: string | null;
+  horaFin: string;
   fechaCreacion: string;
 }
 

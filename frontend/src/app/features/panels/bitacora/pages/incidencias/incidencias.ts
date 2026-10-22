@@ -40,6 +40,7 @@ type CampoFormulario =
   | 'idDataResponsable'
   | 'descripcion'
   | 'horaInicio'
+  | 'horaFin'
   | 'fechaCreacion';
 
 const CABECERAS_EXPORT = [
@@ -175,7 +176,7 @@ export class Incidencias {
     idDataResponsable: this.fb.control<number | null>(null, Validators.required),
     descripcion: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(255)]),
     horaInicio: this.fb.nonNullable.control('', Validators.required),
-    horaFin: this.fb.nonNullable.control(''),
+    horaFin: this.fb.nonNullable.control('', Validators.required),
     fechaCreacion: this.fb.nonNullable.control('', Validators.required),
   });
 
@@ -262,7 +263,7 @@ export class Incidencias {
             incidencia.area ?? '—',
             incidencia.responsable ?? '—',
             incidencia.horaInicio,
-            incidencia.horaFin ?? '—',
+            incidencia.horaFin,
             incidencia.tiempoSolucion ?? '—',
             formatDate(incidencia.creadoEn, 'dd/MM/yyyy HH:mm', this.locale),
             this.directorio.etiqueta(incidencia.creadoPor),
@@ -407,7 +408,7 @@ export class Incidencias {
       idDataResponsable: incidencia.idDataResponsable,
       descripcion: incidencia.descripcion,
       horaInicio: this.hhmm(incidencia.horaInicio),
-      horaFin: incidencia.horaFin ? this.hhmm(incidencia.horaFin) : '',
+      horaFin: this.hhmm(incidencia.horaFin),
       fechaCreacion: incidencia.creadoEn.slice(0, 10),
     });
     this.formAbierto.set(true);
@@ -439,7 +440,7 @@ export class Incidencias {
       idDataResponsable: valores.idDataResponsable!,
       descripcion: valores.descripcion,
       horaInicio: this.normalizarHora(valores.horaInicio),
-      horaFin: valores.horaFin ? this.normalizarHora(valores.horaFin) : null,
+      horaFin: this.normalizarHora(valores.horaFin),
       fechaCreacion: valores.fechaCreacion,
     };
 

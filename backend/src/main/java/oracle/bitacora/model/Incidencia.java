@@ -57,7 +57,7 @@ public class Incidencia extends Auditable {
     @Column(name = "hora_inicio", nullable = false)
     private LocalTime horaInicio;
 
-    @Column(name = "hora_fin")
+    @Column(name = "hora_fin", nullable = false)
     private LocalTime horaFin;
  
     @Column(name = "tiempo_solucion")

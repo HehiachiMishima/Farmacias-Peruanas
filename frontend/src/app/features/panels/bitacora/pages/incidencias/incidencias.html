@@ -364,9 +364,14 @@
     </div>
 
     <div class="ui-field">
-      <label class="ui-label">Hora de fin</label>
-      <input type="time" class="ui-input" formControlName="horaFin" />
-      <span class="hint">Opcional. Si la completas se calcula el tiempo de solución.</span>
+      <label class="ui-label">Hora de fin<span class="ui-required">*</span></label>
+      <input
+        type="time"
+        class="ui-input"
+        [class.ui-input--invalid]="campoInvalido('horaFin')"
+        formControlName="horaFin"
+      />
+      @if (campoInvalido('horaFin')) { <span class="ui-error">La hora de fin es obligatoria.</span> }
     </div>
 
     <div class="ui-field">
