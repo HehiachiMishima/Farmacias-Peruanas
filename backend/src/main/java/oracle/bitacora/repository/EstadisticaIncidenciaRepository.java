@@ -1,7 +1,6 @@
 package oracle.bitacora.repository;
 
-import java.sql.Timestamp;
-import java.util.ArrayList;
+import oracle.common.support.CondicionSql;
 import java.util.List;
 import oracle.bitacora.request.FiltroIncidencia;
 import oracle.bitacora.response.GrupoEstadistica;
@@ -33,7 +32,7 @@ public class EstadisticaIncidenciaRepository {
 
     /** (total de incidencias, segundos acumulados de solucion) para el filtro. */
     public long[] totales(FiltroIncidencia filtro) {
-        Condicion condicion = condicion(filtro);
+        CondicionSql condicion = condicion(filtro);
         String sql = "SELECT COUNT(*) AS total, "
                 + "COALESCE(SUM(TIME_TO_SEC(i.tiempo_solucion)), 0) AS segundos "
                 + "FROM incidencias i " + condicion.where();
@@ -58,7 +57,7 @@ public class EstadisticaIncidenciaRepository {
     }
 
     private List<GrupoEstadistica> agrupar(FiltroIncidencia filtro, String tabla, String columna, String fk) {
-        Condicion condicion = condicion(filtro);
+        CondicionSql condicion = condicion(filtro);
         String sql = "SELECT COALESCE(t." + columna + ", '—') AS etiqueta, "
                 + "COUNT(*) AS count, "
                 + "COALESCE(SUM(TIME_TO_SEC(i.tiempo_solucion)), 0) AS segundos "
@@ -70,49 +69,7 @@ public class EstadisticaIncidenciaRepository {
         return jdbc.query(sql, GRUPO, condicion.args().toArray());
     }
 
-    private Condicion condicion(FiltroIncidencia filtro) {
-        List<String> condiciones = new ArrayList<>();
-        List<Object> args = new ArrayList<>();
-        if (filtro != null) {
-            if (filtro.centro() != null) {
-                condiciones.add("i.id_data_centro = ?");
-                args.add(filtro.centro());
-            }
-            if (filtro.sistema() != null) {
-                condiciones.add("i.id_data_sistema = ?");
-                args.add(filtro.sistema());
-            }
-            if (filtro.area() != null) {
-                condiciones.add("i.id_data_area = ?");
-                args.add(filtro.area());
-            }
-            if (filtro.responsable() != null) {
-                condiciones.add("i.id_data_responsable = ?");
-                args.add(filtro.responsable());
-            }
-            if (filtro.tipo() != null) {
-                condiciones.add("i.id_data_incidencia = ?");
-                args.add(filtro.tipo());
-            }
-            if (filtro.desde() != null) {
-                condiciones.add("i.creado_en >= ?");
-                args.add(Timestamp.valueOf(filtro.desde().atStartOfDay()));
-            }
-            if (filtro.hasta() != null) {
-                condiciones.add("i.creado_en < ?");
-                args.add(Timestamp.valueOf(filtro.hasta().plusDays(1).atStartOfDay()));
-            }
-            if (filtro.texto() != null && !filtro.texto().isBlank()) {
-                condiciones.add("(LOWER(i.ticket) LIKE ? OR LOWER(i.descripcion) LIKE ?)");
-                String patron = "%" + filtro.texto().trim().toLowerCase() + "%";
-                args.add(patron);
-                args.add(patron);
-            }
-        }
-        String where = condiciones.isEmpty() ? "" : "WHERE " + String.join(" AND ", condiciones);
-        return new Condicion(where, args);
-    }
-
-    private record Condicion(String where, List<Object> args) {
+    private CondicionSql condicion(FiltroIncidencia filtro) {
+        return CondicionIncidencia.de(filtro);
     }
 }

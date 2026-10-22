@@ -1,6 +1,7 @@
 import { Service, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  AnaliticaBitacora,
   EstadisticaIncidencia,
   Incidencia,
   IncidenciaActualizarRequest,
@@ -28,6 +29,11 @@ export class IncidenciasApi {
 
   estadisticas(filtros: IncidenciaFiltros = {}): Observable<EstadisticaIncidencia> {
     return this.api.get<EstadisticaIncidencia>('/incidencias/estadisticas', filtros as Record<string, unknown>);
+  }
+
+  /** Analítica completa del dashboard (KPIs, rankings, cruces y tendencias). */
+  analitica(filtros: IncidenciaFiltros = {}): Observable<AnaliticaBitacora> {
+    return this.api.get<AnaliticaBitacora>('/incidencias/analitica', filtros as Record<string, unknown>);
   }
 
   crear(peticion: IncidenciaCrearRequest): Observable<Incidencia> {

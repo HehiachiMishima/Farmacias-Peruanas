@@ -22,7 +22,9 @@ import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
+import { ChipFiltro, FiltrosActivos, fechaChip } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
+import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
 
@@ -47,7 +49,7 @@ const CABECERAS_EXPORT = [
 
 @Component({
   selector: 'app-inbound-incidencias',
-  imports: [ReactiveFormsModule, DatePipe, ActorLabelPipe, Icon, Modal, EmptyState, HasPermiso, ColumnasRedimensionables, Paginador, PanelFiltros, SelectBuscable],
+  imports: [ReactiveFormsModule, DatePipe, ActorLabelPipe, Icon, Modal, EmptyState, HasPermiso, ColumnasRedimensionables, Paginador, PanelFiltros, SelectBuscable, FiltrosActivos, RangoRapido],
   templateUrl: './incidencias.html',
   styleUrl: './incidencias.scss',
 })
@@ -85,6 +87,28 @@ export class InboundIncidencias {
     if (this.filtroDesde()) total++;
     if (this.filtroHasta()) total++;
     return total;
+  });
+
+  /** Filtros del panel aplicados, como chips removibles. */
+  readonly chips = computed<ChipFiltro[]>(() => {
+    const chips: ChipFiltro[] = [];
+    const proveedor = this.filtroProveedor();
+    if (proveedor !== null) {
+      const nombre = this.proveedores().find((p) => p.id === proveedor)?.proveedor ?? `#${proveedor}`;
+      chips.push({ clave: 'proveedor', etiqueta: 'Proveedor', valor: nombre, icono: 'truck' });
+    }
+    const tipo = this.filtroTipo();
+    if (tipo !== null) {
+      const nombre = this.tipos().find((t) => t.id === tipo)?.incidenciaInbound ?? `#${tipo}`;
+      chips.push({ clave: 'tipo', etiqueta: 'Tipo', valor: nombre, icono: 'incidencias' });
+    }
+    if (this.filtroDesde()) {
+      chips.push({ clave: 'desde', etiqueta: 'Desde', valor: fechaChip(this.filtroDesde()), icono: 'calendario' });
+    }
+    if (this.filtroHasta()) {
+      chips.push({ clave: 'hasta', etiqueta: 'Hasta', valor: fechaChip(this.filtroHasta()), icono: 'calendario' });
+    }
+    return chips;
   });
 
   readonly hayFiltros = computed(() => this.filtrosActivos() > 0 || this.filtroBusqueda().trim() !== '');
@@ -206,6 +230,20 @@ export class InboundIncidencias {
 
   setFiltroHasta(evento: Event): void {
     this.filtroHasta.set((evento.target as HTMLInputElement).value);
+    this.cargarDesde(1);
+  }
+
+  quitarFiltro(clave: string): void {
+    if (clave === 'proveedor') this.filtroProveedor.set(null);
+    if (clave === 'tipo') this.filtroTipo.set(null);
+    if (clave === 'desde') this.filtroDesde.set('');
+    if (clave === 'hasta') this.filtroHasta.set('');
+    this.cargarDesde(1);
+  }
+
+  setRango(rango: RangoFechas): void {
+    this.filtroDesde.set(rango.desde);
+    this.filtroHasta.set(rango.hasta);
     this.cargarDesde(1);
   }
 

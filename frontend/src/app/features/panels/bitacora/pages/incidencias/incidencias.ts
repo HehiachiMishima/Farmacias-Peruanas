@@ -27,7 +27,9 @@ import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
+import { ChipFiltro, FiltrosActivos, fechaChip } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
+import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 
 type CampoFormulario =
   | 'idDataCentro'
@@ -70,6 +72,8 @@ const CABECERAS_EXPORT = [
     ColumnasRedimensionables,
     Paginador,
     PanelFiltros,
+    FiltrosActivos,
+    RangoRapido,
   ],
   templateUrl: './incidencias.html',
   styleUrl: './incidencias.scss',
@@ -116,6 +120,24 @@ export class Incidencias {
   readonly filtrosAbierto = signal(false);
 
   private readonly busqueda$ = new Subject<string>();
+
+  /** Filtros del panel aplicados, como chips removibles. */
+  readonly chips = computed<ChipFiltro[]>(() => {
+    const chips: ChipFiltro[] = [];
+    const nombre = <T extends { id: number }>(lista: T[], id: number, campo: keyof T): string =>
+      String(lista.find((x) => x.id === id)?.[campo] ?? `#${id}`);
+    const centro = this.filtroCentro();
+    if (centro !== null) chips.push({ clave: 'centro', etiqueta: 'Centro', valor: nombre(this.centros(), centro, 'centro'), icono: 'centro' });
+    const sistema = this.filtroSistema();
+    if (sistema !== null) chips.push({ clave: 'sistema', etiqueta: 'Sistema', valor: nombre(this.sistemas(), sistema, 'sistema'), icono: 'sistema' });
+    const area = this.filtroArea();
+    if (area !== null) chips.push({ clave: 'area', etiqueta: 'Área', valor: nombre(this.areas(), area, 'area'), icono: 'area' });
+    const responsable = this.filtroResponsable();
+    if (responsable !== null) chips.push({ clave: 'responsable', etiqueta: 'Responsable', valor: nombre(this.responsablesFiltro(), responsable, 'responsable'), icono: 'responsable' });
+    if (this.filtroDesde()) chips.push({ clave: 'desde', etiqueta: 'Desde', valor: fechaChip(this.filtroDesde()), icono: 'calendario' });
+    if (this.filtroHasta()) chips.push({ clave: 'hasta', etiqueta: 'Hasta', valor: fechaChip(this.filtroHasta()), icono: 'calendario' });
+    return chips;
+  });
 
   readonly filtrosActivos = computed(() => {
     let total = 0;
@@ -300,6 +322,26 @@ export class Incidencias {
 
   setFiltroHasta(evento: Event): void {
     this.filtroHasta.set((evento.target as HTMLInputElement).value);
+    this.cargarDesde(1);
+  }
+
+  quitarFiltro(clave: string): void {
+    if (clave === 'centro') this.filtroCentro.set(null);
+    if (clave === 'sistema') this.filtroSistema.set(null);
+    if (clave === 'area') {
+      this.filtroArea.set(null);
+      this.filtroResponsable.set(null);
+      this.responsablesFiltro.set([]);
+    }
+    if (clave === 'responsable') this.filtroResponsable.set(null);
+    if (clave === 'desde') this.filtroDesde.set('');
+    if (clave === 'hasta') this.filtroHasta.set('');
+    this.cargarDesde(1);
+  }
+
+  setRango(rango: RangoFechas): void {
+    this.filtroDesde.set(rango.desde);
+    this.filtroHasta.set(rango.hasta);
     this.cargarDesde(1);
   }
 

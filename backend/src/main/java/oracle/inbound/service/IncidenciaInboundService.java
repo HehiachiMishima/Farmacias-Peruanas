@@ -1,5 +1,9 @@
 package oracle.inbound.service;
 
+import oracle.common.support.EjecutorAnalitica;
+import oracle.inbound.repository.AnaliticaInboundRepository;
+import oracle.inbound.response.AnaliticaInboundResponse;
+
 import oracle.common.support.ExportacionJson;
 
 import jakarta.persistence.criteria.Predicate;
@@ -44,6 +48,7 @@ import reactor.core.publisher.Mono;
 public class IncidenciaInboundService {
   private static final int MAX_TAMANO_PAGINA = 200;
   private static final int TAMANO_LOTE_EXPORT = 1_000;
+  private static final int TOP_MENSUAL = 5;
 
   private final IncidenciaInboundRepository repo;
   private final DataProveedorRepository proveedorRepo;
@@ -53,6 +58,8 @@ public class IncidenciaInboundService {
   private final CacheRespuestas cacheRespuestas;
   private final Transacciones transacciones;
   private final ObjectMapper json;
+  private final AnaliticaInboundRepository analiticaRepo;
+  private final EjecutorAnalitica ejecutor;
 
   public IncidenciaInboundService(
       IncidenciaInboundRepository repo,
@@ -62,7 +69,11 @@ public class IncidenciaInboundService {
       CatalogoInbound catalogo,
       CacheRespuestas cacheRespuestas,
       Transacciones transacciones,
-      ObjectMapper json) {
+      ObjectMapper json,
+      AnaliticaInboundRepository analiticaRepo,
+      EjecutorAnalitica ejecutor) {
+    this.analiticaRepo = analiticaRepo;
+    this.ejecutor = ejecutor;
     this.repo = repo;
     this.proveedorRepo = proveedorRepo;
     this.tipoRepo = tipoRepo;
@@ -156,6 +167,43 @@ public class IncidenciaInboundService {
     return Mono.fromCallable(() -> cacheRespuestas.obtener(clave, () -> estadisticasRepo.porProveedorMensual(filtro)))
         .subscribeOn(Schedulers.boundedElastic())
         .map(d -> ApiResponse.ok("OK", d));
+  }
+
+  /**
+   * Analitica del dashboard en torno al proveedor: 7 agregaciones en paralelo
+   * sobre el ejecutor analitico, cacheadas por filtro.
+   */
+  public Mono<ApiResponse<AnaliticaInboundResponse>> analitica(FiltroIncidenciaInbound filtro) {
+    String clave = "inbound-analitica:" + filtro;
+    return Mono.fromCallable(() -> cacheRespuestas.obtener(clave, () -> ejecutor.esperar(calcularAnalitica(filtro))))
+        .subscribeOn(Schedulers.boundedElastic())
+        .map(d -> ApiResponse.ok("Analitica calculada.", d));
+  }
+
+  private Mono<AnaliticaInboundResponse> calcularAnalitica(FiltroIncidenciaInbound filtro) {
+    return Mono.zip(
+        r -> new AnaliticaInboundResponse(
+            (AnaliticaInboundResponse.Kpis) r[0],
+            lista(r[1]), lista(r[2]), lista(r[3]), lista(r[4]), lista(r[5]),
+            analiticaRepo.granularidad(filtro),
+            topMensual(lista(r[6]))),
+        ejecutor.consulta(() -> analiticaRepo.kpis(filtro)),
+        ejecutor.consulta(() -> analiticaRepo.proveedores(filtro)),
+        ejecutor.consulta(() -> analiticaRepo.tipos(filtro)),
+        ejecutor.consulta(() -> analiticaRepo.proveedorPorTipo(filtro)),
+        ejecutor.consulta(() -> analiticaRepo.skusRecurrentes(filtro)),
+        ejecutor.consulta(() -> analiticaRepo.tendencia(filtro)),
+        ejecutor.consulta(() -> estadisticasRepo.porProveedorMensual(filtro)));
+  }
+
+  /** Evolucion mensual solo de los 5 proveedores con mas incidencias (ya vienen ordenados). */
+  private static List<ProveedorMensualEstadistica> topMensual(List<ProveedorMensualEstadistica> todos) {
+    return todos.size() <= TOP_MENSUAL ? todos : todos.subList(0, TOP_MENSUAL);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static <T> List<T> lista(Object valor) {
+    return (List<T>) valor;
   }
 
   public Mono<ApiResponse<IncidenciaInboundResponse>> obtenerPorId(Long id) {

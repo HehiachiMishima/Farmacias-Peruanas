@@ -245,6 +245,9 @@ Base: `/api`
 | `GET/POST/PUT/DELETE` | `/centros`, `/areas`, `/sistemas` | JWT + `*_CONTROL` |
 | `GET/POST/PUT/DELETE` | `/incidencias` (+ `/exportar`, `/estadisticas`) | JWT + `*_INCIDENCIAS` / `VER_DASHBOARD` |
 | `GET/POST/PUT/DELETE` | `/inbound/incidencias`, `/inbound/control/*` | JWT + permisos `*_INBOUND` |
+| `GET` | `/incidencias/analitica` | `VER_DASHBOARD` — KPIs, Pareto de sistemas, matriz centro × sistema, tipos, tendencia y horas |
+| `GET` | `/inbound/incidencias/analitica` | `VER_DASHBOARD_INBOUND` — ranking/Pareto de proveedores, matriz proveedor × tipo, SKUs, tendencias |
+| `GET` | `/admin/analitica` | `DASHBOARD_ADMIN` — cuentas, roles, permisos, cobertura por panel y altas |
 
 ---
 
@@ -261,8 +264,18 @@ Base: `/api`
   permisos o estado); el frontend resincroniza la sesión al volver a la pestaña.
 - **Usuarios**: el listado obtiene roles/permisos de todos con
   `/usuarios/resumen` en lugar de 2 peticiones por usuario.
-- **Dashboards**: agregados SQL (`GROUP BY`) cacheados con TTL e invalidados al
-  escribir incidencias o catálogos.
+- **Dashboards**: cada endpoint de analítica lanza sus agregaciones SQL
+  (`GROUP BY`, CTE + `ROW_NUMBER`) **en paralelo** con `Mono.zip` sobre un
+  scheduler acotado (`EjecutorAnalitica`, `app.analitica.paralelismo`, 6 por
+  defecto): la latencia es la de la consulta más lenta y un pico de dashboards
+  nunca agota el pool de conexiones de los CRUD. El resultado se cachea por
+  filtro (single-flight) y se invalida al escribir incidencias o catálogos.
+  Requiere MySQL 8 (CTE y funciones de ventana).
+- **Gráficos**: componentes SVG/CSS propios (`OnPush`, sin librerías): KPI con
+  variación vs periodo anterior, Pareto, mapa de calor, barras apiladas,
+  líneas y columnas. Se adaptan al contenedor sin deformarse.
+- **Responsive**: en móvil las tablas se muestran como tarjetas
+  (`data-label` automático) y el panel de filtros es una hoja inferior.
 - **Infra**: virtual threads, `open-in-view=false`, timeouts JDBC, apagado
   ordenado, nginx con gzip, keep-alive al backend y cache inmutable de assets.
 

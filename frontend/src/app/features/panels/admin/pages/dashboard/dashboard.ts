@@ -1,169 +1,211 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { catchError, forkJoin, of } from 'rxjs';
 import { PANEL_ADMIN } from '../../../../../core/config/paneles';
-import { PERMISOS } from '../../../../../core/config/permisos';
+import { AnaliticaAdmin } from '../../../../../core/models';
+import { AdminAnaliticaApi } from '../../../../../core/services/admin-analitica.api';
 import { Auth } from '../../../../../core/services/auth';
-import { Permiso, Rol, Usuario } from '../../../../../core/models';
-import { PermisosApi } from '../../../../../core/services/permisos.api';
-import { RolesApi } from '../../../../../core/services/roles.api';
-import { UsuariosApi } from '../../../../../core/services/usuarios.api';
+import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
 import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
 import { DonutChart, SegmentoDonut } from '../../../../../shared/ui/charts/donut-chart';
-import { GaugeChart } from '../../../../../shared/ui/charts/gauge-chart';
+import { SERIES, entero, porcentaje } from '../../../../../shared/ui/charts/formato';
+import { Kpi } from '../../../../../shared/ui/charts/kpi';
+import { LineChart, SerieLinea } from '../../../../../shared/ui/charts/line-chart';
+import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 
-interface Metrica {
-  id: string;
-  etiqueta: string;
-  icono: string;
-  valor: number | null;
-  detalle: string;
-  acento: 'brand' | 'accent' | 'success';
-}
+const NOMBRE_PANEL: Record<string, string> = {
+  PANEL_ADMIN: 'Administración',
+  PANEL_BITACORA: 'Bitácora',
+  PANEL_INBOUND: 'Inbound',
+};
 
+const COLOR_PANEL: Record<string, string> = {
+  PANEL_ADMIN: 'var(--violet)',
+  PANEL_BITACORA: 'var(--brand)',
+  PANEL_INBOUND: 'var(--accent)',
+};
+
+/**
+ * Dashboard ejecutivo de Administración: salud del gobierno de accesos.
+ *
+ * Responde: ¿cuántas cuentas están habilitadas y cuáles son un riesgo (sin
+ * rol, excepciones)?, ¿cómo se reparten los usuarios por rol y por panel?,
+ * ¿qué permisos están más extendidos? y ¿cómo crece la base de usuarios?
+ */
 @Component({
   selector: 'app-admin-dashboard',
-  imports: [RouterLink, Icon, DonutChart, BarChart, GaugeChart],
+  imports: [RouterLink, BarChart, DonutChart, EmptyState, Icon, Kpi, LineChart],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
 export class Dashboard {
   private readonly auth = inject(Auth);
-  private readonly usuariosApi = inject(UsuariosApi);
-  private readonly rolesApi = inject(RolesApi);
-  private readonly permisosApi = inject(PermisosApi);
+  private readonly api = inject(AdminAnaliticaApi);
 
   private readonly permisos = this.auth.permisos;
   readonly usuario = this.auth.usuario;
   readonly panelRuta = PANEL_ADMIN.ruta;
 
-  readonly cargando = signal(true);
-
-  private readonly usuariosTotal = signal<number | null>(null);
-  private readonly usuariosActivos = signal<number | null>(null);
-  private readonly rolesTotal = signal<number | null>(null);
-  private readonly permisosTotal = signal<number | null>(null);
-
-  readonly metricas = computed<Metrica[]>(() => [
-    {
-      id: 'usuarios',
-      etiqueta: 'Usuarios',
-      icono: 'usuarios',
-      valor: this.usuariosTotal(),
-      detalle: this.usuariosActivos() !== null ? `${this.usuariosActivos()} activos` : 'Requiere permiso',
-      acento: 'brand',
-    },
-    {
-      id: 'roles',
-      etiqueta: 'Roles',
-      icono: 'roles',
-      valor: this.rolesTotal(),
-      detalle: this.rolesTotal() !== null ? 'Agrupadores de permisos' : 'Requiere permiso',
-      acento: 'accent',
-    },
-    {
-      id: 'permisos',
-      etiqueta: 'Permisos',
-      icono: 'permisos',
-      valor: this.permisosTotal(),
-      detalle: this.permisosTotal() !== null ? 'Catálogo del sistema' : 'Requiere permiso',
-      acento: 'success',
-    },
-  ]);
+  private readonly recurso = new RecursoRemoto<AnaliticaAdmin>(() => this.api.analitica());
+  readonly cargando = this.recurso.cargando;
+  readonly error = this.recurso.error;
+  readonly datos = this.recurso.valor;
 
   readonly modulos = computed(() =>
     PANEL_ADMIN.modulos.filter((modulo) => this.permisos().includes(modulo.permiso)),
   );
 
-  readonly hayDatosUsuarios = computed(() => (this.usuariosTotal() ?? 0) > 0);
-
-  readonly segmentosUsuarios = computed<SegmentoDonut[]>(() => {
-    const total = this.usuariosTotal();
-    if (total === null || total <= 0) {
-      return [];
-    }
-    const activos = this.usuariosActivos() ?? 0;
-    const inactivos = Math.max(0, total - activos);
-    return [
-      { etiqueta: 'Activos', valor: activos, color: 'var(--success)' },
-      { etiqueta: 'Inactivos', valor: inactivos, color: 'var(--danger)' },
-    ].filter((segmento) => segmento.valor > 0);
-  });
-
-  readonly pctActivos = computed(() => {
-    const total = this.usuariosTotal();
-    if (!total) {
-      return 0;
-    }
-    return Math.round(((this.usuariosActivos() ?? 0) / total) * 100);
-  });
-
-  readonly barrasEntidades = computed<BarraDato[]>(() => {
-    const items: BarraDato[] = [];
-    const usuarios = this.usuariosTotal();
-    const roles = this.rolesTotal();
-    const permisos = this.permisosTotal();
-
-    if (usuarios !== null) {
-      items.push({ etiqueta: 'Usuarios', valor: usuarios, color: 'var(--brand)' });
-    }
-    if (roles !== null) {
-      items.push({ etiqueta: 'Roles', valor: roles, color: 'var(--color-graphite)' });
-    }
-    if (permisos !== null) {
-      items.push({ etiqueta: 'Permisos', valor: permisos, color: 'var(--success)' });
-    }
-    return items;
-  });
-
-  readonly hayBarras = computed(() => this.barrasEntidades().length > 0);
-
   readonly saludo = computed(() => {
     const hora = new Date().getHours();
-    if (hora < 12) {
-      return 'Buenos días';
+    return hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
+  });
+
+  readonly kpis = computed(() => this.datos()?.kpis ?? null);
+
+  readonly tarjetas = computed(() => {
+    const k = this.kpis();
+    const activosPct = k && k.usuarios ? k.usuariosActivos / k.usuarios : 0;
+    return [
+      {
+        etiqueta: 'Usuarios',
+        valor: k ? entero(k.usuarios) : '—',
+        icono: 'usuarios',
+        color: 'var(--accent)',
+        detalle: k ? `${entero(k.usuariosActivos)} activos (${porcentaje(activosPct)})` : '',
+      },
+      {
+        etiqueta: 'Cuentas inactivas',
+        valor: k ? entero(k.usuarios - k.usuariosActivos) : '—',
+        icono: 'power',
+        color: 'var(--color-graphite)',
+        detalle: 'Bloqueadas: no pueden iniciar sesión',
+      },
+      {
+        etiqueta: 'Usuarios sin rol',
+        valor: k ? entero(k.usuariosSinRol) : '—',
+        icono: 'alertTriangle',
+        color: k && k.usuariosSinRol > 0 ? 'var(--warning)' : 'var(--success)',
+        detalle: k && k.usuariosSinRol > 0 ? 'Revisar: acceso solo por excepción' : 'Todos tienen un rol',
+      },
+      {
+        etiqueta: 'Roles',
+        valor: k ? entero(k.roles) : '—',
+        icono: 'roles',
+        color: 'var(--violet)',
+        detalle: k ? `${entero(k.rolesActivos)} activos` : '',
+      },
+      {
+        etiqueta: 'Permisos',
+        valor: k ? entero(k.permisos) : '—',
+        icono: 'permisos',
+        color: 'var(--cyan)',
+        detalle: k ? `${entero(k.permisosActivos)} activos en el catálogo` : '',
+      },
+      {
+        etiqueta: 'Excepciones',
+        valor: k ? entero(k.overridesGrant + k.overridesDeny) : '—',
+        icono: 'key',
+        color: 'var(--brand)',
+        detalle: k ? `${entero(k.overridesGrant)} concedidas · ${entero(k.overridesDeny)} denegadas` : '',
+      },
+    ];
+  });
+
+  readonly hallazgos = computed(() => {
+    const d = this.datos();
+    if (!d) {
+      return [];
     }
-    if (hora < 19) {
-      return 'Buenas tardes';
+    const k = d.kpis;
+    const salida: { icono: string; color: string; kicker: string; texto: string }[] = [];
+    if (k.usuariosSinRol > 0) {
+      salida.push({
+        icono: 'alertTriangle',
+        color: 'var(--warning)',
+        kicker: 'Riesgo de gobierno',
+        texto: `${entero(k.usuariosSinRol)} usuario(s) no tienen rol: su acceso depende de excepciones individuales o no tienen ninguno.`,
+      });
     }
-    return 'Buenas noches';
+    const rol = d.usuariosPorRol[0];
+    if (rol && rol.valor > 0) {
+      salida.push({
+        icono: 'roles',
+        color: 'var(--violet)',
+        kicker: 'Rol más asignado',
+        texto: `${rol.etiqueta} agrupa a ${entero(rol.valor)} usuario(s) (${porcentaje(k.usuarios ? rol.valor / k.usuarios : 0)} del total).`,
+      });
+    }
+    if (k.overridesDeny + k.overridesGrant > 0) {
+      salida.push({
+        icono: 'key',
+        color: 'var(--brand)',
+        kicker: 'Excepciones al RBAC',
+        texto: `Hay ${entero(k.overridesGrant)} permisos concedidos y ${entero(k.overridesDeny)} denegados de forma individual; lo ideal es modelarlos como roles.`,
+      });
+    }
+    return salida;
+  });
+
+  readonly segmentosEstado = computed<SegmentoDonut[]>(() => {
+    const k = this.kpis();
+    if (!k || k.usuarios === 0) {
+      return [];
+    }
+    return [
+      { etiqueta: 'Activos', valor: k.usuariosActivos, color: 'var(--success)' },
+      { etiqueta: 'Inactivos', valor: k.usuarios - k.usuariosActivos, color: 'var(--danger)' },
+    ].filter((s) => s.valor > 0);
+  });
+
+  readonly barrasRoles = computed<BarraDato[]>(() =>
+    (this.datos()?.usuariosPorRol ?? []).slice(0, 10).map((c, i) => ({
+      etiqueta: c.etiqueta,
+      valor: c.valor,
+      color: SERIES[i % SERIES.length],
+      detalle: porcentaje(this.kpis()?.usuarios ? c.valor / this.kpis()!.usuarios : 0),
+    })),
+  );
+
+  /** Usuarios activos con acceso a cada panel, en % del total de activos. */
+  readonly barrasCobertura = computed<BarraDato[]>(() => {
+    const activos = this.kpis()?.usuariosActivos ?? 0;
+    const porPanel = new Map((this.datos()?.coberturaPaneles ?? []).map((c) => [c.etiqueta, c.valor]));
+    return Object.keys(NOMBRE_PANEL).map((clave) => {
+      const valor = porPanel.get(clave) ?? 0;
+      return {
+        etiqueta: NOMBRE_PANEL[clave],
+        valor,
+        color: COLOR_PANEL[clave],
+        detalle: `${porcentaje(activos ? valor / activos : 0)} de los activos`,
+      };
+    });
+  });
+
+  readonly barrasPermisos = computed<BarraDato[]>(() =>
+    (this.datos()?.permisosMasOtorgados ?? []).map((c) => ({
+      etiqueta: c.etiqueta,
+      valor: c.valor,
+      color: 'var(--cyan)',
+      detalle: 'usuarios',
+    })),
+  );
+
+  readonly altas = computed(() => {
+    const serie = this.datos()?.altasPorMes ?? [];
+    return {
+      etiquetas: serie.map((p) => p.periodo),
+      series: [
+        { nombre: 'Altas', color: 'var(--accent)', valores: serie.map((p) => p.valor) },
+        { nombre: 'Siguen activas', color: 'var(--success)', valores: serie.map((p) => p.secundario) },
+      ] as SerieLinea[],
+    };
   });
 
   constructor() {
     this.cargar();
   }
 
-  private cargar(): void {
-    const permisos = this.permisos();
-    const puedeUsuarios = permisos.includes(PERMISOS.VER_USUARIOS);
-    const puedeRoles = permisos.includes(PERMISOS.VER_ROLES);
-    const puedePermisos = permisos.includes(PERMISOS.VER_PERMISOS);
-
-    const usuarios$ = puedeUsuarios
-      ? this.usuariosApi.listar().pipe(catchError(() => of([] as Usuario[])))
-      : of([] as Usuario[]);
-    const roles$ = puedeRoles
-      ? this.rolesApi.listar().pipe(catchError(() => of([] as Rol[])))
-      : of([] as Rol[]);
-    const permisos$ = puedePermisos
-      ? this.permisosApi.listar().pipe(catchError(() => of([] as Permiso[])))
-      : of([] as Permiso[]);
-
-    forkJoin({ usuarios: usuarios$, roles: roles$, permisos: permisos$ }).subscribe(
-      ({ usuarios, roles, permisos: permisosLista }) => {
-        if (puedeUsuarios) {
-          this.usuariosTotal.set(usuarios.length);
-          this.usuariosActivos.set(usuarios.filter((usuario) => usuario.activo).length);
-        }
-        if (puedeRoles) {
-          this.rolesTotal.set(roles.length);
-        }
-        if (puedePermisos) {
-          this.permisosTotal.set(permisosLista.length);
-        }
-        this.cargando.set(false);
-      },
-    );
+  cargar(): void {
+    this.recurso.recargar();
   }
 }

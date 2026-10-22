@@ -15,11 +15,13 @@ import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
+import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
+import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
 
 @Component({
   selector: 'app-admin-roles',
-  imports: [ReactiveFormsModule, DatePipe, ActorLabelPipe, Icon, Modal, EmptyState, HasPermiso, ColumnasRedimensionables, Paginador],
+  imports: [ReactiveFormsModule, DatePipe, ActorLabelPipe, Icon, Modal, EmptyState, HasPermiso, ColumnasRedimensionables, Paginador, PanelFiltros, FiltrosActivos],
   templateUrl: './roles.html',
   styleUrl: './roles.scss',
 })
@@ -37,7 +39,7 @@ export class Roles {
   readonly roles = signal<Rol[]>([]);
   readonly busqueda = signal('');
 
-  readonly filtrados = computed(() => {
+  private readonly coincidenBusqueda = computed(() => {
     const termino = this.busqueda().trim().toLowerCase();
     const lista = this.roles();
     if (!termino) {
@@ -47,6 +49,53 @@ export class Roles {
       [rol.nombre, rol.descripcion ?? ''].some((campo) => campo.toLowerCase().includes(termino)),
     );
   });
+
+  // ---------------- Filtros del panel ----------------
+  readonly filtroEstado = signal<'todos' | 'activos' | 'inactivos'>('todos');
+  readonly filtrosAbierto = signal(false);
+  readonly estados = [
+    { id: 'todos', etiqueta: 'Todos' },
+    { id: 'activos', etiqueta: 'Activos' },
+    { id: 'inactivos', etiqueta: 'Inactivos' },
+  ] as const;
+
+  /** Búsqueda + filtros del panel (todo en cliente: el listado ya está en memoria). */
+  readonly filtrados = computed(() => {
+    const estado = this.filtroEstado();
+    return this.coincidenBusqueda().filter(
+      (item) =>
+        (estado === 'todos' || (estado === 'activos') === !!item.activo),
+    );
+  });
+
+  readonly chips = computed<ChipFiltro[]>(() => {
+    const chips: ChipFiltro[] = [];
+    if (this.filtroEstado() !== 'todos') {
+      chips.push({ clave: 'estado', etiqueta: 'Estado', valor: this.filtroEstado() === 'activos' ? 'Activos' : 'Inactivos', icono: 'power' });
+    }
+    return chips;
+  });
+
+  readonly filtrosActivos = computed(() => this.chips().length);
+
+  alternarFiltros(): void {
+    this.filtrosAbierto.update((abierto) => !abierto);
+  }
+
+  setEstado(estado: 'todos' | 'activos' | 'inactivos'): void {
+    this.filtroEstado.set(estado);
+    this.pagina.set(1);
+  }
+
+  quitarFiltro(clave: string): void {
+    if (clave === 'estado') this.filtroEstado.set('todos');
+    this.pagina.set(1);
+  }
+
+  limpiarFiltros(): void {
+    this.filtroEstado.set('todos');
+    this.pagina.set(1);
+  }
 
   readonly pagina = signal(1);
   readonly porPagina = signal(10);

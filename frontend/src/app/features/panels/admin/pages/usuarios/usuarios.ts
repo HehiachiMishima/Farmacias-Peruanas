@@ -22,11 +22,16 @@ import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
+import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
+import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
+
+/** Valor del filtro de rol para «usuarios sin ningún rol». */
+const SIN_ROL = '__sin_rol__';
 
 @Component({
   selector: 'app-admin-usuarios',
-  imports: [ReactiveFormsModule, DatePipe, ActorLabelPipe, Icon, Modal, EmptyState, HasPermiso, ColumnasRedimensionables, Paginador],
+  imports: [ReactiveFormsModule, DatePipe, ActorLabelPipe, Icon, Modal, EmptyState, HasPermiso, ColumnasRedimensionables, Paginador, PanelFiltros, FiltrosActivos],
   templateUrl: './usuarios.html',
   styleUrl: './usuarios.scss',
 })
@@ -47,7 +52,7 @@ export class Usuarios {
   readonly usuarios = signal<Usuario[]>([]);
   readonly busqueda = signal('');
 
-  readonly filtrados = computed(() => {
+  private readonly coincidenBusqueda = computed(() => {
     const termino = this.busqueda().trim().toLowerCase();
     const lista = this.usuarios();
     if (!termino) {
@@ -59,6 +64,75 @@ export class Usuarios {
         .some((campo) => campo.toLowerCase().includes(termino)),
     );
   });
+
+  // ---------------- Filtros del panel ----------------
+  readonly filtroEstado = signal<'todos' | 'activos' | 'inactivos'>('todos');
+  readonly filtrosAbierto = signal(false);
+  readonly sinRol = SIN_ROL;
+
+  readonly estados = [
+    { id: 'todos', etiqueta: 'Todos' },
+    { id: 'activos', etiqueta: 'Activos' },
+    { id: 'inactivos', etiqueta: 'Inactivos' },
+  ] as const;
+  readonly filtroRol = signal<string | null>(null);
+
+  /** Roles presentes en el listado (desde el resumen agregado). */
+  readonly opcionesRol = computed(() =>
+    [...new Set([...this.resumen().values()].flatMap((r) => r.roles))].sort((a, b) => a.localeCompare(b)),
+  );
+
+  /** Búsqueda + filtros del panel (todo en cliente: el listado ya está en memoria). */
+  readonly filtrados = computed(() => {
+    const estado = this.filtroEstado();
+    const rol = this.filtroRol();
+    return this.coincidenBusqueda().filter(
+      (item) =>
+        (estado === 'todos' || (estado === 'activos') === !!item.activo)
+        && (rol === null || (rol === SIN_ROL ? this.rolesDe(item.id).length === 0 : this.rolesDe(item.id).includes(rol))),
+    );
+  });
+
+  readonly chips = computed<ChipFiltro[]>(() => {
+    const chips: ChipFiltro[] = [];
+    if (this.filtroEstado() !== 'todos') {
+      chips.push({ clave: 'estado', etiqueta: 'Estado', valor: this.filtroEstado() === 'activos' ? 'Activos' : 'Inactivos', icono: 'power' });
+    }
+    const rol = this.filtroRol();
+    if (rol !== null) {
+      chips.push({ clave: 'rol', etiqueta: 'Rol', valor: rol === SIN_ROL ? 'Sin rol' : rol, icono: 'roles' });
+    }
+    return chips;
+  });
+
+  readonly filtrosActivos = computed(() => this.chips().length);
+
+  alternarFiltros(): void {
+    this.filtrosAbierto.update((abierto) => !abierto);
+  }
+
+  setEstado(estado: 'todos' | 'activos' | 'inactivos'): void {
+    this.filtroEstado.set(estado);
+    this.pagina.set(1);
+  }
+
+  setRol(evento: Event): void {
+    const valor = (evento.target as HTMLSelectElement).value;
+    this.filtroRol.set(valor || null);
+    this.pagina.set(1);
+  }
+
+  quitarFiltro(clave: string): void {
+    if (clave === 'estado') this.filtroEstado.set('todos');
+    if (clave === 'rol') this.filtroRol.set(null);
+    this.pagina.set(1);
+  }
+
+  limpiarFiltros(): void {
+    this.filtroEstado.set('todos');
+    this.filtroRol.set(null);
+    this.pagina.set(1);
+  }
 
   readonly pagina = signal(1);
   readonly porPagina = signal(10);

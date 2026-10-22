@@ -24,7 +24,48 @@
     <ui-icon name="refresh" [size]="16" />
     Actualizar
   </button>
+  <button
+    type="button"
+    class="ui-btn ui-btn--secondary ui-btn--sm"
+    [attr.aria-expanded]="filtrosAbierto()"
+    aria-controls="permisos-filtros"
+    (click)="alternarFiltros()"
+  >
+    <ui-icon name="filtro" [size]="16" />
+    Filtros
+    @if (filtrosActivos() > 0) {
+      <span class="filtros-badge">{{ filtrosActivos() }}</span>
+    }
+  </button>
 </div>
+
+<ui-filtros-activos [chips]="chips()" (quitar)="quitarFiltro($event)" (limpiar)="limpiarFiltros()" />
+
+<ui-panel-filtros
+  id="permisos-filtros"
+  [abierto]="filtrosAbierto()"
+  [activos]="filtrosActivos()"
+  titulo="Filtrar permisos"
+  (cerrar)="filtrosAbierto.set(false)"
+  (limpiar)="limpiarFiltros()"
+>
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="power" [size]="15" /> Estado</h3>
+    <div class="ui-rango" role="group" aria-label="Estado">
+      @for (e of estados; track e.id) {
+        <button
+          type="button"
+          class="ui-rango__btn"
+          [class.ui-rango__btn--on]="filtroEstado() === e.id"
+          [attr.aria-pressed]="filtroEstado() === e.id"
+          (click)="setEstado(e.id)"
+        >
+          {{ e.etiqueta }}
+        </button>
+      }
+    </div>
+  </section>
+</ui-panel-filtros>
 
 <div class="table-card" [class.table-card--refrescando]="cargando() && filtrados().length > 0">
   @if (cargando() && filtrados().length === 0) {
@@ -38,8 +79,8 @@
   } @else if (filtrados().length === 0) {
     <ui-empty
       icono="permisos"
-      [titulo]="busqueda() ? 'Sin resultados' : 'Aún no hay permisos'"
-      [mensaje]="busqueda() ? 'Ningún permiso coincide con la búsqueda.' : 'Crea el primer permiso del catálogo.'"
+      [titulo]="busqueda() || filtrosActivos() ? 'Sin resultados' : 'Aún no hay permisos'"
+      [mensaje]="busqueda() || filtrosActivos() ? 'Ningún permiso coincide con la búsqueda.' : 'Crea el primer permiso del catálogo.'"
     ></ui-empty>
   } @else {
     <div class="ui-table-wrap">

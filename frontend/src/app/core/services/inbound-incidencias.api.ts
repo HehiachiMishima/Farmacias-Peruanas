@@ -1,6 +1,7 @@
 import { Service, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  AnaliticaInbound,
   EstadisticaInbound,
   IncidenciaInbound,
   IncidenciaInboundActualizarRequest,
@@ -21,6 +22,11 @@ export class InboundIncidenciasApi {
 
   estadisticas(filtros: IncidenciaInboundFiltros = {}): Observable<EstadisticaInbound> {
     return this.api.get<EstadisticaInbound>('/inbound/incidencias/estadisticas', filtros as Record<string, unknown>);
+  }
+
+  /** Analítica del dashboard en torno al proveedor. */
+  analitica(filtros: IncidenciaInboundFiltros = {}): Observable<AnaliticaInbound> {
+    return this.api.get<AnaliticaInbound>('/inbound/incidencias/analitica', filtros as Record<string, unknown>);
   }
 
   estadisticaProveedoresMensual(filtros: IncidenciaInboundFiltros = {}): Observable<ProveedorMensualEstadistica[]> {

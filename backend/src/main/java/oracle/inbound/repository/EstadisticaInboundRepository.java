@@ -1,6 +1,6 @@
 package oracle.inbound.repository;
 
-import java.sql.Timestamp;
+import oracle.common.support.CondicionSql;
 import java.util.ArrayList;
 import java.util.List;
 import oracle.inbound.request.FiltroIncidenciaInbound;
@@ -35,7 +35,7 @@ public class EstadisticaInboundRepository {
 
     /** (total de incidencias, unidades acumuladas) para el filtro. */
     public long[] totales(FiltroIncidenciaInbound filtro) {
-        Condicion condicion = condicion(filtro);
+        CondicionSql condicion = condicion(filtro);
         String sql = "SELECT COUNT(*) AS total, "
                 + "COALESCE(SUM(i.n_unidades), 0) AS unidades "
                 + "FROM incidencias_inbound i " + condicion.where();
@@ -52,7 +52,7 @@ public class EstadisticaInboundRepository {
     }
 
     private List<GrupoEstadisticaInbound> agrupar(FiltroIncidenciaInbound filtro, String tabla, String columna, String fk) {
-        Condicion condicion = condicion(filtro);
+        CondicionSql condicion = condicion(filtro);
         String sql = "SELECT COALESCE(t." + columna + ", '—') AS etiqueta, "
                 + "COUNT(*) AS count "
                 + "FROM incidencias_inbound i "
@@ -64,7 +64,7 @@ public class EstadisticaInboundRepository {
     }
 
     public List<ProveedorMensualEstadistica> porProveedorMensual(FiltroIncidenciaInbound filtro) {
-        Condicion condicion = condicion(filtro);
+        CondicionSql condicion = condicion(filtro);
         String sql = "SELECT i.id_data_proveedor AS id_proveedor, "
                 + "COALESCE(t.proveedor, '—') AS proveedor, "
                 + "DATE_FORMAT(i.creado_en, '%Y-%m') AS mes, "
@@ -103,37 +103,7 @@ public class EstadisticaInboundRepository {
         return resultado;
     }
 
-    private Condicion condicion(FiltroIncidenciaInbound filtro) {
-        List<String> condiciones = new ArrayList<>();
-        List<Object> args = new ArrayList<>();
-        if (filtro != null) {
-            if (filtro.proveedor() != null) {
-                condiciones.add("i.id_data_proveedor = ?");
-                args.add(filtro.proveedor());
-            }
-            if (filtro.tipo() != null) {
-                condiciones.add("i.id_data_incidencia_inbound = ?");
-                args.add(filtro.tipo());
-            }
-            if (filtro.desde() != null) {
-                condiciones.add("i.creado_en >= ?");
-                args.add(Timestamp.valueOf(filtro.desde().atStartOfDay()));
-            }
-            if (filtro.hasta() != null) {
-                condiciones.add("i.creado_en < ?");
-                args.add(Timestamp.valueOf(filtro.hasta().plusDays(1).atStartOfDay()));
-            }
-            if (filtro.texto() != null && !filtro.texto().isBlank()) {
-                condiciones.add("(LOWER(i.orden_compra) LIKE ? OR LOWER(i.sku_producto) LIKE ?)");
-                String patron = "%" + filtro.texto().trim().toLowerCase() + "%";
-                args.add(patron);
-                args.add(patron);
-            }
-        }
-        String where = condiciones.isEmpty() ? "" : "WHERE " + String.join(" AND ", condiciones);
-        return new Condicion(where, args);
-    }
-
-    private record Condicion(String where, List<Object> args) {
+    private CondicionSql condicion(FiltroIncidenciaInbound filtro) {
+        return CondicionInbound.de(filtro);
     }
 }

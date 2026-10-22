@@ -1,5 +1,9 @@
 package oracle.bitacora.service;
 
+import oracle.bitacora.repository.AnaliticaIncidenciaRepository;
+import oracle.bitacora.response.AnaliticaBitacoraResponse;
+import oracle.common.support.EjecutorAnalitica;
+
 import oracle.common.support.ActorActual;
 import oracle.common.support.Auditoria;
 import oracle.common.support.ExportacionJson;
@@ -74,6 +78,8 @@ public class IncidenciaService {
     private final CacheRespuestas cacheRespuestas;
     private final Transacciones transacciones;
     private final ObjectMapper json;
+    private final AnaliticaIncidenciaRepository analiticaRepository;
+    private final EjecutorAnalitica ejecutor;
 
     public IncidenciaService(IncidenciaRepository incidenciaRepository,
             DataCentroRepository dataCentroRepository,
@@ -85,7 +91,11 @@ public class IncidenciaService {
         CatalogoBitacora catalogo,
         CacheRespuestas cacheRespuestas,
         Transacciones transacciones,
-        ObjectMapper json) {
+        ObjectMapper json,
+        AnaliticaIncidenciaRepository analiticaRepository,
+        EjecutorAnalitica ejecutor) {
+        this.analiticaRepository = analiticaRepository;
+        this.ejecutor = ejecutor;
         this.incidenciaRepository = incidenciaRepository;
         this.dataCentroRepository = dataCentroRepository;
         this.dataSistemaRepository = dataSistemaRepository;
@@ -164,6 +174,40 @@ public class IncidenciaService {
                         ApiResponse.ok("Estadísticas calculadas.",
                                 cacheRespuestas.obtener(clave, () -> calcularEstadisticas(filtro)))))
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Analitica completa del dashboard: 8 agregaciones en paralelo sobre el
+     * ejecutor analitico, cacheadas por filtro (single-flight por clave).
+     */
+    public Mono<ApiResponse<AnaliticaBitacoraResponse>> analitica(FiltroIncidencia filtro) {
+        String clave = "bitacora-analitica:" + filtro;
+        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.analitica", () ->
+                        cacheRespuestas.obtener(clave, () -> ejecutor.esperar(calcularAnalitica(filtro)))))
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(datos -> ApiResponse.ok("Analitica calculada.", datos));
+    }
+
+    private Mono<AnaliticaBitacoraResponse> calcularAnalitica(FiltroIncidencia filtro) {
+        return Mono.zip(
+                r -> new AnaliticaBitacoraResponse(
+                        (AnaliticaBitacoraResponse.Kpis) r[0],
+                        lista(r[1]), lista(r[2]), lista(r[3]), lista(r[4]), lista(r[5]), lista(r[6]),
+                        analiticaRepository.granularidad(filtro),
+                        lista(r[7])),
+                ejecutor.consulta(() -> analiticaRepository.kpis(filtro)),
+                ejecutor.consulta(() -> analiticaRepository.porSistema(filtro)),
+                ejecutor.consulta(() -> analiticaRepository.porCentro(filtro)),
+                ejecutor.consulta(() -> analiticaRepository.porArea(filtro)),
+                ejecutor.consulta(() -> analiticaRepository.porTipo(filtro)),
+                ejecutor.consulta(() -> analiticaRepository.centroPorSistema(filtro)),
+                ejecutor.consulta(() -> analiticaRepository.tendencia(filtro)),
+                ejecutor.consulta(() -> analiticaRepository.porHora(filtro)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> List<T> lista(Object valor) {
+        return (List<T>) valor;
     }
 
     private EstadisticaResponse calcularEstadisticas(FiltroIncidencia filtro) {

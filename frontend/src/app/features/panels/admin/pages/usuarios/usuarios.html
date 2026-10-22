@@ -24,7 +24,61 @@
     <ui-icon name="refresh" [size]="16" />
     Actualizar
   </button>
+  <button
+    type="button"
+    class="ui-btn ui-btn--secondary ui-btn--sm"
+    [attr.aria-expanded]="filtrosAbierto()"
+    aria-controls="usuarios-filtros"
+    (click)="alternarFiltros()"
+  >
+    <ui-icon name="filtro" [size]="16" />
+    Filtros
+    @if (filtrosActivos() > 0) {
+      <span class="filtros-badge">{{ filtrosActivos() }}</span>
+    }
+  </button>
 </div>
+
+<ui-filtros-activos [chips]="chips()" (quitar)="quitarFiltro($event)" (limpiar)="limpiarFiltros()" />
+
+<ui-panel-filtros
+  id="usuarios-filtros"
+  [abierto]="filtrosAbierto()"
+  [activos]="filtrosActivos()"
+  titulo="Filtrar usuarios"
+  (cerrar)="filtrosAbierto.set(false)"
+  (limpiar)="limpiarFiltros()"
+>
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="power" [size]="15" /> Estado</h3>
+    <div class="ui-rango" role="group" aria-label="Estado">
+      @for (e of estados; track e.id) {
+        <button
+          type="button"
+          class="ui-rango__btn"
+          [class.ui-rango__btn--on]="filtroEstado() === e.id"
+          [attr.aria-pressed]="filtroEstado() === e.id"
+          (click)="setEstado(e.id)"
+        >
+          {{ e.etiqueta }}
+        </button>
+      }
+    </div>
+  </section>
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="roles" [size]="15" /> Rol</h3>
+    <div class="ui-field">
+      <label class="ui-label">Rol asignado</label>
+      <select class="ui-select" [value]="filtroRol() ?? ''" (change)="setRol($event)">
+        <option value="">Todos los roles</option>
+        <option [value]="sinRol">Sin rol (riesgo)</option>
+        @for (rol of opcionesRol(); track rol) {
+          <option [value]="rol">{{ rol }}</option>
+        }
+      </select>
+    </div>
+  </section>
+</ui-panel-filtros>
 
 <div class="table-card" [class.table-card--refrescando]="cargando() && filtrados().length > 0">
   @if (cargando() && filtrados().length === 0) {
@@ -41,8 +95,8 @@
   } @else if (filtrados().length === 0) {
     <ui-empty
       icono="usuarios"
-      [titulo]="busqueda() ? 'Sin resultados' : 'Aún no hay usuarios'"
-      [mensaje]="busqueda() ? 'Ningún usuario coincide con la búsqueda.' : 'Crea el primer usuario para empezar.'"
+      [titulo]="busqueda() || filtrosActivos() ? 'Sin resultados' : 'Aún no hay usuarios'"
+      [mensaje]="busqueda() || filtrosActivos() ? 'Ningún usuario coincide con la búsqueda.' : 'Crea el primer usuario para empezar.'"
     ></ui-empty>
   } @else {
     <div class="ui-table-wrap">

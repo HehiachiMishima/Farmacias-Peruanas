@@ -7,6 +7,10 @@ import { AfterViewInit, Directive, ElementRef, OnDestroy, inject } from '@angula
  *
  * Los anchos se calculan después de pintarse las filas (los botones condicionados
  * con *hasPermiso se renderizan en un efecto, posterior a ngAfterViewInit).
+ *
+ * Además etiqueta cada celda con el texto de su cabecera (`data-label`) y lo
+ * mantiene al paginar (MutationObserver): en móvil el CSS muestra cada fila
+ * como una tarjeta «etiqueta: valor», sin tocar las plantillas.
  */
 const ANCHO_MINIMO = 56;
 const ANCHO_MAXIMO = 340;
@@ -21,6 +25,14 @@ export class ColumnasRedimensionables implements AfterViewInit, OnDestroy {
   private marcoAcciones: number | null = null;
 
   ngAfterViewInit(): void {
+    this.etiquetarCeldas();
+    const cuerpo = this.tabla.nativeElement.tBodies[0];
+    if (cuerpo && typeof MutationObserver !== 'undefined') {
+      const observador = new MutationObserver(() => this.etiquetarCeldas());
+      observador.observe(cuerpo, { childList: true });
+      this.limpiezas.push(() => observador.disconnect());
+    }
+
     this.temporizador = window.setTimeout(() => {
       this.temporizador = null;
       // Medir con las fuentes web ya cargadas: si se mide con la fuente de
@@ -36,6 +48,25 @@ export class ColumnasRedimensionables implements AfterViewInit, OnDestroy {
         });
       });
     }, 0);
+  }
+
+  /** data-label de cada <td> = texto de la <th> de su columna. */
+  private etiquetarCeldas(): void {
+    const tabla = this.tabla.nativeElement;
+    const cabeceras = Array.from(tabla.tHead?.rows[0]?.cells ?? []).map((th) => th.textContent?.trim() ?? '');
+    if (cabeceras.length === 0) {
+      return;
+    }
+    for (const cuerpo of Array.from(tabla.tBodies)) {
+      for (const fila of Array.from(cuerpo.rows)) {
+        Array.from(fila.cells).forEach((celda, i) => {
+          const etiqueta = cabeceras[i] ?? '';
+          if (celda.dataset['label'] !== etiqueta) {
+            celda.dataset['label'] = etiqueta;
+          }
+        });
+      }
+    }
   }
 
   private fijarAnchos(): void {

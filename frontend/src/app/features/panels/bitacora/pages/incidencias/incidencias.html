@@ -50,43 +50,49 @@
   </button>
 </div>
 
+<ui-filtros-activos [chips]="chips()" (quitar)="quitarFiltro($event)" (limpiar)="limpiarFiltros()" />
+
 <ui-panel-filtros
   id="incidencias-filtros"
   [abierto]="filtrosAbierto()"
-  titulo="Filtros"
+  [activos]="filtrosActivos()"
+  titulo="Filtrar incidencias"
   (cerrar)="filtrosAbierto.set(false)"
+  (limpiar)="limpiarFiltros()"
 >
-  <div class="filtros">
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="sistema" [size]="15" /> Operación</h3>
     <div class="ui-field">
       <label class="ui-label">Centro</label>
       <select class="ui-select" [value]="filtroCentro() ?? ''" (change)="setFiltroCentro($event)">
-        <option value="">Todos</option>
+        <option value="">Todos los centros</option>
         @for (centro of centros(); track centro.id) {
           <option [value]="centro.id">{{ centro.centro }}</option>
         }
       </select>
     </div>
-
     <div class="ui-field">
       <label class="ui-label">Sistema</label>
       <select class="ui-select" [value]="filtroSistema() ?? ''" (change)="setFiltroSistema($event)">
-        <option value="">Todos</option>
+        <option value="">Todos los sistemas</option>
         @for (sistema of sistemas(); track sistema.id) {
           <option [value]="sistema.id">{{ sistema.sistema }}</option>
         }
       </select>
     </div>
+  </section>
 
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="responsable" [size]="15" /> Responsabilidad</h3>
     <div class="ui-field">
       <label class="ui-label">Área</label>
       <select class="ui-select" [value]="filtroArea() ?? ''" (change)="setFiltroArea($event)">
-        <option value="">Todas</option>
+        <option value="">Todas las áreas</option>
         @for (area of areas(); track area.id) {
           <option [value]="area.id">{{ area.area }}</option>
         }
       </select>
     </div>
-
     <div class="ui-field">
       <label class="ui-label">Responsable</label>
       <select
@@ -103,24 +109,22 @@
         }
       </select>
     </div>
+  </section>
 
-    <div class="ui-field">
-      <label class="ui-label">Desde</label>
-      <input type="date" class="ui-input" [value]="filtroDesde()" (input)="setFiltroDesde($event)" />
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="calendario" [size]="15" /> Periodo</h3>
+    <ui-rango-rapido [desde]="filtroDesde()" [hasta]="filtroHasta()" (rango)="setRango($event)" />
+    <div class="filtro-seccion__fila">
+      <div class="ui-field">
+        <label class="ui-label">Desde</label>
+        <input type="date" class="ui-input" [value]="filtroDesde()" (change)="setFiltroDesde($event)" />
+      </div>
+      <div class="ui-field">
+        <label class="ui-label">Hasta</label>
+        <input type="date" class="ui-input" [value]="filtroHasta()" (change)="setFiltroHasta($event)" />
+      </div>
     </div>
-
-    <div class="ui-field">
-      <label class="ui-label">Hasta</label>
-      <input type="date" class="ui-input" [value]="filtroHasta()" (input)="setFiltroHasta($event)" />
-    </div>
-
-    <div class="filtros__pie">
-      <button type="button" class="ui-btn ui-btn--ghost ui-btn--block" (click)="limpiarFiltros()">
-        <ui-icon name="close" [size]="16" />
-        Limpiar filtros
-      </button>
-    </div>
-  </div>
+  </section>
 </ui-panel-filtros>
 
 <div class="table-card" [class.table-card--refrescando]="refrescando()">

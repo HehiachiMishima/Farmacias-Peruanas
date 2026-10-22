@@ -11,6 +11,8 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Nunca scroll horizontal de página: los anchos grandes scrollean en su contenedor. */
+  overflow-x: clip;
 }
 
 body {

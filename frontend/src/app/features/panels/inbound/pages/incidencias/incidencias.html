@@ -50,13 +50,18 @@
   </button>
 </div>
 
+<ui-filtros-activos [chips]="chips()" (quitar)="quitarFiltro($event)" (limpiar)="limpiarFiltros()" />
+
 <ui-panel-filtros
   id="incidencias-filtros"
   [abierto]="filtrosAbierto()"
-  titulo="Filtros"
+  [activos]="filtrosActivos()"
+  titulo="Filtrar incidencias"
   (cerrar)="filtrosAbierto.set(false)"
+  (limpiar)="limpiarFiltros()"
 >
-  <div class="filtros">
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="truck" [size]="15" /> Proveedor y tipo</h3>
     <div class="ui-field">
       <label class="ui-label">Proveedor</label>
       <ui-select-buscable
@@ -67,7 +72,7 @@
       />
     </div>
     <div class="ui-field">
-      <label class="ui-label">Tipo</label>
+      <label class="ui-label">Tipo de incidencia</label>
       <ui-select-buscable
         [opciones]="opcionesTipo()"
         [valor]="filtroTipo()"
@@ -75,21 +80,22 @@
         (valorCambia)="setFiltroTipo($event)"
       />
     </div>
-    <div class="ui-field">
-      <label class="ui-label">Desde</label>
-      <input type="date" class="ui-input" [value]="filtroDesde()" (change)="setFiltroDesde($event)" />
+  </section>
+
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="calendario" [size]="15" /> Periodo</h3>
+    <ui-rango-rapido [desde]="filtroDesde()" [hasta]="filtroHasta()" (rango)="setRango($event)" />
+    <div class="filtro-seccion__fila">
+      <div class="ui-field">
+        <label class="ui-label">Desde</label>
+        <input type="date" class="ui-input" [value]="filtroDesde()" (change)="setFiltroDesde($event)" />
+      </div>
+      <div class="ui-field">
+        <label class="ui-label">Hasta</label>
+        <input type="date" class="ui-input" [value]="filtroHasta()" (change)="setFiltroHasta($event)" />
+      </div>
     </div>
-    <div class="ui-field">
-      <label class="ui-label">Hasta</label>
-      <input type="date" class="ui-input" [value]="filtroHasta()" (change)="setFiltroHasta($event)" />
-    </div>
-    <div class="filtros__pie">
-      <button type="button" class="ui-btn ui-btn--ghost ui-btn--block" (click)="limpiarFiltros()">
-        <ui-icon name="close" [size]="16" />
-        Limpiar filtros
-      </button>
-    </div>
-  </div>
+  </section>
 </ui-panel-filtros>
 
 <div class="table-card" [class.table-card--refrescando]="refrescando()">

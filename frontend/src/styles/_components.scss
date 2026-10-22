@@ -931,86 +931,346 @@ body.col-resize--activo .col-resize {
 .u-mono { font-family: var(--font-mono); font-size: var(--fs-sm); }
 
 /**
- * Panel de filtros (drawer derecho). Misma coreografía de ocultar/mostrar que
- * el sidebar "Módulos": velo + panel que se desliza fuera de pantalla.
- * El diseño de los campos lo aporta cada módulo vía ng-content.
+ * Panel de filtros: drawer derecho (escritorio) / hoja inferior (móvil).
+ * Cabecera con contador, cuerpo por secciones (.filtro-seccion) y pie fijo.
  */
 $pf-salida: cubic-bezier(0.16, 1, 0.3, 1);
 $pf-entrada: cubic-bezier(0.7, 0, 0.84, 0);
-$pf-panel-dur: 650ms;
-$pf-panel-retardo: 150ms;
-$pf-cierre-dur: 320ms;
 
 .ui-panel-filtros__overlay {
   position: fixed;
   inset: 0;
   z-index: calc(var(--z-drawer) - 3);
   background: var(--overlay);
+  backdrop-filter: blur(2px);
   opacity: 0;
   pointer-events: none;
-  transition: opacity $pf-cierre-dur $pf-entrada;
+  transition: opacity 260ms $pf-entrada;
 }
 
 .ui-panel-filtros--abierto .ui-panel-filtros__overlay {
   opacity: 1;
   pointer-events: auto;
   transition: opacity 300ms $pf-salida;
-  transition-delay: 100ms;
 }
 
 .ui-panel-filtros__panel {
   position: fixed;
   inset: 0 0 0 auto;
+  z-index: var(--z-drawer);
   display: flex;
   flex-direction: column;
-  width: min(340px, 86vw);
-  z-index: var(--z-drawer);
-  transform: translateX(100%);
-  transition: transform $pf-cierre-dur $pf-entrada;
-  background: var(--surface);
+  width: min(380px, 92vw);
   color: var(--text);
+  background: var(--surface);
   border-left: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(102%);
+  transition: transform 300ms $pf-entrada;
   will-change: transform;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--brand), var(--accent));
+  }
 }
 
 .ui-panel-filtros--abierto .ui-panel-filtros__panel {
-  transform: translateX(0);
-  transition: transform $pf-panel-dur $pf-salida;
-  transition-delay: $pf-panel-retardo;
+  transform: none;
+  transition: transform 480ms $pf-salida;
+}
+
+.ui-panel-filtros__asa {
+  display: none;
 }
 
 .ui-panel-filtros__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5);
+  color: #fff;
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(225, 29, 46, 0.35), transparent 60%),
+    var(--chrome-bg-2);
+}
+
+.ui-panel-filtros__icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: var(--radius);
+  background: var(--brand);
+  box-shadow: 0 8px 18px -8px var(--brand);
+}
+
+.ui-panel-filtros__textos {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.25;
 }
 
 .ui-panel-filtros__title {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.ui-panel-filtros__sub {
   font-size: var(--fs-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-2);
+  color: var(--chrome-fg);
+}
+
+.ui-panel-filtros__header .ui-icon-btn {
+  color: var(--chrome-fg);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
 }
 
 .ui-panel-filtros__body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-5);
+  overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ui-panel-filtros__pie {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5) calc(var(--space-3) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+/* Móvil: hoja inferior. */
+@include bp.down(sm) {
+  .ui-panel-filtros__panel {
+    inset: auto 0 0 0;
+    width: 100%;
+    max-height: 88dvh;
+    border-left: 0;
+    border-radius: 18px 18px 0 0;
+    transform: translateY(102%);
+    overflow: hidden;
+
+    &::before {
+      inset: 0 0 auto 0;
+      width: auto;
+      height: 3px;
+      background: linear-gradient(90deg, var(--brand), var(--accent));
+    }
+  }
+
+  .ui-panel-filtros--abierto .ui-panel-filtros__panel {
+    transform: none;
+  }
+
+  .ui-panel-filtros__asa {
+    display: block;
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    z-index: 1;
+    width: 40px;
+    height: 4px;
+    margin-left: -20px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.35);
+  }
+
+  .ui-panel-filtros__header {
+    padding-top: var(--space-5);
+  }
+}
+
+/* Secciones del cuerpo del panel. */
+.filtro-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+
+  &__titulo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--fs-xs);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-2);
+
+    ui-icon {
+      color: var(--accent);
+    }
+  }
+
+  &__fila {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+
+  .ui-input,
+  .ui-select,
+  .ui-selbusc__control {
+    background: var(--surface);
+  }
+}
+
+/* Botón «Filtros» de la barra: contador. */
+.filtros-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+  color: #fff;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Chips de filtros aplicados. */
+.ui-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: calc(var(--space-2) * -1) 0 var(--space-4);
+  animation: ui-rise var(--transition) both;
+
+  &__titulo {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  &__limpiar {
+    border: 0;
+    background: transparent;
+    padding: 4px 6px;
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    color: var(--brand);
+    cursor: pointer;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 2px 4px 2px 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+
+  &__etiqueta {
+    color: var(--text-2);
+    font-weight: 600;
+  }
+
+  &__valor {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+  }
+
+  &__quitar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-3);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--danger);
+      color: #fff;
+    }
+  }
+}
+
+/* Rangos rápidos de fecha (segmentado). */
+.ui-rango {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  &__btn {
+    flex: 1 1 auto;
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-2);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+
+    &:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    &--on,
+    &--on:hover {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ui-panel-filtros__panel,
   .ui-panel-filtros__overlay {
-    transition-delay: 0ms !important;
+    transition: none !important;
   }
 }
 
@@ -1226,3 +1486,415 @@ $pf-cierre-dur: 320ms;
 
   &__detail { font-size: var(--fs-sm); color: var(--text-3); }
 }
+
+/* =====================================================================
+ * Dashboards analíticos (compartido por Administración, Bitácora e Inbound)
+ * Grid de 12 columnas que colapsa a 1 en móvil; tarjetas con cabecera
+ * (pregunta de negocio + subtítulo) y cuerpo con el gráfico.
+ * ===================================================================== */
+.dash-kpis {
+  display: grid;
+  /* 6 / 3 / 2 columnas: los 6 KPIs nunca dejan una tarjeta huérfana. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+
+  @media (min-width: 1680px) {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  @include bp.down(md) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+}
+
+.dash-insights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.dash-insight {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--c, var(--accent));
+  box-shadow: var(--shadow-xs);
+  animation: ui-rise var(--transition-slow) both;
+
+  &__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex: none;
+    border-radius: var(--radius-sm);
+    color: var(--c, var(--accent));
+    background: color-mix(in srgb, var(--c, var(--accent)) 13%, transparent);
+  }
+
+  &__kicker {
+    display: block;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  &__texto {
+    font-size: var(--fs-sm);
+    line-height: 1.45;
+    color: var(--text-2);
+
+    strong {
+      color: var(--text);
+    }
+  }
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.dash-card {
+  grid-column: span 12;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  animation: ui-rise var(--transition-slow) both;
+
+  &--4 { grid-column: span 4; }
+  &--5 { grid-column: span 5; }
+  &--6 { grid-column: span 6; }
+  &--7 { grid-column: span 7; }
+  &--8 { grid-column: span 8; }
+
+  &__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-4) var(--space-5) var(--space-3);
+    border-bottom: 1px solid var(--border);
+  }
+
+  &__titulos {
+    min-width: 0;
+  }
+
+  &__titulo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--fs-base);
+    font-weight: 800;
+    letter-spacing: -0.015em;
+    color: var(--text);
+
+    ui-icon {
+      color: var(--accent);
+    }
+  }
+
+  &__sub {
+    margin-top: 2px;
+    font-size: var(--fs-xs);
+    color: var(--text-3);
+  }
+
+  &__body {
+    flex: 1;
+    min-width: 0;
+    padding: var(--space-4) var(--space-5) var(--space-5);
+  }
+
+  &__vacio {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 140px;
+    font-size: var(--fs-sm);
+    color: var(--text-3);
+  }
+
+  &--cargando .dash-card__body {
+    opacity: 0.55;
+    transition: opacity 160ms ease;
+  }
+}
+
+@include bp.down(xl) {
+  .dash-card--4 { grid-column: span 6; }
+  .dash-card--5,
+  .dash-card--7,
+  .dash-card--8 { grid-column: span 12; }
+}
+
+@include bp.down(lg) {
+  .dash-card--4,
+  .dash-card--6 { grid-column: span 12; }
+}
+
+@include bp.down(sm) {
+  .dash-grid { gap: var(--space-3); }
+  .dash-card__head,
+  .dash-card__body { padding-inline: var(--space-4); }
+}
+
+/* Tabla de ranking compacta dentro de una tarjeta. */
+.dash-tabla-wrap {
+  overflow-x: auto;
+  margin: 0 calc(var(--space-5) * -1);
+}
+
+.dash-tabla {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+
+  th {
+    padding: 8px var(--space-3);
+    text-align: left;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  th:first-child,
+  td:first-child { padding-left: var(--space-5); }
+
+  th:last-child,
+  td:last-child { padding-right: var(--space-5); }
+
+  td {
+    padding: 9px var(--space-3);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+
+  tbody tr:hover { background: var(--table-hover); }
+  tbody tr:last-child td { border-bottom: 0; }
+
+  .num { text-align: right; }
+  .fuerte { color: var(--text); font-weight: 800; }
+
+  .rank {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: var(--radius-xs);
+    font-size: var(--fs-xs);
+    font-weight: 800;
+    background: var(--surface-3);
+    color: var(--text-3);
+  }
+
+  tr:nth-child(-n + 3) .rank {
+    background: var(--brand);
+    color: #fff;
+  }
+
+  .mini-barra {
+    display: inline-block;
+    width: 70px;
+    height: 6px;
+    margin-left: 8px;
+    vertical-align: middle;
+    border-radius: 6px;
+    background: var(--surface-3);
+    overflow: hidden;
+
+    span {
+      display: block;
+      height: 100%;
+      background: var(--accent);
+    }
+  }
+
+  .link-fila {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+  }
+}
+
+.dash-card__body--pila {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.filtro-nota {
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+/* =====================================================================
+ * Tablas responsive: en móvil cada fila es una tarjeta «etiqueta: valor».
+ * Las etiquetas (data-label) las pone ColumnasRedimensionables.
+ * ===================================================================== */
+@include bp.down(sm) {
+  .ui-table-wrap {
+    overflow-x: visible;
+  }
+
+  .ui-table,
+  .ui-table.ui-table--rigid {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: auto;
+
+    colgroup,
+    thead {
+      display: none;
+    }
+
+    tbody {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      padding: var(--space-3);
+    }
+
+    tbody tr,
+    tbody tr:nth-child(even) {
+      display: block;
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: var(--shadow-xs);
+    }
+
+    tbody tr:hover td:first-child {
+      box-shadow: none;
+    }
+
+    td,
+    &.ui-table--rigid td {
+      display: grid;
+      grid-template-columns: minmax(96px, 38%) minmax(0, 1fr);
+      align-items: center;
+      gap: var(--space-3);
+      padding: 7px 0;
+      border-bottom: 1px dashed var(--border);
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      overflow-wrap: anywhere;
+      text-align: left;
+    }
+
+    td > * {
+      justify-self: start;
+      max-width: 100%;
+    }
+
+    td::before {
+      content: attr(data-label);
+      font-size: 0.66rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    td:last-child {
+      border-bottom: 0;
+    }
+
+    /* Celda de acciones: sin etiqueta, botones a lo ancho. */
+    td:has(.row-actions) {
+      display: block;
+      padding-top: var(--space-3);
+
+      &::before {
+        display: none;
+      }
+    }
+
+    .row-actions {
+      justify-content: flex-end;
+
+      .ui-icon-btn {
+        width: 40px;
+        height: 40px;
+      }
+    }
+
+    .cell-sub,
+    td .ui-person > .ui-table__primary,
+    td .ui-stack > .ui-table__primary {
+      max-width: none;
+      white-space: normal;
+    }
+
+    .col-resize {
+      display: none;
+    }
+  }
+}
+
+/* Barra de herramientas en móvil: buscador a ancho completo y botones repartidos. */
+@include bp.down(sm) {
+  .toolbar {
+    .toolbar__grow {
+      flex-basis: 100%;
+    }
+
+    > .ui-btn {
+      flex: 1 1 auto;
+    }
+  }
+
+  .page-head {
+    align-items: flex-start;
+
+    > .ui-btn {
+      width: 100%;
+    }
+  }
+}
+
+.dash-tabla--corta {
+  min-width: 0;
+}
+

@@ -1,5 +1,7 @@
 package oracle.inbound.controller;
 
+import oracle.inbound.response.AnaliticaInboundResponse;
+
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
@@ -80,6 +82,18 @@ public class InboundIncidenciaController {
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
       @RequestParam(required = false) String texto) {
     return service.estadisticaProveedoresMensual(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto));
+  }
+
+  /** Analitica del dashboard Inbound (en torno al proveedor) para el filtro. */
+  @GetMapping("/analitica")
+  @PreAuthorize("hasAuthority('VER_DASHBOARD_INBOUND')")
+  public Mono<ApiResponse<AnaliticaInboundResponse>> analitica(
+      @RequestParam(required = false) Long proveedor,
+      @RequestParam(required = false) Long tipo,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+      @RequestParam(required = false) String texto) {
+    return service.analitica(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto));
   }
 
   @GetMapping("/{id}")

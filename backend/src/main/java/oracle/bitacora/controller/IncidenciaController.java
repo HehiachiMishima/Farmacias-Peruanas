@@ -1,5 +1,7 @@
 package oracle.bitacora.controller;
 
+import oracle.bitacora.response.AnaliticaBitacoraResponse;
+
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import oracle.bitacora.request.FiltroIncidencia;
@@ -89,6 +91,22 @@ public class IncidenciaController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
             @RequestParam(required = false) String texto) {
         return incidenciaService.estadisticas(
+                new FiltroIncidencia(centro, sistema, area, responsable, tipo, desde, hasta, texto));
+    }
+
+    /** Analitica del dashboard (KPIs, rankings, cruces y tendencias) para el filtro. */
+    @GetMapping("/analitica")
+    @PreAuthorize("hasAuthority('VER_DASHBOARD')")
+    public Mono<ApiResponse<AnaliticaBitacoraResponse>> analitica(
+            @RequestParam(required = false) Long centro,
+            @RequestParam(required = false) Long sistema,
+            @RequestParam(required = false) Long area,
+            @RequestParam(required = false) Long responsable,
+            @RequestParam(required = false) Long tipo,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
+            @RequestParam(required = false) String texto) {
+        return incidenciaService.analitica(
                 new FiltroIncidencia(centro, sistema, area, responsable, tipo, desde, hasta, texto));
     }
 

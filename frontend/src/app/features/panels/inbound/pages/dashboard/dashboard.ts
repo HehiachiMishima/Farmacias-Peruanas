@@ -1,60 +1,66 @@
-import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { forkJoin } from 'rxjs';
-import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
+import { AnaliticaInbound, IncidenciaInboundFiltros } from '../../../../../core/models';
 import { InboundCatalogos } from '../../../../../core/services/inbound-catalogos';
-import { mensajeDeError } from '../../../../../core/errors/error.util';
-import { EstadisticaInbound, GrupoEstadisticaInbound, IncidenciaInboundFiltros, ProveedorMensualEstadistica } from '../../../../../core/models';
-import { InboundControlApi } from '../../../../../core/services/inbound-control.api';
 import { InboundIncidenciasApi } from '../../../../../core/services/inbound-incidencias.api';
-import { Notificaciones } from '../../../../../core/services/notificaciones';
+import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
 import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
-import { ColumnasProveedores, DatoCol } from '../../../../../shared/ui/charts/cols-proveedores';
+import { SERIES, SERIE_OTROS, compacto, entero, porcentaje, variacion } from '../../../../../shared/ui/charts/formato';
+import { CeldaCalor, Heatmap } from '../../../../../shared/ui/charts/heatmap';
+import { Kpi } from '../../../../../shared/ui/charts/kpi';
+import { LineChart, SerieLinea } from '../../../../../shared/ui/charts/line-chart';
+import { ItemPareto, ParetoChart } from '../../../../../shared/ui/charts/pareto-chart';
+import { GrupoApilado, StackedBars } from '../../../../../shared/ui/charts/stacked-bars';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
+import { ChipFiltro, FiltrosActivos, fechaChip } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
+import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
+import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 
-const TOP = 10;
-const TOP_COLS = 15;
-const PALETA = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
-const COLOR_OTROS = 'var(--chart-otros)';
+const TOP_TIPOS = 8;
 
+/**
+ * Dashboard Inbound: control de proveedores.
+ *
+ * Responde, para el filtro aplicado: ¿quién genera más incidencias (Pareto)?,
+ * ¿qué tipos se repiten y en qué proveedores (matriz y apiladas)?, ¿cómo
+ * evolucionan los proveedores críticos (tendencia mensual)? y ¿qué SKUs son
+ * reincidentes? Todo sale de un único endpoint de analítica (SQL + caché).
+ */
 @Component({
   selector: 'app-inbound-dashboard',
   imports: [
-    DecimalPipe,
     BarChart,
-    ColumnasProveedores,
     EmptyState,
+    Heatmap,
     Icon,
+    Kpi,
+    LineChart,
+    ParetoChart,
+    StackedBars,
     PanelFiltros,
+    FiltrosActivos,
+    RangoRapido,
+    SelectBuscable,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
 export class InboundDashboard {
   private readonly incidenciasApi = inject(InboundIncidenciasApi);
-  private readonly controlApi = inject(InboundControlApi);
-  private readonly notificaciones = inject(Notificaciones);
-
   private readonly catalogos = inject(InboundCatalogos);
 
-  private readonly recurso = new RecursoRemoto<{
-    estadistica: EstadisticaInbound;
-    proveedoresMensual: ProveedorMensualEstadistica[];
-  }>(() =>
-    forkJoin({
-      estadistica: this.incidenciasApi.estadisticas(this.filtros()),
-      proveedoresMensual: this.incidenciasApi.estadisticaProveedoresMensual(this.filtros()),
-    }),
+  private readonly recurso = new RecursoRemoto<AnaliticaInbound>(() =>
+    this.incidenciasApi.analitica(this.filtros()),
   );
   readonly cargando = this.recurso.cargando;
   readonly error = this.recurso.error;
-  readonly estadistica = computed(() => this.recurso.valor()?.estadistica ?? null);
-  readonly proveedoresMensual = computed(() => this.recurso.valor()?.proveedoresMensual ?? []);
+  readonly datos = this.recurso.valor;
 
   readonly proveedores = this.catalogos.proveedores;
   readonly tipos = this.catalogos.tipos;
+  readonly opcionesProveedor = computed(() => this.proveedores().map((p) => ({ id: p.id, etiqueta: p.proveedor })));
+  readonly opcionesTipo = computed(() => this.tipos().map((t) => ({ id: t.id, etiqueta: t.incidenciaInbound })));
 
   readonly filtroProveedor = signal<number | null>(null);
   readonly filtroTipo = signal<number | null>(null);
@@ -62,57 +68,224 @@ export class InboundDashboard {
   readonly filtroHasta = signal('');
   readonly filtrosAbierto = signal(false);
 
-  readonly filtrosActivos = computed(() => {
-    let total = 0;
-    if (this.filtroProveedor() !== null) total++;
-    if (this.filtroTipo() !== null) total++;
-    if (this.filtroDesde()) total++;
-    if (this.filtroHasta()) total++;
-    return total;
+  readonly filtrosActivos = computed(() => this.chips().length);
+
+  readonly chips = computed<ChipFiltro[]>(() => {
+    const chips: ChipFiltro[] = [];
+    const proveedor = this.filtroProveedor();
+    if (proveedor !== null) {
+      const nombre = this.proveedores().find((p) => p.id === proveedor)?.proveedor ?? `#${proveedor}`;
+      chips.push({ clave: 'proveedor', etiqueta: 'Proveedor', valor: nombre, icono: 'truck' });
+    }
+    const tipo = this.filtroTipo();
+    if (tipo !== null) {
+      const nombre = this.tipos().find((t) => t.id === tipo)?.incidenciaInbound ?? `#${tipo}`;
+      chips.push({ clave: 'tipo', etiqueta: 'Tipo', valor: nombre, icono: 'incidencias' });
+    }
+    if (this.filtroDesde()) {
+      chips.push({ clave: 'desde', etiqueta: 'Desde', valor: fechaChip(this.filtroDesde()), icono: 'calendario' });
+    }
+    if (this.filtroHasta()) {
+      chips.push({ clave: 'hasta', etiqueta: 'Hasta', valor: fechaChip(this.filtroHasta()), icono: 'calendario' });
+    }
+    return chips;
   });
 
-  readonly totalIncidencias = computed(() => this.estadistica()?.total ?? 0);
-  readonly totalUnidades = computed(() => this.estadistica()?.totalUnidades ?? 0);
+  // ---------------- KPIs ----------------
+  readonly kpis = computed(() => this.datos()?.kpis ?? null);
+  readonly hayDatos = computed(() => (this.kpis()?.total ?? 0) > 0);
 
-  readonly topProveedores = computed(() => this.proveedoresMensual().slice(0, TOP));
-  readonly barrasTipos = computed(() => this.aBarras(this.estadistica()?.tipos ?? []));
+  readonly concentracionTop5 = computed(() => {
+    const lista = this.datos()?.proveedores ?? [];
+    const total = this.kpis()?.total ?? 0;
+    return total ? lista.slice(0, 5).reduce((t, p) => t + p.total, 0) / total : 0;
+  });
 
-  readonly totalProveedores = computed(() => this.proveedoresMensual().length);
+  readonly tarjetas = computed(() => {
+    const k = this.kpis();
+    return [
+      {
+        etiqueta: 'Incidencias',
+        valor: k ? entero(k.total) : '—',
+        icono: 'incidencias',
+        color: 'var(--brand)',
+        detalle: 'Registradas en el periodo',
+        variacion: k ? variacion(k.total, k.totalPeriodoAnterior) : null,
+      },
+      {
+        etiqueta: 'Unidades afectadas',
+        valor: k ? compacto(k.unidades) : '—',
+        icono: 'paquete',
+        color: 'var(--warning)',
+        detalle: k && k.total ? `${entero(Math.round(k.unidades / k.total))} u por incidencia` : '',
+        variacion: k ? variacion(k.unidades, k.unidadesPeriodoAnterior) : null,
+      },
+      {
+        etiqueta: 'Proveedores con incidencias',
+        valor: k ? entero(k.proveedores) : '—',
+        icono: 'truck',
+        color: 'var(--accent)',
+        detalle: k ? `${entero(k.tipos)} tipos distintos` : '',
+        variacion: null,
+      },
+      {
+        etiqueta: 'Concentración top 5',
+        valor: k ? porcentaje(this.concentracionTop5()) : '—',
+        icono: 'tendencia',
+        color: 'var(--violet)',
+        detalle: 'De las incidencias en 5 proveedores',
+        variacion: null,
+      },
+      {
+        etiqueta: 'Órdenes de compra',
+        valor: k ? entero(k.ordenesCompra) : '—',
+        icono: 'layers',
+        color: 'var(--cyan)',
+        detalle: 'OC distintas con incidencia',
+        variacion: null,
+      },
+      {
+        etiqueta: 'SKUs afectados',
+        valor: k ? entero(k.skus) : '—',
+        icono: 'key',
+        color: 'var(--success)',
+        detalle: 'Productos distintos',
+        variacion: null,
+      },
+    ];
+  });
 
-  readonly colsTop = computed<DatoCol[]>(() =>
-    this.proveedoresMensual()
-      .slice(0, TOP_COLS)
-      .map((p) => ({ etiqueta: p.proveedor, valor: p.total })),
+  // ---------------- Hallazgos (texto) ----------------
+  readonly hallazgos = computed(() => {
+    const d = this.datos();
+    if (!d || d.kpis.total === 0) {
+      return [];
+    }
+    const total = d.kpis.total;
+    const hallazgos: { icono: string; color: string; kicker: string; html: string }[] = [];
+    const lider = d.proveedores[0];
+    if (lider) {
+      hallazgos.push({
+        icono: 'alertTriangle',
+        color: 'var(--brand)',
+        kicker: 'Proveedor crítico',
+        html: `<strong>${escapar(lider.proveedor)}</strong> concentra el <strong>${porcentaje(lider.total / total)}</strong> de las incidencias; su problema más frecuente es <strong>${escapar(lider.tipoDominante)}</strong> (${porcentaje(lider.total ? lider.totalTipoDominante / lider.total : 0)} de sus casos).`,
+      });
+    }
+    const tipo = d.tipos[0];
+    if (tipo) {
+      hallazgos.push({
+        icono: 'incidencias',
+        color: 'var(--warning)',
+        kicker: 'Incidencia más repetida',
+        html: `<strong>${escapar(tipo.tipo)}</strong> suma <strong>${entero(tipo.total)}</strong> casos (${porcentaje(tipo.total / total)}) y aparece en <strong>${entero(tipo.proveedores)}</strong> proveedores.`,
+      });
+    }
+    const sku = d.skus[0];
+    if (sku && sku.total > 1) {
+      hallazgos.push({
+        icono: 'paquete',
+        color: 'var(--accent)',
+        kicker: 'SKU reincidente',
+        html: `El SKU <strong>${escapar(sku.sku)}</strong> tuvo <strong>${entero(sku.total)}</strong> incidencias (${entero(sku.unidades)} u) con <strong>${entero(sku.proveedores)}</strong> proveedor(es).`,
+      });
+    }
+    return hallazgos;
+  });
+
+  // ---------------- Gráficos ----------------
+  readonly pareto = computed<ItemPareto[]>(() =>
+    (this.datos()?.proveedores ?? []).map((p) => ({
+      etiqueta: p.proveedor,
+      valor: p.total,
+      detalle: `${entero(p.unidades)} u · principal: ${p.tipoDominante}`,
+    })),
   );
 
-  readonly colsResto = computed<DatoCol[]>(() =>
-    this.proveedoresMensual()
-      .slice(TOP_COLS)
-      .map((p) => ({ etiqueta: p.proveedor, valor: p.total })),
+  readonly barrasTipos = computed<BarraDato[]>(() => {
+    const tipos = this.datos()?.tipos ?? [];
+    const barras = tipos.slice(0, TOP_TIPOS).map((t, i) => ({
+      etiqueta: t.tipo,
+      valor: t.total,
+      color: SERIES[i % SERIES.length],
+      detalle: `${entero(t.proveedores)} prov. · ${compacto(t.unidades)} u`,
+    }));
+    const resto = tipos.slice(TOP_TIPOS);
+    if (resto.length) {
+      barras.push({
+        etiqueta: `Otros (${resto.length})`,
+        valor: resto.reduce((t, x) => t + x.total, 0),
+        color: SERIE_OTROS,
+        detalle: '',
+      });
+    }
+    return barras;
+  });
+
+  readonly matriz = computed<CeldaCalor[]>(() => this.datos()?.proveedorTipo ?? []);
+
+  /** Composición por tipo de los proveedores con más incidencias. */
+  readonly apiladas = computed<GrupoApilado[]>(() => {
+    const grupos = new Map<string, { nombre: string; valor: number }[]>();
+    for (const c of this.datos()?.proveedorTipo ?? []) {
+      const lista = grupos.get(c.fila) ?? [];
+      lista.push({ nombre: c.columna, valor: c.valor });
+      grupos.set(c.fila, lista);
+    }
+    return [...grupos.entries()].map(([etiqueta, segmentos]) => ({ etiqueta, segmentos }));
+  });
+
+  readonly tendencia = computed(() => {
+    const serie = this.datos()?.tendencia ?? [];
+    return {
+      etiquetas: serie.map((p) => p.periodo),
+      series: [{ nombre: 'Incidencias', color: 'var(--brand)', valores: serie.map((p) => p.valor) }] as SerieLinea[],
+    };
+  });
+
+  readonly tendenciaUnidades = computed(() => {
+    const serie = this.datos()?.tendencia ?? [];
+    return {
+      etiquetas: serie.map((p) => p.periodo),
+      series: [{ nombre: 'Unidades', color: 'var(--warning)', valores: serie.map((p) => p.secundario) }] as SerieLinea[],
+    };
+  });
+
+  /** Evolución mensual de los 5 proveedores críticos (una línea por proveedor). */
+  readonly mensual = computed(() => {
+    const top = this.datos()?.mensualTop ?? [];
+    const meses = [...new Set(top.flatMap((p) => p.meses.map((m) => m.mes)))].sort();
+    const series: SerieLinea[] = top.map((p, i) => {
+      const porMes = new Map(p.meses.map((m) => [m.mes, m.incidencias]));
+      return { nombre: p.proveedor, color: SERIES[i % SERIES.length], valores: meses.map((m) => porMes.get(m) ?? 0) };
+    });
+    return { etiquetas: meses, series };
+  });
+
+  readonly ranking = computed(() => {
+    const total = this.kpis()?.total ?? 0;
+    const lista = this.datos()?.proveedores ?? [];
+    const tope = lista[0]?.total || 1;
+    return lista.slice(0, 15).map((p) => ({
+      ...p,
+      pct: porcentaje(total ? p.total / total : 0),
+      barra: (p.total / tope) * 100,
+      dominantePct: porcentaje(p.total ? p.totalTipoDominante / p.total : 0),
+      unidadesPorIncidencia: p.total ? entero(Math.round(p.unidades / p.total)) : '—',
+      totalTexto: entero(p.total),
+      unidadesTexto: entero(p.unidades),
+    }));
+  });
+
+  readonly skus = computed(() =>
+    (this.datos()?.skus ?? []).map((s) => ({ ...s, totalTexto: entero(s.total), unidadesTexto: entero(s.unidades) })),
   );
 
-  readonly mensajeColsTop = computed(() => {
-    const lista = this.proveedoresMensual();
-    const suma = lista.reduce((t, p) => t + p.total, 0);
-    if (suma === 0) return 'Sin incidencias para los filtros aplicados.';
-    const n = Math.min(TOP_COLS, lista.length);
-    const pct = (lista.slice(0, TOP_COLS).reduce((t, p) => t + p.total, 0) / suma) * 100;
-    return `Total de incidencias por proveedor · los ${n} con más incidencias concentran el ${pct.toFixed(1)}% del total`;
-  });
-
-  readonly mensajeColsResto = computed(() => {
-    const restantes = this.colsResto().length;
-    if (restantes === 0) return 'No hay más proveedores con incidencias.';
-    return `Los otros ${restantes} proveedores · total de incidencias de cada uno · desliza para recorrerlos →`;
-  });
+  readonly granularidad = computed(() => (this.datos()?.granularidad === 'dia' ? 'por día' : 'por mes'));
 
   constructor() {
-    this.cargarCatalogos();
-    this.cargar();
-  }
-
-  cargarCatalogos(): void {
     this.catalogos.cargar();
+    this.cargar();
   }
 
   cargar(): void {
@@ -132,14 +305,19 @@ export class InboundDashboard {
     this.filtrosAbierto.update((abierto) => !abierto);
   }
 
-  setFiltroProveedor(evento: Event): void {
-    this.filtroProveedor.set(this.valorNumero(evento));
+  setFiltroProveedor(id: number | null): void {
+    this.filtroProveedor.set(id);
     this.cargar();
   }
 
-  setFiltroTipo(evento: Event): void {
-    this.filtroTipo.set(this.valorNumero(evento));
+  setFiltroTipo(id: number | null): void {
+    this.filtroTipo.set(id);
     this.cargar();
+  }
+
+  /** Drill-down desde el ranking: filtra el dashboard por ese proveedor. */
+  enfocarProveedor(id: number): void {
+    this.setFiltroProveedor(this.filtroProveedor() === id ? null : id);
   }
 
   setFiltroDesde(evento: Event): void {
@@ -152,6 +330,20 @@ export class InboundDashboard {
     this.cargar();
   }
 
+  setRango(rango: RangoFechas): void {
+    this.filtroDesde.set(rango.desde);
+    this.filtroHasta.set(rango.hasta);
+    this.cargar();
+  }
+
+  quitarFiltro(clave: string): void {
+    if (clave === 'proveedor') this.filtroProveedor.set(null);
+    if (clave === 'tipo') this.filtroTipo.set(null);
+    if (clave === 'desde') this.filtroDesde.set('');
+    if (clave === 'hasta') this.filtroHasta.set('');
+    this.cargar();
+  }
+
   limpiarFiltros(): void {
     this.filtroProveedor.set(null);
     this.filtroTipo.set(null);
@@ -159,33 +351,9 @@ export class InboundDashboard {
     this.filtroHasta.set('');
     this.cargar();
   }
+}
 
-  private aBarras(grupos: GrupoEstadisticaInbound[]): BarraDato[] {
-    const barras: BarraDato[] = grupos.slice(0, TOP).map((grupo, indice) => ({
-      etiqueta: grupo.etiqueta,
-      valor: grupo.count,
-      color: PALETA[indice % PALETA.length],
-      detalle: this.formatearUnidades(grupo),
-    }));
-
-    const resto = grupos.slice(TOP);
-    if (resto.length > 0) {
-      barras.push({
-        etiqueta: 'Otros',
-        valor: resto.reduce((total, grupo) => total + grupo.count, 0),
-        color: COLOR_OTROS,
-      });
-    }
-
-    return barras;
-  }
-
-  private formatearUnidades(grupo: GrupoEstadisticaInbound): string {
-    return `${grupo.count} ${grupo.count === 1 ? 'incidencia' : 'incidencias'}`;
-  }
-
-  private valorNumero(evento: Event): number | null {
-    const valor = (evento.target as HTMLSelectElement).value;
-    return valor ? Number(valor) : null;
-  }
+/** Los nombres vienen de la BD: se escapan antes de insertarlos como HTML en los hallazgos. */
+function escapar(texto: string): string {
+  return texto.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
