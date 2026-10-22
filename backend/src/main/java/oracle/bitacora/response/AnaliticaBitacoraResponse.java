@@ -26,7 +26,6 @@ public record AnaliticaBitacoraResponse(
      */
     public record Kpis(
             long total,
-            long abiertas,
             long resueltas,
             long segundosSolucion,
             long mttrSegundos,
@@ -35,8 +34,8 @@ public record AnaliticaBitacoraResponse(
             Long totalPeriodoAnterior) {
     }
 
-    /** Agregado por una dimension: volumen, abiertas y tiempo medio de solucion. */
-    public record Grupo(String etiqueta, long total, long abiertas, long mttrSegundos) {
+    /** Agregado por una dimension: volumen y tiempo medio de solucion. */
+    public record Grupo(String etiqueta, long total, long mttrSegundos) {
     }
 
     /** Tipo de incidencia con su sistema (el tipo pertenece a un sistema). */

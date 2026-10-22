@@ -111,7 +111,6 @@ export class DashboardBitacora {
 
   readonly tarjetas = computed(() => {
     const k = this.kpis();
-    const abiertasPct = k && k.total ? k.abiertas / k.total : 0;
     return [
       {
         etiqueta: 'Incidencias',
@@ -120,14 +119,6 @@ export class DashboardBitacora {
         color: 'var(--brand)',
         detalle: 'Registradas en el periodo',
         variacion: k ? variacion(k.total, k.totalPeriodoAnterior) : null,
-      },
-      {
-        etiqueta: 'Abiertas',
-        valor: k ? entero(k.abiertas) : '—',
-        icono: 'alertTriangle',
-        color: 'var(--warning)',
-        detalle: k ? `${porcentaje(abiertasPct)} sin hora de fin` : '',
-        variacion: null,
       },
       {
         etiqueta: 'Tiempo medio de solución',
@@ -216,7 +207,7 @@ export class DashboardBitacora {
     (this.datos()?.sistemas ?? []).map((g) => ({
       etiqueta: g.etiqueta,
       valor: g.total,
-      detalle: `MTTR ${duracion(g.mttrSegundos)} · ${entero(g.abiertas)} abiertas`,
+      detalle: `MTTR ${duracion(g.mttrSegundos)}`,
     })),
   );
 
@@ -271,7 +262,6 @@ export class DashboardBitacora {
       etiquetas: serie.map((p) => p.periodo),
       series: [
         { nombre: 'Incidencias', color: 'var(--accent)', valores: serie.map((p) => p.valor) },
-        { nombre: 'Siguen abiertas', color: 'var(--brand)', valores: serie.map((p) => p.secundario) },
       ] as SerieLinea[],
     };
   });
@@ -398,7 +388,7 @@ export class DashboardBitacora {
       etiqueta: g.etiqueta,
       valor: g.total,
       color,
-      detalle: `${entero(g.abiertas)} abiertas · MTTR ${duracion(g.mttrSegundos)}`,
+      detalle: `MTTR ${duracion(g.mttrSegundos)}`,
     }));
     const resto = grupos.slice(TOP);
     if (resto.length) {

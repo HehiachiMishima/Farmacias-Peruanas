@@ -34,7 +34,6 @@ public class AnaliticaIncidenciaRepository {
     public Kpis kpis(FiltroIncidencia filtro) {
         CondicionSql c = CondicionIncidencia.de(filtro);
         String sql = "SELECT COUNT(*) AS total, "
-                + "COALESCE(SUM(i.hora_fin IS NULL), 0) AS abiertas, "
                 + "COUNT(i.tiempo_solucion) AS resueltas, "
                 + "COALESCE(SUM(TIME_TO_SEC(i.tiempo_solucion)), 0) AS segundos, "
                 + "COALESCE(ROUND(AVG(TIME_TO_SEC(i.tiempo_solucion))), 0) AS mttr, "
@@ -42,7 +41,7 @@ public class AnaliticaIncidenciaRepository {
                 + "COUNT(DISTINCT i.id_data_centro) AS centros "
                 + "FROM incidencias i " + c.where();
         Kpis actual = jdbc.queryForObject(sql, (rs, n) -> new Kpis(
-                rs.getLong("total"), rs.getLong("abiertas"), rs.getLong("resueltas"),
+                rs.getLong("total"), rs.getLong("resueltas"),
                 rs.getLong("segundos"), rs.getLong("mttr"), rs.getLong("sistemas"),
                 rs.getLong("centros"), null), c.argumentos());
         FiltroIncidencia anterior = periodoAnterior(filtro);
@@ -52,7 +51,7 @@ public class AnaliticaIncidenciaRepository {
         CondicionSql ca = CondicionIncidencia.de(anterior);
         Long previo = jdbc.queryForObject("SELECT COUNT(*) FROM incidencias i " + ca.where(), Long.class,
                 ca.argumentos());
-        return new Kpis(actual.total(), actual.abiertas(), actual.resueltas(), actual.segundosSolucion(),
+        return new Kpis(actual.total(), actual.resueltas(), actual.segundosSolucion(),
                 actual.mttrSegundos(), actual.sistemasAfectados(), actual.centrosAfectados(), previo);
     }
 
@@ -95,23 +94,23 @@ public class AnaliticaIncidenciaRepository {
                 rs.getLong("valor")), c.argumentos());
     }
 
-    /** Serie temporal: valor = incidencias, secundario = abiertas. */
+    /** Serie temporal: valor = incidencias. */
     public List<PuntoSerie> tendencia(FiltroIncidencia filtro) {
         CondicionSql c = CondicionIncidencia.de(filtro);
         String formato = granularidad(filtro).equals("dia") ? "%Y-%m-%d" : "%Y-%m";
         String sql = "SELECT DATE_FORMAT(i.creado_en, '" + formato + "') AS periodo, COUNT(*) AS valor, "
-                + "COALESCE(SUM(i.hora_fin IS NULL), 0) AS secundario "
+                + "0 AS secundario "
                 + "FROM incidencias i " + c.where()
                 + " GROUP BY periodo ORDER BY periodo";
         return jdbc.query(sql, (rs, n) -> new PuntoSerie(rs.getString("periodo"), rs.getLong("valor"),
                 rs.getLong("secundario")), c.argumentos());
     }
 
-    /** Incidencias por hora de inicio (0-23): valor = incidencias, secundario = abiertas. */
+    /** Incidencias por hora de inicio (0-23): valor = incidencias. */
     public List<PuntoSerie> porHora(FiltroIncidencia filtro) {
         CondicionSql c = CondicionIncidencia.de(filtro);
         String sql = "SELECT HOUR(i.hora_inicio) AS hora, COUNT(*) AS valor, "
-                + "COALESCE(SUM(i.hora_fin IS NULL), 0) AS secundario "
+                + "0 AS secundario "
                 + "FROM incidencias i " + c.where()
                 + " GROUP BY hora ORDER BY hora";
         return jdbc.query(sql, (rs, n) -> new PuntoSerie(String.format("%02d", rs.getInt("hora")),
@@ -130,7 +129,6 @@ public class AnaliticaIncidenciaRepository {
     private List<Grupo> agrupar(FiltroIncidencia filtro, String tabla, String columna, String fk) {
         CondicionSql c = CondicionIncidencia.de(filtro);
         String sql = "SELECT COALESCE(t." + columna + ", '—') AS etiqueta, COUNT(*) AS total, "
-                + "COALESCE(SUM(i.hora_fin IS NULL), 0) AS abiertas, "
                 + "COALESCE(ROUND(AVG(TIME_TO_SEC(i.tiempo_solucion))), 0) AS mttr "
                 + "FROM incidencias i "
                 + "LEFT JOIN " + tabla + " t ON t.id = " + fk + " "
@@ -138,7 +136,7 @@ public class AnaliticaIncidenciaRepository {
                 + " GROUP BY " + fk + ", t." + columna
                 + " ORDER BY total DESC, etiqueta ASC";
         return jdbc.query(sql, (rs, n) -> new Grupo(rs.getString("etiqueta"), rs.getLong("total"),
-                rs.getLong("abiertas"), rs.getLong("mttr")), c.argumentos());
+                rs.getLong("mttr")), c.argumentos());
     }
 
     /** Mismo filtro desplazado al periodo anterior de igual duracion (requiere desde y hasta). */

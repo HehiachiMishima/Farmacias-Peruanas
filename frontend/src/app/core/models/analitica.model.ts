@@ -18,7 +18,6 @@ export type Granularidad = 'dia' | 'mes';
 export interface AnaliticaBitacora {
   kpis: {
     total: number;
-    abiertas: number;
     resueltas: number;
     segundosSolucion: number;
     mttrSegundos: number;
@@ -39,7 +38,6 @@ export interface AnaliticaBitacora {
 export interface GrupoBitacora {
   etiqueta: string;
   total: number;
-  abiertas: number;
   mttrSegundos: number;
 }
 
