@@ -65,7 +65,7 @@ export interface CapaPin {
 
 export const CAPAS: readonly CapaPin[] = [
   { icono: 'almacen', texto: 'Almacenes', x: 12, y: 13, nodo: CIUDADES.trujillo },
-  { icono: 'truck', texto: 'Distribución', x: 89, y: 11, nodo: CIUDADES.iquitos },
+  { icono: 'area', texto: 'Slotting', x: 89, y: 11, nodo: CIUDADES.iquitos },
   { icono: 'farmacia', texto: 'Farmacias', x: 10, y: 58, nodo: LIMA },
   { icono: 'dashboard', texto: 'Datos y analítica', x: 90, y: 64, nodo: CIUDADES.cusco },
 ];

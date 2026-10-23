@@ -250,10 +250,25 @@ $salida: cubic-bezier(0.16, 1, 0.3, 1);
   &--oro {
     background-image: linear-gradient(180deg, #ffd84a 0%, var(--l-oro) 55%, #e0ad00 100%);
     filter:
-      drop-shadow(0 1px 0 #c79800)
+      drop-shadow(0 2px 0 #c79800)
       drop-shadow(0 2px 0 #ad8400)
       drop-shadow(0 3px 0 #926f00)
       drop-shadow(0 18px 22px rgba(160, 120, 0, 0.3));
+  }
+    &--t {
+    /* 2 colores puros: Rojo arriba (travesaño) y Amarillo abajo (tallo) */
+    background-image: linear-gradient(
+      180deg,
+      var(--l-rojo) 26%,
+      var(--l-oro) 20%,
+    );
+
+    /* Mantenemos la sombra 3D con el tono rojo para que el volumen coincida */
+    filter:
+      drop-shadow(0 1px 0 #b30e1c)
+      drop-shadow(0 2px 0 #ad8400)
+      drop-shadow(0 3px 0 #926f00)
+      drop-shadow(0 18px 22px rgba(140, 8, 20, 0.28));
   }
 }
 
