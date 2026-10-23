@@ -1,6 +1,6 @@
 import { Component, computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { PANELES, PanelDef } from '../../core/config/paneles';
+import { PANELES, PanelDef, panelAccesible } from '../../core/config/paneles';
 import { Auth } from '../../core/services/auth';
 import { Notificaciones } from '../../core/services/notificaciones';
 import { TemaService } from '../../core/services/tema';
@@ -23,7 +23,7 @@ export class Launcher {
   readonly permisos = this.auth.permisos;
 
   readonly accesibles = computed(
-    () => this.paneles.filter((panel) => this.permisos().includes(panel.permiso)).length,
+    () => this.paneles.filter((panel) => panelAccesible(panel, this.permisos())).length,
   );
 
   readonly saludo = computed(() => {
@@ -40,6 +40,9 @@ export class Launcher {
 
   /** Módulos del panel a los que el usuario tiene acceso (chips de la tarjeta). */
   modulosDe(panel: PanelDef) {
+    if (panel.publico) {
+      return panel.modulos;
+    }
     return panel.modulos.filter((modulo) => this.permisos().includes(modulo.permiso));
   }
 
@@ -52,7 +55,7 @@ export class Launcher {
   });
 
   accesible(panel: PanelDef): boolean {
-    return this.permisos().includes(panel.permiso);
+    return panelAccesible(panel, this.permisos());
   }
 
   abrir(panel: PanelDef): void {

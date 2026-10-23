@@ -1,8 +1,15 @@
 import { Routes } from '@angular/router';
+import {
+  PANEL_ANALISIS,
+  PANEL_AUTOMATIZACION,
+  PANEL_LOGISTICA,
+  PANEL_SINCRONIZACION,
+  PANEL_TRAZABILIDAD,
+} from './core/config/paneles';
 import { PERMISOS } from './core/config/permisos';
 import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
-import { permisoGuard } from './core/guards/permiso.guard';
+import { panelGuard, permisoGuard } from './core/guards/permiso.guard';
 
 export const routes: Routes = [
   {
@@ -36,6 +43,42 @@ export const routes: Routes = [
     canActivate: [permisoGuard(PERMISOS.PANEL_INBOUND)],
     loadChildren: () =>
       import('./features/panels/inbound/inbound.routes').then((m) => m.INBOUND_ROUTES),
+  },
+  {
+    path: 'analisis',
+    canActivate: [panelGuard(PANEL_ANALISIS)],
+    loadChildren: () =>
+      import('./features/panels/analisis/analisis.routes').then((m) => m.ANALISIS_ROUTES),
+  },
+  {
+    path: 'trazabilidad',
+    canActivate: [panelGuard(PANEL_TRAZABILIDAD)],
+    loadChildren: () =>
+      import('./features/panels/trazabilidad/trazabilidad.routes').then(
+        (m) => m.TRAZABILIDAD_ROUTES,
+      ),
+  },
+  {
+    path: 'logistica',
+    canActivate: [panelGuard(PANEL_LOGISTICA)],
+    loadChildren: () =>
+      import('./features/panels/logistica/logistica.routes').then((m) => m.LOGISTICA_ROUTES),
+  },
+  {
+    path: 'automatizacion',
+    canActivate: [panelGuard(PANEL_AUTOMATIZACION)],
+    loadChildren: () =>
+      import('./features/panels/automatizacion/automatizacion.routes').then(
+        (m) => m.AUTOMATIZACION_ROUTES,
+      ),
+  },
+  {
+    path: 'sincronizacion',
+    canActivate: [panelGuard(PANEL_SINCRONIZACION)],
+    loadChildren: () =>
+      import('./features/panels/sincronizacion/sincronizacion.routes').then(
+        (m) => m.SINCRONIZACION_ROUTES,
+      ),
   },
   { path: '**', redirectTo: '' },
 ];

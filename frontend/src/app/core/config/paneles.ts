@@ -16,6 +16,11 @@ export interface PanelDef {
   icono: string;
   ruta: string;
   permiso: string;
+  /**
+   * Panel sin lógica todavía: visible y accesible para cualquier usuario
+   * autenticado, sin exigir permiso. Quitar cuando tenga permisos reales.
+   */
+  publico?: boolean;
   /** Color de señal del panel (CSS): tarjeta del launcher y detalles del panel. */
   acento: string;
   modulos: ModuloPanel[];
@@ -137,10 +142,136 @@ export const PANEL_INBOUND: PanelDef = {
   ],
 }
 
-export const PANELES: PanelDef[] = [PANEL_ADMIN, PANEL_BITACORA, PANEL_INBOUND];
+/**
+ * Paneles en construcción: misma estructura que los paneles reales (permiso,
+ * módulos, acento), pero marcados como `publico` mientras no tengan lógica,
+ * para que se visualicen sin exigir permisos.
+ */
+export const PANEL_ANALISIS: PanelDef = {
+  id: 'analisis',
+  nombre: 'Análisis',
+  descripcion: 'Indicadores, Fill Rate, incidencias y desempeño operativo.',
+  icono: 'analisis',
+  ruta: '/analisis',
+  permiso: PERMISOS.PANEL_ANALISIS,
+  publico: true,
+  acento: 'var(--brand)',
+  modulos: [
+    {
+      id: 'resumen',
+      nombre: 'Resumen',
+      descripcion: 'Vista general del panel de análisis.',
+      icono: 'dashboard',
+      ruta: 'resumen',
+      permiso: PERMISOS.PANEL_ANALISIS,
+    },
+  ],
+}
+
+export const PANEL_TRAZABILIDAD: PanelDef = {
+  id: 'trazabilidad',
+  nombre: 'Trazabilidad',
+  descripcion: 'Seguimiento de pedidos, rutas, procesos e incidencias.',
+  icono: 'trazabilidad',
+  ruta: '/trazabilidad',
+  permiso: PERMISOS.PANEL_TRAZABILIDAD,
+  publico: true,
+  acento: 'var(--accent)',
+  modulos: [
+    {
+      id: 'resumen',
+      nombre: 'Resumen',
+      descripcion: 'Vista general del panel de trazabilidad.',
+      icono: 'dashboard',
+      ruta: 'resumen',
+      permiso: PERMISOS.PANEL_TRAZABILIDAD,
+    },
+  ],
+}
+
+export const PANEL_LOGISTICA: PanelDef = {
+  id: 'logistica',
+  nombre: 'Logística',
+  descripcion: 'Gestión de las herramientas y procesos de la operación.',
+  icono: 'logistica',
+  ruta: '/logistica',
+  permiso: PERMISOS.PANEL_LOGISTICA,
+  publico: true,
+  acento: 'var(--success)',
+  modulos: [
+    {
+      id: 'resumen',
+      nombre: 'Resumen',
+      descripcion: 'Vista general del panel de logística.',
+      icono: 'dashboard',
+      ruta: 'resumen',
+      permiso: PERMISOS.PANEL_LOGISTICA,
+    },
+  ],
+}
+
+export const PANEL_AUTOMATIZACION: PanelDef = {
+  id: 'automatizacion',
+  nombre: 'Automatización',
+  descripcion: 'Reducción de tareas manuales y consolidación de reportes.',
+  icono: 'automatizacion',
+  ruta: '/automatizacion',
+  permiso: PERMISOS.PANEL_AUTOMATIZACION,
+  publico: true,
+  acento: 'var(--violet)',
+  modulos: [
+    {
+      id: 'resumen',
+      nombre: 'Resumen',
+      descripcion: 'Vista general del panel de automatización.',
+      icono: 'dashboard',
+      ruta: 'resumen',
+      permiso: PERMISOS.PANEL_AUTOMATIZACION,
+    },
+  ],
+}
+
+export const PANEL_SINCRONIZACION: PanelDef = {
+  id: 'sincronizacion',
+  nombre: 'Sincronización',
+  descripcion: 'Integración de información de diferentes sistemas y fuentes.',
+  icono: 'sincronizacion',
+  ruta: '/sincronizacion',
+  permiso: PERMISOS.PANEL_SINCRONIZACION,
+  publico: true,
+  acento: '#f59e0b',
+  modulos: [
+    {
+      id: 'resumen',
+      nombre: 'Resumen',
+      descripcion: 'Vista general del panel de sincronización.',
+      icono: 'dashboard',
+      ruta: 'resumen',
+      permiso: PERMISOS.PANEL_SINCRONIZACION,
+    },
+  ],
+}
+
+export const PANELES: PanelDef[] = [
+  PANEL_ADMIN,
+  PANEL_BITACORA,
+  PANEL_INBOUND,
+  PANEL_ANALISIS,
+  PANEL_TRAZABILIDAD,
+  PANEL_LOGISTICA,
+  PANEL_AUTOMATIZACION,
+  PANEL_SINCRONIZACION,
+];
 
 export function primerModuloAccesible(panel: PanelDef, permisos: readonly string[]): ModuloPanel | undefined {
+  if (panel.publico) {
+    return panel.modulos[0];
+  }
   return panel.modulos.find((modulo) => permisos.includes(modulo.permiso));
+}
+
+export function panelAccesible(panel: PanelDef, permisos: readonly string[]): boolean {
+  return panel.publico === true || permisos.includes(panel.permiso);
 }
 
 export function tienePermiso(permisos: readonly string[], permiso: string): boolean {
