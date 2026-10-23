@@ -82,20 +82,22 @@ Cada panel del backend tiene sus propias capas:
 
 | Recurso | Uso |
 | --- | --- |
-| `public/marca/atlas.webp` | Atlas recortado (fondo transparente, HD) — escena del login. |
-| `public/marca/atlas-marca.webp` | Emblema compacto — sidebar, launcher, tarjeta de acceso, pantalla de carga. |
-| `public/marca/atlas-icono.png`, `public/favicon.png` | Ícono de la app (`apple-touch-icon`) y favicon. |
+| `public/marca/login-almacen.webp` | Foto del almacén con robots — parte baja del hero del login. |
+| `public/marca/atlas-marca.webp` | Emblema Atlas — sidebar, launcher y pantalla de carga. |
+| `public/faviconFape.png`, `public/marca/fp-icono-*.png`, `public/marca/fp-apple-touch.png` | Favicon e íconos de la app (corazón FP, fondo transparente; el de iOS sobre blanco). |
 | `public/marca/atlas-carga.webp` | Fondo de la pantalla de carga. |
 | `public/marca/fp-nombre.webp` | Logotipo Farmacias Peruanas (HD, fondo transparente). |
 
 Los originales (`atlasLogo.jpg`, `atlasCarga.jpg`, `FarmaciasPeruanasName.jpg`)
 quedan en `public/` como fuente; la app usa las versiones `webp` optimizadas.
 
-- **Login**: split-screen con hero animado (letras con volumen, acróstico en
-  ciclo, Atlas flotando sobre la red logística del Perú, órbitas, piso con luces
-  y parallax con el puntero) y tarjeta de acceso con sombras por capas. En
-  tablet/móvil el Atlas pasa a ser fondo decorativo del encabezado y la barra
-  de capas se oculta. Respeta `prefers-reduced-motion`.
+- **Login**: réplica del diseño de referencia. Hero con marca FP + IL, título
+  ATLAS, acróstico en ciclo, mapa real del Perú con la red de distribución
+  desde Lima y cuatro pines (Almacenes, Distribución, Farmacias, Datos y
+  analítica), foto del almacén con destellos láser y barra roja de capas; a la
+  derecha, la tarjeta de acceso. Datos de la escena en
+  `features/auth/login/login-escena.ts`. En móvil el mapa y la barra se ocultan
+  y la foto queda como franja bajo el texto. Respeta `prefers-reduced-motion`.
 - **Pantalla de carga** (`ui-loader` + servicio `Carga`): "Ingresando a Atlas" /
   "Saliendo de Atlas", con un tiempo mínimo en pantalla para que no parpadee.
 - **Modales** (`ui-modal`): sombra por capas, filete de marca, bloqueo del

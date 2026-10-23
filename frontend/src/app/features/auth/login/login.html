@@ -1,8 +1,10 @@
 <div class="login">
   <section #hero class="login__hero">
-    <span class="login__fondo" aria-hidden="true"></span>
+    <div class="login__foto" aria-hidden="true">
+      <img src="marca/login-almacen.webp" alt="" width="1352" height="440" fetchpriority="high" />
+      <span class="login__laser"></span>
+    </div>
     <span class="login__cinta" aria-hidden="true"></span>
-    <span class="login__piso" aria-hidden="true"></span>
 
     <div class="login__contenido">
       <header class="login__marca">
@@ -36,40 +38,42 @@
           </p>
         </div>
 
-        <div class="login__escena" aria-hidden="true">
-          <span class="login__halo"></span>
-          <svg class="login__mapa" viewBox="0 0 260 360" focusable="false">
+        <div class="login__mapa" aria-hidden="true">
+          <svg class="login__enlaces" viewBox="0 0 100 100" preserveAspectRatio="none" focusable="false">
+            @for (e of enlaces; track $index) {
+              <path [attr.d]="e" />
+            }
+          </svg>
+
+          <svg class="login__peru" viewBox="0 0 217 312" focusable="false">
             <defs>
-              <linearGradient id="login-peru" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="#f4f5f7" />
-                <stop offset="1" stop-color="#dde1e7" />
+              <pattern id="login-puntos" width="4" height="4" patternUnits="userSpaceOnUse">
+                <circle cx="2" cy="2" r="0.7" fill="#c3c9d2" />
+              </pattern>
+              <linearGradient id="login-relieve" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#ffffff" />
+                <stop offset="1" stop-color="#e3e7ec" />
               </linearGradient>
             </defs>
-            <path class="login__peru" d="M16 66 L6 88 L26 98 L36 134 L54 160 L68 186 L86 216 L94 248 L116 284 L136 314 L180 346 L208 358 L234 334 L248 314 L242 272 L254 226 L258 192 L228 152 L198 112 L210 64 L238 32 L214 16 L168 26 L126 52 L82 58 L44 58 Z" />
+            <path class="login__peru-base" [attr.d]="peru" />
+            <path class="login__peru-trama" [attr.d]="peru" />
             <g class="login__rutas">
-              @for (r of rutas; track r) {
-                <path [attr.d]="r" />
+              @for (r of rutas; track $index) {
+                <path [attr.d]="r" [style.--i]="$index" />
               }
             </g>
             <g class="login__nodos">
               @for (n of nodos; track $index) {
-                <circle [attr.cx]="n[0]" [attr.cy]="n[1]" [attr.r]="n[2]" />
+                <circle [attr.cx]="n[0]" [attr.cy]="n[1]" r="2.6" [style.--i]="$index" />
               }
-              <circle cx="100" cy="246" r="11" class="login__nodo-halo" />
+              <circle [attr.cx]="hub[0]" [attr.cy]="hub[1]" r="4.4" class="login__hub" />
+              <circle [attr.cx]="hub[0]" [attr.cy]="hub[1]" r="9" class="login__hub-halo" />
             </g>
           </svg>
 
-          <span class="login__orbita login__orbita--1"></span>
-          <span class="login__orbita login__orbita--2"></span>
-
-          <div class="login__atlas">
-            <img class="login__atlas-img" src="marca/atlas.webp" alt="" width="1061" height="1504" fetchpriority="high" />
-            <span class="login__atlas-sombra"></span>
-          </div>
-
           @for (c of capas; track c.texto; let i = $index) {
-            <span class="login__pin" [style.left]="c.x" [style.top]="c.y" [style.--i]="i">
-              <span class="login__pin-ico"><ui-icon [name]="c.icono" [size]="20" /></span>
+            <span class="login__pin" [style.left.%]="c.x" [style.top.%]="c.y" [style.--i]="i">
+              <span class="login__pin-ico"><ui-icon [name]="c.icono" [size]="22" /></span>
               <span class="login__pin-texto">{{ c.texto }}</span>
             </span>
           }
@@ -80,7 +84,7 @@
     <footer class="login__barra">
       @for (p of pie; track p.texto; let i = $index) {
         <span class="login__barra-item" [style.--i]="i">
-          <span class="login__barra-ico"><ui-icon [name]="p.icono" [size]="22" /></span>
+          <span class="login__barra-ico"><ui-icon [name]="p.icono" [size]="24" /></span>
           <span class="login__barra-texto">{{ p.texto }}</span>
         </span>
       }
@@ -92,10 +96,7 @@
     <span class="login__franja login__franja--abajo" aria-hidden="true"></span>
 
     <div class="login__card">
-      <p class="login__acceso">
-        <img src="marca/atlas-marca.webp" alt="" width="28" height="28" />
-        Acceso · Atlas
-      </p>
+      <p class="login__acceso">Acceso · Atlas</p>
 
       <header class="login__header">
         <h2>Inicia sesión</h2>
@@ -132,7 +133,7 @@
             <button type="button" class="login__toggle" (click)="toggleContrasena()"
               [attr.aria-label]="verContrasena() ? 'Ocultar contraseña' : 'Mostrar contraseña'"
               [attr.aria-pressed]="verContrasena()">
-              <ui-icon [name]="verContrasena() ? 'ojoOff' : 'ojo'" [size]="18" />
+              <ui-icon [name]="verContrasena() ? 'ojo' : 'ojoOff'" [size]="18" />
             </button>
           </div>
           @if (campoInvalido('contrasena')) {

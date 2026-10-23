@@ -15,6 +15,7 @@ import { Auth } from '../../../core/services/auth';
 import { Carga } from '../../../core/services/carga';
 import { Notificaciones } from '../../../core/services/notificaciones';
 import { Icon } from '../../../shared/ui/icon/icon';
+import { CAPAS, ENLACES, LIMA, NODOS, PERU, RUTAS } from './login-escena';
 
 @Component({
   selector: 'app-login',
@@ -41,13 +42,13 @@ export class Login {
   /** Concepto de la plataforma: acróstico ATLAS. */
   readonly concepto = ['Análisis', 'Trazabilidad', 'Logística', 'Automatización', 'Sincronización'] as const;
 
-  /** Capas de la operación: pines alrededor de la escena. */
-  readonly capas: ReadonlyArray<{ icono: string; texto: string; x: string; y: string }> = [
-    { icono: 'almacen', texto: 'Almacenes', x: '10%', y: '12%' },
-    { icono: 'truck', texto: 'Distribución', x: '90%', y: '10%' },
-    { icono: 'farmacia', texto: 'Farmacias', x: '6%', y: '60%' },
-    { icono: 'dashboard', texto: 'Datos y analítica', x: '94%', y: '58%' },
-  ];
+  /** Escena del hero: mapa del Perú, red de rutas y pines (ver login-escena.ts). */
+  readonly peru = PERU;
+  readonly hub = LIMA;
+  readonly nodos = NODOS;
+  readonly rutas = RUTAS;
+  readonly capas = CAPAS;
+  readonly enlaces = ENLACES;
 
   /** Capas de la plataforma mostradas en la barra inferior del hero. */
   readonly pie: ReadonlyArray<{ texto: string; icono: string }> = [
@@ -58,24 +59,6 @@ export class Login {
     { texto: 'Distribución', icono: 'truck' },
     { texto: 'Farmacias', icono: 'farmacia' },
     { texto: 'Indicadores de operación', icono: 'dashboard' },
-  ];
-
-  /** Red de rutas sobre el mapa del Perú (viewBox 260×360). */
-  readonly rutas = [
-    'M40 118 Q46 142 62 168',
-    'M62 168 Q74 202 100 246',
-    'M100 246 Q112 262 120 276',
-    'M120 276 Q150 300 170 322',
-    'M100 246 Q132 244 160 250',
-    'M160 250 Q198 256 230 268',
-    'M160 250 Q170 198 170 150',
-    'M170 150 Q166 106 165 74',
-  ] as const;
-
-  /** Nodos de la red: [x, y, radio]. */
-  readonly nodos: ReadonlyArray<readonly [number, number, number]> = [
-    [40, 118, 3.4], [62, 168, 3.4], [100, 246, 5.6], [120, 276, 3.4], [170, 322, 3.4],
-    [160, 250, 4.4], [230, 268, 3.4], [170, 150, 3.4], [165, 74, 3.4],
   ];
 
   readonly formulario = this.fb.nonNullable.group({
