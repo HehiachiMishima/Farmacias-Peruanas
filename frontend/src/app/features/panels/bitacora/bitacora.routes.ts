@@ -1,19 +1,9 @@
-import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
-import { PANEL_BITACORA, primerModuloAccesible } from '../../../core/config/paneles';
+import { PANEL_BITACORA } from '../../../core/config/paneles';
 import { PERMISOS } from '../../../core/config/permisos';
 import { permisoGuard } from '../../../core/guards/permiso.guard';
-import { SesionStore } from '../../../core/services/sesion';
 import { PanelShell } from '../panel-shell';
-
-function primerModuloBitacora(): string {
-  try {
-    const modulo = primerModuloAccesible(PANEL_BITACORA, inject(SesionStore).permisos());
-    return modulo ? `/bitacora/${modulo.ruta}` : '/sin-acceso';
-  } catch {
-    return '/bitacora/incidencias';
-  }
-}
+import { aPrimerModulo } from '../panel-rutas';
 
 export const BITACORA_ROUTES: Routes = [
   {
@@ -21,7 +11,7 @@ export const BITACORA_ROUTES: Routes = [
     component: PanelShell,
     data: { panel: PANEL_BITACORA },
     children: [
-      { path: '', pathMatch: 'full', redirectTo: primerModuloBitacora },
+      { path: '', pathMatch: 'full', redirectTo: aPrimerModulo(PANEL_BITACORA) },
       {
         path: 'incidencias',
         canActivate: [permisoGuard(PERMISOS.VER_INCIDENCIAS)],

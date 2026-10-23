@@ -1,19 +1,9 @@
-import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
-import { PANEL_INBOUND, primerModuloAccesible } from '../../../core/config/paneles';
+import { PANEL_INBOUND } from '../../../core/config/paneles';
 import { PERMISOS } from '../../../core/config/permisos';
 import { permisoGuard } from '../../../core/guards/permiso.guard';
-import { SesionStore } from '../../../core/services/sesion';
 import { PanelShell } from '../panel-shell';
-
-function primerModuloInbound(): string {
-  try {
-    const modulo = primerModuloAccesible(PANEL_INBOUND, inject(SesionStore).permisos());
-    return modulo ? `/inbound/${modulo.ruta}` : '/sin-acceso';
-  } catch {
-    return '/inbound/incidencias';
-  }
-}
+import { aPrimerModulo } from '../panel-rutas';
 
 export const INBOUND_ROUTES: Routes = [
   {
@@ -21,7 +11,7 @@ export const INBOUND_ROUTES: Routes = [
     component: PanelShell,
     data: { panel: PANEL_INBOUND },
     children: [
-      { path: '', pathMatch: 'full', redirectTo: primerModuloInbound },
+      { path: '', pathMatch: 'full', redirectTo: aPrimerModulo(PANEL_INBOUND) },
       {
         path: 'incidencias',
         canActivate: [permisoGuard(PERMISOS.VER_INCIDENCIAS_INBOUND)],

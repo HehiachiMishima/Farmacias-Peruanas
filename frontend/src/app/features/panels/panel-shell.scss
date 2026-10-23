@@ -1,7 +1,7 @@
 @use 'breakpoints' as bp;
 
 /**
- * Shell "Control Tower": cromo navy a la izquierda, barra superior clara con
+ * Shell "Atlas": cromo navy a la izquierda, barra superior clara con
  * estado del sistema y reloj, y el contenido en el lienzo gris-azulado.
  *
  * Escritorio: grid [sidebar | cuerpo]; el sidebar colapsa a un riel de iconos.
@@ -74,11 +74,11 @@ $entrada: cubic-bezier(0.7, 0, 0.84, 0);
 }
 
 .shell__brand-mark {
-  width: 44px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   flex: none;
   object-fit: contain;
-  filter: drop-shadow(0 6px 14px rgba(29, 99, 237, 0.45));
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 14px rgba(214, 140, 74, 0.35));
 }
 
 .shell__brand-text {

@@ -1,49 +1,101 @@
 <div class="login">
-  <!-- Escena de fondo: degradados suaves + rejilla + destellos (CSS puro). -->
-  <div class="login__scene" aria-hidden="true">
-    <span class="login__blob login__blob--1"></span>
-    <span class="login__blob login__blob--2"></span>
-    <span class="login__blob login__blob--3"></span>
-    <span class="login__grid"></span>
-  </div>
+  <section #hero class="login__hero">
+    <span class="login__fondo" aria-hidden="true"></span>
+    <span class="login__cinta" aria-hidden="true"></span>
+    <span class="login__piso" aria-hidden="true"></span>
 
-  <section class="login__hero">
-    <div class="login__hero-inner">
-      <div class="login__logo">
-        <img class="login__logo-nube" src="marca/cloudhub-logo.webp" alt="" width="84" height="54" />
-        <span class="login__logo-text">
-          <span class="login__kicker">Ingeniería Logística</span>
-          <span class="login__org">Farmacias Peruanas</span>
+    <div class="login__contenido">
+      <header class="login__marca">
+        <img class="login__fp" src="marca/fp-nombre.webp" alt="Farmacias Peruanas" width="1600" height="437" />
+        <span class="login__marca-sep" aria-hidden="true"></span>
+        <span class="login__il">
+          <span class="login__il-caja" aria-hidden="true">IL</span>
+          <span class="login__il-texto">Ingeniería Logística</span>
         </span>
-      </div>
+      </header>
 
-      <h1 class="login__title">
-        <span class="login__title-accent">Interfaz Atlas</span>
-      </h1>
-      <p class="login__lead">
-        Una sola plataforma para analizar, trazar y sincronizar la operación
-        logística de Farmacias Peruanas.
-      </p>
+      <div class="login__cuerpo">
+        <div class="login__copy">
+          <h1 class="login__titulo" aria-label="Atlas">
+            @for (letra of titulo; track $index) {
+              <span class="login__letra" [class.login__letra--oro]="$index === 2" [style.--i]="$index" aria-hidden="true">{{ letra }}</span>
+            }
+          </h1>
+          <p class="login__subtitulo">Plataforma de ingeniería logística</p>
 
-      <!-- Concepto de la plataforma: acróstico ATLAS. -->
-      <ul class="atlas" aria-label="Qué significa Atlas">
-        @for (l of letras; track $index) {
-          <li class="atlas__item" [style.--c]="l.color">
-            <span class="atlas__letra" aria-hidden="true">{{ l.letra }}</span>
-            <span class="atlas__info">
-              <span class="atlas__palabra">{{ l.palabra }}</span>
-              <span class="atlas__desc">{{ l.descripcion }}</span>
+          <p class="login__concepto">
+            @for (c of concepto; track c; let i = $index) {
+              @if (i > 0) { <span class="login__concepto-sep" aria-hidden="true">·</span> }
+              <span class="login__palabra" [style.--i]="i">{{ c }}</span>
+            }
+          </p>
+
+          <p class="login__claim">
+            Tecnología y personas para una cadena de suministro
+            <strong>más eficiente.</strong>
+          </p>
+        </div>
+
+        <div class="login__escena" aria-hidden="true">
+          <span class="login__halo"></span>
+          <svg class="login__mapa" viewBox="0 0 260 360" focusable="false">
+            <defs>
+              <linearGradient id="login-peru" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#f4f5f7" />
+                <stop offset="1" stop-color="#dde1e7" />
+              </linearGradient>
+            </defs>
+            <path class="login__peru" d="M16 66 L6 88 L26 98 L36 134 L54 160 L68 186 L86 216 L94 248 L116 284 L136 314 L180 346 L208 358 L234 334 L248 314 L242 272 L254 226 L258 192 L228 152 L198 112 L210 64 L238 32 L214 16 L168 26 L126 52 L82 58 L44 58 Z" />
+            <g class="login__rutas">
+              @for (r of rutas; track r) {
+                <path [attr.d]="r" />
+              }
+            </g>
+            <g class="login__nodos">
+              @for (n of nodos; track $index) {
+                <circle [attr.cx]="n[0]" [attr.cy]="n[1]" [attr.r]="n[2]" />
+              }
+              <circle cx="100" cy="246" r="11" class="login__nodo-halo" />
+            </g>
+          </svg>
+
+          <span class="login__orbita login__orbita--1"></span>
+          <span class="login__orbita login__orbita--2"></span>
+
+          <div class="login__atlas">
+            <img class="login__atlas-img" src="marca/atlas.webp" alt="" width="1061" height="1504" fetchpriority="high" />
+            <span class="login__atlas-sombra"></span>
+          </div>
+
+          @for (c of capas; track c.texto; let i = $index) {
+            <span class="login__pin" [style.left]="c.x" [style.top]="c.y" [style.--i]="i">
+              <span class="login__pin-ico"><ui-icon [name]="c.icono" [size]="20" /></span>
+              <span class="login__pin-texto">{{ c.texto }}</span>
             </span>
-            <span class="atlas__icono"><ui-icon [name]="l.icono" [size]="18" /></span>
-          </li>
-        }
-      </ul>
+          }
+        </div>
+      </div>
     </div>
+
+    <footer class="login__barra">
+      @for (p of pie; track p.texto; let i = $index) {
+        <span class="login__barra-item" [style.--i]="i">
+          <span class="login__barra-ico"><ui-icon [name]="p.icono" [size]="22" /></span>
+          <span class="login__barra-texto">{{ p.texto }}</span>
+        </span>
+      }
+    </footer>
   </section>
 
   <section class="login__panel">
+    <span class="login__franja login__franja--arriba" aria-hidden="true"></span>
+    <span class="login__franja login__franja--abajo" aria-hidden="true"></span>
+
     <div class="login__card">
-      <img class="login__wordmark" src="marca/cloudhub-nombre.webp" alt="Cloud Hub" width="220" height="84" />
+      <p class="login__acceso">
+        <img src="marca/atlas-marca.webp" alt="" width="28" height="28" />
+        Acceso · Atlas
+      </p>
 
       <header class="login__header">
         <h2>Inicia sesión</h2>
@@ -63,7 +115,7 @@
           <div class="login__control">
             <ui-icon name="user" [size]="18" class="login__control-icon" />
             <input id="usuario" type="text" class="ui-input" [class.ui-input--invalid]="campoInvalido('usuario')"
-              formControlName="usuario" autocomplete="username" placeholder="@usuario" autofocus />
+              formControlName="usuario" autocomplete="username" placeholder="nombre.apellido o email" autofocus />
           </div>
           @if (campoInvalido('usuario')) {
             <span class="ui-error">Ingresa tu usuario.</span>
@@ -73,10 +125,10 @@
         <div class="ui-field">
           <label class="ui-label" for="contrasena">Contraseña</label>
           <div class="login__control">
-            <ui-icon name="key" [size]="18" class="login__control-icon" />
+            <ui-icon name="lock" [size]="18" class="login__control-icon" />
             <input id="contrasena" [type]="verContrasena() ? 'text' : 'password'" class="ui-input"
               [class.ui-input--invalid]="campoInvalido('contrasena')" formControlName="contrasena"
-              autocomplete="current-password" placeholder="••••••••" />
+              autocomplete="current-password" placeholder="Tu contraseña" />
             <button type="button" class="login__toggle" (click)="toggleContrasena()"
               [attr.aria-label]="verContrasena() ? 'Ocultar contraseña' : 'Mostrar contraseña'"
               [attr.aria-pressed]="verContrasena()">
@@ -93,15 +145,18 @@
             <span class="ui-spinner login__spinner"></span>
             Verificando…
           } @else {
-            Ingresar a la interfaz de Atlas
-            <ui-icon name="flecha" [size]="18" />
+            Ingresar a ATLAS
+            <ui-icon name="flecha" [size]="18" class="login__submit-flecha" />
           }
         </button>
       </form>
 
-      <footer class="login__foot">
-        <img class="login__foot-fp" src="marca/fp-nombre.webp" alt="Farmacias Peruanas" width="150" height="39" />
+      <footer class="login__nota">
+        <ui-icon name="shieldCheck" [size]="16" />
+        <span>Acceso restringido a personal autorizado.</span>
       </footer>
     </div>
+
+    <p class="login__uso">Uso interno · Farmacias Peruanas</p>
   </section>
 </div>

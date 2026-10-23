@@ -1,375 +1,793 @@
 @use 'breakpoints' as bp;
 
 /**
- * Login "Atlas" — rediseño claro en verde y blanco.
+ * Login "ATLAS" — Farmacias Peruanas (rojo / oro / blanco).
  *
- * Split-screen: a la izquierda la escena de marca con el acróstico ATLAS; a la
- * derecha la tarjeta de inicio de sesión en blanco con acento esmeralda. Todo
- * CSS/SVG (sin WebGL) y respeta prefers-reduced-motion.
+ * Split-screen: hero claro con la escena de marca (Atlas sosteniendo el
+ * mundo sobre la red logística del Perú, piso con luces en movimiento y
+ * parallax con el puntero) y barra de capas; a la derecha, panel gris con
+ * franjas y la tarjeta de acceso. Los colores son locales: el login se ve
+ * igual en tema claro y oscuro. Respeta prefers-reduced-motion.
  */
 
-/* ---------------- Tokens locales (solo este login) ---------------- */
-.login {
-  --atlas-green: #0ea56b;
-  --atlas-green-deep: #047857;
-  --atlas-green-soft: #e7f6ef;
-  --atlas-mint: #34d399;
-  --atlas-lime: #7ee2b8;
-  --atlas-ink: #0b1f18;
-  --atlas-ink-2: #3f5a52;
-  --atlas-line: #d3e6dd;
+$salida: cubic-bezier(0.16, 1, 0.3, 1);
 
-  position: relative;
-  isolation: isolate;
+/* ---------------- Base ---------------- */
+.login {
+  --l-rojo: #e11d2e;
+  --l-rojo-2: #c4101f;
+  --l-rojo-3: #8e0b16;
+  --l-oro: #f7c400;
+  --l-oro-2: #c99a00;
+  --l-tinta: #0f1217;
+  --l-tinta-2: #4b5563;
+  --l-tinta-3: #8a93a0;
+  --l-panel: #f1f2f4;
+  --l-sombra: 220 25% 8%;
+
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(400px, 0.9fr);
+  grid-template-columns: minmax(0, 1fr) clamp(400px, 31vw, 560px);
   min-height: 100dvh;
-  color: var(--atlas-ink-2);
-  background: #f4fbf7;
-  overflow: hidden;
+  color: var(--l-tinta-2);
+  background: #fff;
 
   @include bp.down(lg) {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
   }
 }
 
-/* ---------------- Escena de fondo ---------------- */
-.login__scene {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.login__blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.6;
-  will-change: transform;
-}
-
-.login__blob--1 {
-  width: 44vmax;
-  height: 44vmax;
-  left: -14vmax;
-  top: -16vmax;
-  background: radial-gradient(circle, #34d399 0%, rgba(52, 211, 153, 0) 68%);
-  animation: login-flotar-1 20s ease-in-out infinite alternate;
-}
-
-.login__blob--2 {
-  width: 40vmax;
-  height: 40vmax;
-  right: -12vmax;
-  bottom: -16vmax;
-  background: radial-gradient(circle, #7ee2b8 0%, rgba(126, 226, 184, 0) 70%);
-  animation: login-flotar-2 24s ease-in-out infinite alternate;
-}
-
-.login__blob--3 {
-  width: 30vmax;
-  height: 30vmax;
-  left: 40%;
-  top: 44%;
-  background: radial-gradient(circle, #a7f3d0 0%, rgba(167, 243, 208, 0) 72%);
-  opacity: 0.5;
-  animation: login-flotar-3 28s ease-in-out infinite alternate;
-}
-
-@keyframes login-flotar-1 {
-  to { transform: translate(8vmax, 6vmax) scale(1.08); }
-}
-@keyframes login-flotar-2 {
-  to { transform: translate(-10vmax, -6vmax) scale(1.12); }
-}
-@keyframes login-flotar-3 {
-  to { transform: translate(-6vmax, 8vmax) scale(0.9); }
-}
-
-.login__grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(14, 165, 107, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14, 165, 107, 0.08) 1px, transparent 1px);
-  background-size: 46px 46px;
-  mask-image: radial-gradient(ellipse 75% 70% at 32% 42%, #000 26%, transparent 78%);
-}
-
-/* ---------------- Hero (marca) ---------------- */
+/* ---------------- Hero ---------------- */
 .login__hero {
-  display: flex;
-  align-items: center;
-  padding: clamp(var(--space-8), 6vw, var(--space-16));
-
-  @include bp.down(lg) {
-    padding: var(--space-8) var(--space-5) var(--space-4);
-  }
-}
-
-.login__hero-inner {
-  width: 100%;
-  max-width: 580px;
-  animation: ui-rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.login__logo {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.login__logo-nube {
-  width: 84px;
-  height: 54px;
-  flex: none;
-  object-fit: contain;
-  filter: drop-shadow(0 16px 30px rgba(4, 120, 87, 0.28));
-  animation: login-flotar-logo 6s ease-in-out infinite alternate;
-}
-
-@keyframes login-flotar-logo {
-  to { transform: translateY(-4px); }
-}
-
-.login__logo-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
-
-.login__kicker {
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--atlas-green);
-}
-
-.login__org {
-  font-weight: 700;
-  color: var(--atlas-ink);
-}
-
-.login__title {
-  margin-top: var(--space-8);
-  font-family: var(--font-display);
-  font-size: clamp(2.4rem, 1.4rem + 3.6vw, 4.4rem);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.04em;
-  color: var(--atlas-ink);
-
-  @include bp.down(lg) {
-    margin-top: var(--space-5);
-    font-size: clamp(2rem, 1.4rem + 3vw, 2.8rem);
-  }
-}
-
-.login__title-accent {
-  background: linear-gradient(100deg, #059669 0%, #0ea56b 42%, #34d399 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.login__lead {
-  margin-top: var(--space-4);
-  max-width: 46ch;
-  font-size: var(--fs-lg);
-  line-height: 1.55;
-  color: var(--atlas-ink-2);
-
-  @include bp.down(lg) {
-    font-size: var(--fs-base);
-  }
-}
-
-/* ---------------- Acróstico ATLAS ---------------- */
-.atlas {
-  display: grid;
-  gap: 2px;
-  margin-top: var(--space-8);
-  list-style: none;
-
-  @include bp.down(lg) {
-    margin-top: var(--space-6);
-  }
-}
-
-.atlas__item {
+  --mx: 0;
+  --my: 0;
   position: relative;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(100deg, color-mix(in srgb, var(--c) 10%, transparent), transparent 64%);
-  border: 1px solid transparent;
-  border-left: 2px solid color-mix(in srgb, var(--c) 55%, transparent);
-  transition: background 0.35s ease, border-color 0.35s ease, transform 0.35s ease;
-  animation: atlas-entrar 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: calc(var(--i, 0) * 110ms + 250ms);
-
-  &:hover {
-    transform: translateX(4px);
-    background: linear-gradient(100deg, color-mix(in srgb, var(--c) 18%, transparent), transparent 72%);
-    border-color: color-mix(in srgb, var(--c) 32%, transparent);
-  }
-
-  &:nth-child(1) { --i: 0; }
-  &:nth-child(2) { --i: 1; }
-  &:nth-child(3) { --i: 2; }
-  &:nth-child(4) { --i: 3; }
-  &:nth-child(5) { --i: 4; }
-}
-
-@keyframes atlas-entrar {
-  from {
-    opacity: 0;
-    transform: translateY(14px) rotateX(-40deg);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) rotateX(0);
-  }
-}
-
-/* La letra: relieve 3D por extrusión de sombras multicapa. */
-.atlas__letra {
-  font-family: var(--font-display);
-  font-size: clamp(2.6rem, 1.6rem + 2.4vw, 3.6rem);
-  font-weight: 800;
-  line-height: 0.85;
-  letter-spacing: -0.04em;
-  color: color-mix(in srgb, var(--c) 55%, #0b1f18);
-  text-shadow:
-    1px 1px 0 color-mix(in srgb, var(--c) 70%, #043b2a),
-    2px 2px 0 color-mix(in srgb, var(--c) 60%, #043b2a),
-    3px 3px 0 color-mix(in srgb, var(--c) 50%, #043b2a),
-    4px 4px 0 color-mix(in srgb, var(--c) 42%, #043b2a),
-    6px 8px 14px rgba(4, 59, 42, 0.28);
-  transition: color 0.35s ease, text-shadow 0.35s ease;
-
-  .atlas__item:hover & {
-    color: var(--c);
-    text-shadow:
-      1px 1px 0 color-mix(in srgb, var(--c) 85%, #043b2a),
-      2px 2px 0 color-mix(in srgb, var(--c) 75%, #043b2a),
-      3px 3px 0 color-mix(in srgb, var(--c) 65%, #043b2a),
-      4px 4px 0 color-mix(in srgb, var(--c) 55%, #043b2a),
-      6px 10px 18px color-mix(in srgb, var(--c) 45%, transparent);
-  }
-}
-
-.atlas__info {
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   min-width: 0;
-}
-
-.atlas__palabra {
-  font-family: var(--font-display);
-  font-size: var(--fs-lg);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--atlas-ink);
-}
-
-.atlas__desc {
-  font-size: var(--fs-sm);
-  color: var(--atlas-ink-2);
   overflow: hidden;
-  text-overflow: ellipsis;
+  background: #fff;
+}
 
-  @include bp.down(sm) {
-    display: none;
+/* Lienzo: luz cálida arriba a la derecha + trama de puntos que deriva. */
+.login__fondo {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(55% 60% at 74% 38%, rgba(247, 196, 0, 0.1), transparent 70%),
+    radial-gradient(40% 45% at 70% 52%, rgba(225, 29, 46, 0.08), transparent 70%),
+    linear-gradient(180deg, #ffffff 0%, #f7f8fa 62%, #eef0f3 100%);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -40px;
+    background-image: radial-gradient(rgba(15, 18, 23, 0.07) 1px, transparent 1.2px);
+    background-size: 22px 22px;
+    mask-image: radial-gradient(70% 70% at 70% 45%, #000, transparent 75%);
+    animation: l-deriva 40s linear infinite;
   }
 }
 
-.atlas__icono {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  flex: none;
-  border-radius: var(--radius);
-  color: var(--c);
-  background: color-mix(in srgb, var(--c) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent);
-  transition: box-shadow 0.35s ease, background 0.35s ease;
+@keyframes l-deriva {
+  to { transform: translate3d(22px, 22px, 0); }
+}
 
-  .atlas__item:hover & {
-    background: color-mix(in srgb, var(--c) 22%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 48%, transparent), 0 0 20px -4px var(--c);
+/* Cuña roja diagonal en el borde derecho, con un brillo que la recorre. */
+.login__cinta {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: clamp(56px, 7vw, 132px);
+  pointer-events: none;
+  overflow: hidden;
+  clip-path: polygon(80% 0, 100% 0, 100% 100%, 0 100%);
+  background: linear-gradient(180deg, rgba(225, 29, 46, 0.12), rgba(225, 29, 46, 0.48) 45%, rgba(160, 10, 22, 0.95));
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -20% 0;
+    background: linear-gradient(180deg, transparent 40%, rgba(255, 255, 255, 0.4) 50%, transparent 60%);
+    animation: l-brillo-v 7s ease-in-out infinite;
   }
 }
 
-/* ---------------- Panel / tarjeta ---------------- */
-.login__panel {
+@keyframes l-brillo-v {
+  0%, 30% { transform: translateY(-60%); }
+  70%, 100% { transform: translateY(60%); }
+}
+
+/* Piso del almacén: rejilla en perspectiva con líneas de luz roja. */
+.login__piso {
+  position: absolute;
+  z-index: 0;
+  left: -10%;
+  right: -10%;
+  bottom: clamp(76px, 7vw, 104px);
+  height: clamp(150px, 22vh, 260px);
+  pointer-events: none;
+  transform: perspective(520px) rotateX(62deg);
+  transform-origin: 50% 100%;
+  background:
+    linear-gradient(90deg, rgba(15, 18, 23, 0.06) 1px, transparent 1px) 0 0 / 60px 100%,
+    linear-gradient(0deg, rgba(15, 18, 23, 0.06) 1px, transparent 1px) 0 0 / 100% 40px;
+  mask-image: linear-gradient(180deg, transparent, #000 45%);
+  animation: l-piso 3.2s linear infinite;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(225, 29, 46, 0.85) 30%, rgba(255, 70, 90, 1) 50%, rgba(225, 29, 46, 0.85) 70%, transparent);
+    box-shadow: 0 0 12px 2px rgba(225, 29, 46, 0.55);
+    animation: l-laser 4.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+
+  &::after {
+    animation-delay: -2.3s;
+  }
+}
+
+@keyframes l-piso {
+  to { background-position: 0 0, 0 40px; }
+}
+
+@keyframes l-laser {
+  0% { top: 0; opacity: 0; }
+  15% { opacity: 1; }
+  100% { top: 100%; opacity: 0.2; }
+}
+
+.login__contenido {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2.2vw, 32px);
+  padding: clamp(22px, 3vw, 48px) clamp(22px, 4vw, 72px) clamp(18px, 2vw, 32px);
+}
+
+/* ---------------- Marca (FP + IL) ---------------- */
+.login__marca {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: clamp(var(--space-5), 4vw, var(--space-12));
+  gap: clamp(12px, 1.2vw, 18px);
+  animation: l-subir 700ms $salida both;
+}
 
-  @include bp.down(lg) {
-    align-items: flex-start;
-    padding: var(--space-4) var(--space-4) var(--space-10);
+.login__fp {
+  width: clamp(150px, 13vw, 230px);
+  height: auto;
+  filter: drop-shadow(0 6px 10px rgba(15, 18, 23, 0.08));
+}
+
+.login__marca-sep {
+  width: 1px;
+  height: clamp(28px, 2.6vw, 40px);
+  background: linear-gradient(180deg, transparent, #cfd4db, transparent);
+}
+
+.login__il {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.login__il-caja {
+  display: grid;
+  place-items: center;
+  width: clamp(32px, 2.6vw, 40px);
+  aspect-ratio: 1;
+  flex: none;
+  border-radius: 8px;
+  background: linear-gradient(160deg, #ffd84a, var(--l-oro) 55%, #e2b200);
+  color: #14161b;
+  font-family: var(--font-display);
+  font-size: clamp(0.85rem, 0.7rem + 0.3vw, 1.05rem);
+  font-weight: 900;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 1px 2px rgba(120, 90, 0, 0.3),
+    0 10px 20px -8px rgba(247, 196, 0, 0.9);
+}
+
+.login__il-texto {
+  font-size: clamp(0.7rem, 0.6rem + 0.25vw, 0.86rem);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--l-tinta);
+}
+
+/* ---------------- Copy del hero ---------------- */
+.login__cuerpo {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  align-items: center;
+  gap: clamp(16px, 2vw, 40px);
+}
+
+.login__copy {
+  max-width: 620px;
+  container-type: inline-size;
+}
+
+.login__titulo {
+  display: flex;
+  margin: 0;
+  font-family: var(--font-display);
+  /* Escala con el ancho de su columna: nunca invade la escena. */
+  font-size: clamp(3rem, 27cqi, 10rem);
+  font-weight: 900;
+  line-height: 0.86;
+  letter-spacing: -0.035em;
+}
+
+/* Letras con volumen: canto oscuro escalonado + sombra larga suave. */
+.login__letra {
+  display: inline-block;
+  color: var(--l-rojo);
+  background: linear-gradient(180deg, #ff3448 0%, var(--l-rojo) 55%, #c8101f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter:
+    drop-shadow(0 1px 0 #b30e1c)
+    drop-shadow(0 2px 0 #9d0c18)
+    drop-shadow(0 3px 0 #860a14)
+    drop-shadow(0 18px 22px rgba(140, 8, 20, 0.28));
+  animation: l-letra 900ms calc(120ms + var(--i) * 70ms) $salida both;
+
+  &--oro {
+    background-image: linear-gradient(180deg, #ffd84a 0%, var(--l-oro) 55%, #e0ad00 100%);
+    filter:
+      drop-shadow(0 1px 0 #c79800)
+      drop-shadow(0 2px 0 #ad8400)
+      drop-shadow(0 3px 0 #926f00)
+      drop-shadow(0 18px 22px rgba(160, 120, 0, 0.3));
+  }
+}
+
+@keyframes l-letra {
+  from { opacity: 0; transform: translateY(40%) rotateX(-60deg); }
+}
+
+.login__subtitulo {
+  margin: clamp(10px, 1vw, 16px) 0 0;
+  font-size: clamp(0.95rem, 0.6rem + 0.9vw, 1.6rem);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--l-tinta);
+  animation: l-subir 700ms 420ms $salida both;
+}
+
+/* Acróstico: la palabra activa se resalta y subraya en ciclo (CSS puro). */
+.login__concepto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: clamp(12px, 1.2vw, 18px) 0 0;
+  font-size: clamp(0.8rem, 0.7rem + 0.25vw, 0.98rem);
+  font-weight: 600;
+  animation: l-subir 700ms 520ms $salida both;
+}
+
+.login__concepto-sep {
+  color: #c4cad3;
+}
+
+.login__palabra {
+  position: relative;
+  padding-bottom: 5px;
+  color: var(--l-tinta-2);
+  animation: l-palabra 12.5s calc(var(--i) * 2.5s) infinite;
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--l-oro), #ffb800);
+    transform: scaleX(0);
+    transform-origin: left;
+    animation: l-subrayado 12.5s calc(var(--i) * 2.5s) infinite;
+  }
+}
+
+@keyframes l-palabra {
+  0%, 20% { color: var(--l-tinta); }
+  24%, 100% { color: var(--l-tinta-2); }
+}
+
+@keyframes l-subrayado {
+  0% { transform: scaleX(0); }
+  4%, 18% { transform: scaleX(1); }
+  22%, 100% { transform: scaleX(0); transform-origin: right; }
+}
+
+.login__claim {
+  margin: clamp(18px, 2vw, 30px) 0 0;
+  max-width: 520px;
+  font-family: var(--font-display);
+  font-size: clamp(1.35rem, 0.8rem + 1.6vw, 2.6rem);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  color: var(--l-tinta);
+  animation: l-subir 800ms 620ms $salida both;
+
+  strong {
+    position: relative;
+    display: inline-block;
+    color: var(--l-rojo);
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0.02em;
+      height: 0.14em;
+      border-radius: 4px;
+      background: rgba(225, 29, 46, 0.16);
+      transform-origin: left;
+      animation: l-trazo 900ms 1.3s $salida both;
+    }
+  }
+}
+
+@keyframes l-trazo {
+  from { transform: scaleX(0); }
+}
+
+@keyframes l-subir {
+  from { opacity: 0; transform: translateY(18px); }
+}
+
+/* ---------------- Escena: mapa + Atlas + pines ---------------- */
+.login__escena {
+  position: relative;
+  justify-self: center;
+  width: 100%;
+  max-width: 640px;
+  aspect-ratio: 0.92;
+  max-height: calc(100dvh - 260px);
+  min-height: 380px;
+}
+
+.login__mapa {
+  position: absolute;
+  left: 44%;
+  top: 48%;
+  width: 74%;
+  height: auto;
+  transform: translate(-50%, -50%);
+  translate: calc(var(--mx) * 10px) calc(var(--my) * 8px);
+  transition: translate 900ms $salida;
+  filter: drop-shadow(0 30px 40px rgba(15, 23, 42, 0.12));
+  animation: l-aparecer 1200ms 300ms ease both;
+}
+
+@keyframes l-aparecer {
+  from { opacity: 0; }
+}
+
+.login__peru {
+  fill: url(#login-peru);
+  stroke: #cdd3db;
+  stroke-width: 1.2;
+}
+
+.login__rutas {
+  fill: none;
+  stroke: var(--l-rojo);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-dasharray: 3 6;
+  opacity: 0.7;
+  animation: l-flujo 1.6s linear infinite;
+}
+
+@keyframes l-flujo {
+  to { stroke-dashoffset: -18; }
+}
+
+.login__nodos circle {
+  fill: var(--l-rojo);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.login__nodos .login__nodo-halo {
+  fill: none;
+  stroke: var(--l-rojo);
+  stroke-width: 1.5;
+  opacity: 0.45;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: l-halo 2.6s ease-out infinite;
+}
+
+@keyframes l-halo {
+  70%, 100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* Resplandor y órbitas detrás del Atlas. */
+.login__halo {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  width: 70%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.4) 35%, transparent 62%),
+    conic-gradient(from 0deg, rgba(225, 29, 46, 0.14), rgba(247, 196, 0, 0.16), rgba(225, 29, 46, 0.14));
+  filter: blur(18px);
+  animation: ui-spin 24s linear infinite;
+}
+
+.login__orbita {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(225, 29, 46, 0.32);
+  transform: translate(-50%, -50%) rotateX(72deg) rotate(0deg);
+  animation: l-orbita 30s linear infinite;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: -5px;
+    left: 50%;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--l-rojo);
+    box-shadow: 0 0 0 4px rgba(225, 29, 46, 0.18), 0 0 14px rgba(225, 29, 46, 0.7);
+  }
+
+  &--1 { width: 86%; }
+
+  &--2 {
+    width: 64%;
+    border-color: rgba(247, 196, 0, 0.45);
+    animation-duration: 22s;
+    animation-direction: reverse;
+
+    &::after {
+      background: var(--l-oro);
+      box-shadow: 0 0 0 4px rgba(247, 196, 0, 0.2), 0 0 14px rgba(247, 196, 0, 0.8);
+    }
+  }
+}
+
+@keyframes l-orbita {
+  to { transform: translate(-50%, -50%) rotateX(72deg) rotate(360deg); }
+}
+
+.login__atlas {
+  position: absolute;
+  left: 50%;
+  bottom: 2%;
+  height: 92%;
+  aspect-ratio: 1061 / 1504;
+  transform: translateX(-50%);
+  translate: calc(var(--mx) * -18px) calc(var(--my) * -12px);
+  transition: translate 700ms $salida;
+  animation: l-atlas-entrar 1200ms 200ms $salida both;
+}
+
+@keyframes l-atlas-entrar {
+  from { opacity: 0; transform: translateX(-50%) translateY(30px) scale(0.94); }
+}
+
+.login__atlas-img {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 2px 2px rgba(40, 20, 8, 0.25))
+    drop-shadow(0 18px 24px rgba(40, 20, 8, 0.22))
+    drop-shadow(0 44px 60px rgba(15, 18, 23, 0.24));
+  animation: l-flotar 6s ease-in-out infinite;
+}
+
+@keyframes l-flotar {
+  50% { transform: translateY(-10px); }
+}
+
+/* Sombra de contacto: se contrae cuando el Atlas sube. */
+.login__atlas-sombra {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: -2%;
+  height: 7%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(15, 18, 23, 0.38), transparent);
+  filter: blur(4px);
+  animation: l-sombra 6s ease-in-out infinite;
+}
+
+@keyframes l-sombra {
+  50% { transform: scaleX(0.84); opacity: 0.7; }
+}
+
+.login__pin {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transform: translate(-50%, -50%);
+  translate: calc(var(--mx) * 6px) calc(var(--my) * 6px);
+  transition: translate 1000ms $salida;
+  animation:
+    l-pin 700ms calc(700ms + var(--i) * 140ms) $salida both,
+    l-pin-flotar 5s calc(var(--i) * -1.2s) ease-in-out infinite;
+}
+
+@keyframes l-pin {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 16px)) scale(0.85); }
+}
+
+@keyframes l-pin-flotar {
+  50% { transform: translate(-50%, calc(-50% - 6px)); }
+}
+
+.login__pin-ico {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(44px, 3.4vw, 56px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  color: var(--l-rojo);
+  background: radial-gradient(circle at 50% 30%, #fff, #f6f7f9);
+  border: 2px solid rgba(225, 29, 46, 0.5);
+  box-shadow:
+    inset 0 -2px 4px rgba(15, 18, 23, 0.06),
+    0 2px 4px rgba(15, 18, 23, 0.06),
+    0 14px 28px -10px rgba(15, 18, 23, 0.4),
+    0 0 0 6px rgba(255, 255, 255, 0.7);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(225, 29, 46, 0.35);
+    animation: l-onda 3s calc(var(--i) * 0.7s) ease-out infinite;
+  }
+}
+
+@keyframes l-onda {
+  from { transform: scale(0.8); opacity: 0.9; }
+  to { transform: scale(1.5); opacity: 0; }
+}
+
+.login__pin-texto {
+  max-width: 128px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: clamp(0.6rem, 0.52rem + 0.18vw, 0.72rem);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #1f2937;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 6px 16px -10px rgba(15, 18, 23, 0.5);
+}
+
+/* ---------------- Barra inferior de capas ---------------- */
+.login__barra {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: stretch;
+  min-height: clamp(76px, 7vw, 104px);
+  padding: 0 clamp(96px, 7vw, 140px) 0 clamp(12px, 2.4vw, 40px);
+  overflow: hidden;
+  color: #fff;
+  background: linear-gradient(90deg, #6f0a13, #a00f1b 45%, #b8111f 70%, #8d0c16);
+  box-shadow: 0 -24px 40px -24px rgba(110, 8, 18, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  clip-path: polygon(0 0, calc(100% - 90px) 0, 100% 100%, 0 100%);
+  animation: l-barra 800ms 300ms $salida both;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.14) 50%, transparent 65%);
+    transform: translateX(-100%);
+    animation: l-brillo-h 9s 2s ease-in-out infinite;
+  }
+}
+
+@keyframes l-barra {
+  from { transform: translateY(100%); }
+}
+
+@keyframes l-brillo-h {
+  0%, 60% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.login__barra-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 4px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.95);
+  animation: l-subir 600ms calc(600ms + var(--i) * 70ms) $salida both;
+
+  & + & {
+    border-left: 1px solid rgba(255, 255, 255, 0.16);
+  }
+}
+
+.login__barra-ico {
+  display: grid;
+  place-items: center;
+  transition: transform 300ms $salida;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+
+  .login__barra-item:hover & {
+    transform: translateY(-3px) scale(1.08);
+  }
+}
+
+.login__barra-texto {
+  font-size: clamp(0.56rem, 0.48rem + 0.2vw, 0.72rem);
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ---------------- Panel de acceso ---------------- */
+.login__panel {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: clamp(24px, 2.4vw, 48px);
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(-45deg, rgba(15, 23, 42, 0.03) 0 1px, transparent 1px 14px),
+    linear-gradient(180deg, #f6f7f8, var(--l-panel));
+  box-shadow: inset 1px 0 0 rgba(15, 18, 23, 0.06);
+}
+
+/* Franjas diagonales de marca en las esquinas del panel. */
+.login__franja {
+  position: absolute;
+  z-index: -1;
+  width: 160%;
+  height: 120px;
+  pointer-events: none;
+  transform: rotate(-38deg);
+
+  &--arriba {
+    top: -40px;
+    right: -78%;
+    background:
+      linear-gradient(90deg, transparent, rgba(225, 29, 46, 0.1) 30%, rgba(225, 29, 46, 0.22)) top / 100% 46% no-repeat,
+      linear-gradient(90deg, transparent, rgba(225, 29, 46, 0.06) 40%, rgba(225, 29, 46, 0.12)) bottom / 100% 22% no-repeat;
+  }
+
+  &--abajo {
+    bottom: -30px;
+    left: -86%;
+    background: linear-gradient(90deg, rgba(225, 29, 46, 0.16), rgba(225, 29, 46, 0.05) 60%, transparent) center / 100% 30% no-repeat;
   }
 }
 
 .login__card {
   position: relative;
-  width: 100%;
-  max-width: 420px;
-  padding: clamp(var(--space-6), 3vw, var(--space-8));
-  border-radius: 24px;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid var(--atlas-line);
+  width: min(100%, 420px);
+  padding: clamp(26px, 2.6vw, 44px);
+  color: #1f2937;
+  background: linear-gradient(180deg, #ffffff, #fdfdfd);
+  border: 1px solid rgba(15, 18, 23, 0.06);
+  border-radius: 20px;
   box-shadow:
-    0 30px 70px -28px rgba(4, 90, 66, 0.35),
-    0 1px 0 rgba(255, 255, 255, 0.9) inset;
-  backdrop-filter: blur(18px) saturate(1.2);
-  animation: ui-rise 700ms 120ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  overflow: hidden;
+    inset 0 1px 0 #fff,
+    0 1px 1px hsl(var(--l-sombra) / 0.04),
+    0 2px 4px hsl(var(--l-sombra) / 0.04),
+    0 6px 12px -2px hsl(var(--l-sombra) / 0.05),
+    0 16px 32px -8px hsl(var(--l-sombra) / 0.08),
+    0 40px 80px -24px hsl(var(--l-sombra) / 0.18),
+    0 80px 120px -60px hsl(var(--l-sombra) / 0.22);
+  animation: l-tarjeta 900ms 150ms $salida both;
 
+  /* Filete superior rojo → oro. */
   &::before {
     content: '';
     position: absolute;
-    inset: 0 0 auto 0;
-    height: 4px;
-    background: linear-gradient(90deg, #047857, #0ea56b, #34d399);
+    top: -1px;
+    left: 28px;
+    right: 28px;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: linear-gradient(90deg, var(--l-rojo), var(--l-oro));
   }
 }
 
-.login__wordmark {
-  display: block;
-  width: min(220px, 70%);
-  height: auto;
-  margin: 0 auto var(--space-5);
+@keyframes l-tarjeta {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+}
+
+.login__acceso {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--l-rojo);
+
+  img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    filter: drop-shadow(0 3px 4px rgba(60, 30, 10, 0.3));
+  }
 }
 
 .login__header {
   margin-bottom: var(--space-6);
-  text-align: center;
 
   h2 {
-    font-size: var(--fs-2xl);
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 1.3rem + 0.8vw, 2.1rem);
     font-weight: 800;
-    letter-spacing: -0.03em;
-    color: var(--atlas-ink);
+    letter-spacing: -0.025em;
+    color: var(--l-tinta);
   }
 
   p {
-    margin-top: 4px;
-    font-size: var(--fs-sm);
-    color: var(--text-3);
+    margin-top: 6px;
+    font-size: var(--fs-md);
+    line-height: 1.5;
+    color: var(--l-tinta-3);
   }
 }
 
@@ -379,79 +797,158 @@
   gap: var(--space-2);
   margin-bottom: var(--space-4);
   padding: var(--space-3);
-  border-radius: var(--radius);
+  border-radius: 10px;
   font-size: var(--fs-sm);
-  color: var(--danger);
-  background: var(--danger-soft);
-  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  color: #b91c1c;
+  background: #fef1f2;
+  border: 1px solid rgba(225, 29, 46, 0.25);
   animation: ui-shake 420ms both;
 }
 
 .login__form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
+
+  .ui-label {
+    font-weight: 600;
+    color: #1f2937;
+  }
 }
 
 .login__control {
   position: relative;
   display: flex;
   align-items: center;
+}
 
-  .ui-input {
-    min-height: 48px;
-    padding-left: 42px;
-    padding-right: 44px;
-    font-size: var(--fs-base);
-    border-radius: var(--radius-lg);
+.login__control .ui-input {
+  min-height: 50px;
+  padding-left: 44px;
+  padding-right: 46px;
+  font-size: 0.95rem;
+  color: var(--l-tinta);
+  background: #fff;
+  border: 1px solid #e2e5e9;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 2px rgba(15, 18, 23, 0.04);
+  transition: border-color 160ms ease, box-shadow 220ms ease, background-color 160ms ease;
 
-    &:focus {
-      border-color: var(--atlas-green);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--atlas-green) 18%, transparent);
-    }
+  &::placeholder { color: #9aa3af; }
+  &:hover { border-color: #c9ced6; }
+
+  &:focus {
+    border-color: var(--l-rojo);
+    box-shadow: 0 0 0 4px rgba(225, 29, 46, 0.12), 0 8px 18px -10px rgba(225, 29, 46, 0.5);
+  }
+}
+
+.login__control .ui-input.ui-input--invalid {
+  border-color: #dc2626;
+
+  &:focus {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.16);
   }
 }
 
 .login__control-icon {
   position: absolute;
-  left: 14px;
-  color: var(--text-3);
+  left: 15px;
+  color: #8a93a0;
   pointer-events: none;
+  transition: color 160ms ease;
+
+  .login__control:focus-within & {
+    color: var(--l-rojo);
+  }
 }
 
 .login__toggle {
   position: absolute;
-  right: 6px;
+  right: 7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 36px;
   height: 36px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 9px;
   background: transparent;
-  color: var(--text-3);
+  color: #8a93a0;
   cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
 
   &:hover {
-    background: var(--atlas-green-soft);
-    color: var(--atlas-green-deep);
+    background: rgba(225, 29, 46, 0.08);
+    color: var(--l-rojo);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--l-rojo);
+    outline-offset: 1px;
   }
 }
 
 .login__submit {
-  margin-top: var(--space-2);
-  height: 52px;
-  font-size: var(--fs-base);
+  position: relative;
+  overflow: hidden;
+  margin-top: var(--space-1);
+  height: 54px;
+  border: 0;
+  border-radius: 12px;
+  font-size: 1rem;
   font-weight: 700;
+  letter-spacing: 0.01em;
   color: #fff;
-  border-color: transparent;
-  background: linear-gradient(100deg, #059669 0%, #0ea56b 55%, #10b981 100%);
-  box-shadow: 0 16px 30px -12px rgba(5, 150, 105, 0.7);
+  background: linear-gradient(180deg, #ef2a3f, #d31125 60%, #bf0e20);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 1px 2px rgba(140, 8, 20, 0.3),
+    0 12px 24px -10px rgba(225, 29, 46, 0.7),
+    0 24px 40px -24px rgba(225, 29, 46, 0.6);
+  transition: transform 200ms $salida, box-shadow 220ms ease, filter 200ms ease;
+
+  /* Destello que cruza el botón. */
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+    transform: translateX(-120%);
+    animation: l-destello 5s 2.2s ease-in-out infinite;
+  }
 
   &:hover:not(:disabled) {
-    filter: brightness(1.06);
-    box-shadow: 0 18px 34px -12px rgba(5, 150, 105, 0.8);
+    transform: translateY(-1px);
+    filter: brightness(1.04);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.25),
+      0 2px 4px rgba(140, 8, 20, 0.3),
+      0 18px 30px -12px rgba(225, 29, 46, 0.8),
+      0 30px 50px -26px rgba(225, 29, 46, 0.7);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  &:focus-visible {
+    outline: 3px solid rgba(247, 196, 0, 0.8);
+    outline-offset: 2px;
+  }
+}
+
+@keyframes l-destello {
+  0%, 70% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+.login__submit-flecha {
+  transition: transform 260ms $salida;
+
+  .login__submit:hover & {
+    transform: translateX(4px);
   }
 }
 
@@ -462,34 +959,130 @@
   border-top-color: #fff;
 }
 
-.login__foot {
+.login__nota {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
-  margin-top: var(--space-6);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--atlas-line);
-  font-size: var(--fs-xs);
-  color: var(--text-3);
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #eceef1;
+  font-size: 0.78rem;
+  color: var(--l-tinta-3);
+
+  ui-icon { color: #7b8794; }
+}
+
+.login__uso {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
   text-align: center;
+  color: #9aa3af;
+  animation: l-aparecer 900ms 900ms ease both;
 }
 
-.login__foot-fp {
-  width: 150px;
-  height: auto;
-  opacity: 0.95;
+/* ---------------- Pantallas grandes (2K / 4K) ---------------- */
+@media (min-width: 1920px) {
+  .login__card { width: min(100%, 480px); }
+  .login__escena { max-width: 760px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .login__blob,
-  .login__logo-nube {
-    animation: none !important;
+/* ---------------- Responsive ---------------- */
+@include bp.down(xl) {
+  .login__cuerpo { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); }
+  .login__pin-texto { max-width: 104px; }
+}
+
+/* Tablet y móvil: hero compacto con el Atlas como fondo decorativo. */
+@include bp.down(lg) {
+  .login__cuerpo {
+    grid-template-columns: 1fr;
+    align-items: start;
   }
 
-  .atlas__item {
+  .login__copy {
+    position: relative;
+    z-index: 1;
+    max-width: 62%;
+  }
+
+  .login__escena {
+    position: absolute;
+    z-index: 0;
+    top: 50%;
+    right: clamp(-40px, -2vw, 0px);
+    width: clamp(220px, 44vw, 380px);
+    min-height: 0;
+    max-height: none;
+    transform: translateY(-46%);
+  }
+
+  .login__mapa,
+  .login__pin,
+  .login__orbita--2 {
+    display: none;
+  }
+
+  .login__piso { bottom: clamp(76px, 10vw, 96px); }
+
+  .login__barra {
+    padding-right: clamp(40px, 8vw, 80px);
+    overflow-x: auto;
+    clip-path: none;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar { display: none; }
+  }
+
+  .login__barra-item {
+    flex: none;
+    min-width: 108px;
+  }
+
+  .login__panel {
+    padding: var(--space-8) var(--space-4) var(--space-10);
+    box-shadow: inset 0 1px 0 rgba(15, 18, 23, 0.06);
+  }
+}
+
+@include bp.down(md) {
+  .login__barra,
+  .login__piso,
+  .login__cinta {
+    display: none;
+  }
+
+  .login__contenido { padding-bottom: var(--space-8); }
+}
+
+@include bp.down(sm) {
+  .login__marca { gap: 10px; }
+  .login__fp { width: 128px; }
+  .login__il-texto { letter-spacing: 0.1em; }
+  .login__copy { max-width: 66%; }
+  .login__concepto { display: none; }
+  .login__claim { font-size: 1.15rem; }
+
+  .login__escena {
+    right: -36px;
+    width: 58vw;
+    transform: translateY(-40%);
+  }
+
+  .login__card {
+    padding: 24px 20px;
+    border-radius: 18px;
+  }
+}
+
+/* ---------------- Movimiento reducido ---------------- */
+@media (prefers-reduced-motion: reduce) {
+  .login *,
+  .login *::before,
+  .login *::after {
     animation: none !important;
-    opacity: 1;
-    transform: none;
+    transition: none !important;
   }
 }

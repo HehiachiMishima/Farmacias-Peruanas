@@ -1,7 +1,7 @@
 @use 'breakpoints' as bp;
 
 /**
- * Launcher "Control Tower": cabecera navy con la escena de marca y tarjetas
+ * Launcher "Atlas": cabecera navy con la escena de marca y tarjetas
  * de panel con color de señal propio (--c) que reflejan los módulos
  * habilitados para el usuario.
  */
@@ -58,11 +58,11 @@
 }
 
 .launcher__brand-mark {
-  width: 50px;
-  height: 32px;
+  width: 46px;
+  height: 46px;
   flex: none;
   object-fit: contain;
-  filter: drop-shadow(0 8px 18px rgba(29, 99, 237, 0.5));
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 18px rgba(214, 140, 74, 0.4));
 }
 
 .launcher__brand-text {

@@ -1,19 +1,9 @@
-import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
-import { PANEL_ADMIN, primerModuloAccesible } from '../../../core/config/paneles';
+import { PANEL_ADMIN } from '../../../core/config/paneles';
 import { PERMISOS } from '../../../core/config/permisos';
 import { permisoGuard } from '../../../core/guards/permiso.guard';
-import { SesionStore } from '../../../core/services/sesion';
 import { PanelShell } from '../panel-shell';
-
-function primerModuloAdmin(): string {
-  try {
-    const modulo = primerModuloAccesible(PANEL_ADMIN, inject(SesionStore).permisos());
-    return modulo ? `/admin/${modulo.ruta}` : '/sin-acceso';
-  } catch {
-    return '/admin/dashboard';
-  }
-}
+import { aPrimerModulo } from '../panel-rutas';
 
 export const ADMIN_ROUTES: Routes = [
   {
@@ -21,7 +11,7 @@ export const ADMIN_ROUTES: Routes = [
     component: PanelShell,
     data: { panel: PANEL_ADMIN },
     children: [
-      { path: '', pathMatch: 'full', redirectTo: primerModuloAdmin },
+      { path: '', pathMatch: 'full', redirectTo: aPrimerModulo(PANEL_ADMIN) },
       {
         path: 'dashboard',
         canActivate: [permisoGuard(PERMISOS.DASHBOARD_ADMIN)],

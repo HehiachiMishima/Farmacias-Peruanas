@@ -49,10 +49,8 @@ export class Auth {
     if (!redirigir) {
       return;
     }
-    this.carga.mostrar('Cerrando sesión…');
-    void this.router.navigate(['/login']).then(() => {
-      setTimeout(() => this.carga.ocultar(), 450);
-    });
+    this.carga.mostrar('Saliendo de Atlas', 'Cerrando tu sesión de forma segura');
+    void this.router.navigate(['/login']).then(() => this.carga.ocultar());
   }
 
   tienePermiso(permiso: string): boolean {

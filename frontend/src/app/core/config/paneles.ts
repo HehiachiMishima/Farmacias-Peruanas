@@ -68,7 +68,7 @@ export const PANEL_ADMIN: PanelDef = {
       permiso: PERMISOS.VER_PERMISOS,
     },
   ],
-}
+};
 
 export const PANEL_BITACORA: PanelDef = {
   id: 'bitacora',
@@ -104,7 +104,7 @@ export const PANEL_BITACORA: PanelDef = {
       permiso: PERMISOS.VER_DASHBOARD,
     },
   ],
-}
+};
 
 export const PANEL_INBOUND: PanelDef = {
   id: 'inbound',
@@ -140,7 +140,7 @@ export const PANEL_INBOUND: PanelDef = {
       permiso: PERMISOS.VER_DASHBOARD_INBOUND,
     },
   ],
-}
+};
 
 /**
  * Paneles en construcción: misma estructura que los paneles reales (permiso,
@@ -166,7 +166,7 @@ export const PANEL_ANALISIS: PanelDef = {
       permiso: PERMISOS.PANEL_ANALISIS,
     },
   ],
-}
+};
 
 export const PANEL_TRAZABILIDAD: PanelDef = {
   id: 'trazabilidad',
@@ -187,7 +187,7 @@ export const PANEL_TRAZABILIDAD: PanelDef = {
       permiso: PERMISOS.PANEL_TRAZABILIDAD,
     },
   ],
-}
+};
 
 export const PANEL_LOGISTICA: PanelDef = {
   id: 'logistica',
@@ -208,7 +208,7 @@ export const PANEL_LOGISTICA: PanelDef = {
       permiso: PERMISOS.PANEL_LOGISTICA,
     },
   ],
-}
+};
 
 export const PANEL_AUTOMATIZACION: PanelDef = {
   id: 'automatizacion',
@@ -229,7 +229,7 @@ export const PANEL_AUTOMATIZACION: PanelDef = {
       permiso: PERMISOS.PANEL_AUTOMATIZACION,
     },
   ],
-}
+};
 
 export const PANEL_SINCRONIZACION: PanelDef = {
   id: 'sincronizacion',
@@ -250,7 +250,7 @@ export const PANEL_SINCRONIZACION: PanelDef = {
       permiso: PERMISOS.PANEL_SINCRONIZACION,
     },
   ],
-}
+};
 
 export const PANELES: PanelDef[] = [
   PANEL_ADMIN,
@@ -263,11 +263,16 @@ export const PANELES: PanelDef[] = [
   PANEL_SINCRONIZACION,
 ];
 
-export function primerModuloAccesible(panel: PanelDef, permisos: readonly string[]): ModuloPanel | undefined {
+/** Módulos del panel que el usuario puede abrir (todos si el panel es público). */
+export function modulosAccesibles(panel: PanelDef, permisos: readonly string[]): ModuloPanel[] {
   if (panel.publico) {
-    return panel.modulos[0];
+    return panel.modulos;
   }
-  return panel.modulos.find((modulo) => permisos.includes(modulo.permiso));
+  return panel.modulos.filter((modulo) => permisos.includes(modulo.permiso));
+}
+
+export function primerModuloAccesible(panel: PanelDef, permisos: readonly string[]): ModuloPanel | undefined {
+  return modulosAccesibles(panel, permisos)[0];
 }
 
 export function panelAccesible(panel: PanelDef, permisos: readonly string[]): boolean {

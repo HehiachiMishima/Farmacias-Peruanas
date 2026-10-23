@@ -1,18 +1,7 @@
-import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
-import { PANEL_SINCRONIZACION, primerModuloAccesible } from '../../../core/config/paneles';
-import { panelGuard } from '../../../core/guards/permiso.guard';
-import { SesionStore } from '../../../core/services/sesion';
+import { PANEL_SINCRONIZACION } from '../../../core/config/paneles';
 import { PanelShell } from '../panel-shell';
-
-function primerModuloSincronizacion(): string {
-  try {
-    const modulo = primerModuloAccesible(PANEL_SINCRONIZACION, inject(SesionStore).permisos());
-    return modulo ? `/sincronizacion/${modulo.ruta}` : '/sin-acceso';
-  } catch {
-    return '/sincronizacion/resumen';
-  }
-}
+import { aPrimerModulo } from '../panel-rutas';
 
 export const SINCRONIZACION_ROUTES: Routes = [
   {
@@ -20,11 +9,10 @@ export const SINCRONIZACION_ROUTES: Routes = [
     component: PanelShell,
     data: { panel: PANEL_SINCRONIZACION },
     children: [
-      { path: '', pathMatch: 'full', redirectTo: primerModuloSincronizacion },
+      { path: '', pathMatch: 'full', redirectTo: aPrimerModulo(PANEL_SINCRONIZACION) },
       {
         path: 'resumen',
-        loadComponent: () =>
-          import('./pages/resumen/resumen').then((m) => m.SincronizacionResumen),
+        loadComponent: () => import('./pages/resumen/resumen').then((m) => m.SincronizacionResumen),
       },
     ],
   },

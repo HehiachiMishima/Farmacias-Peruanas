@@ -2,7 +2,7 @@ import { Component, DestroyRef, HostListener, computed, inject, input, signal } 
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
-import { PanelDef } from '../../core/config/paneles';
+import { PanelDef, modulosAccesibles } from '../../core/config/paneles';
 import { Auth } from '../../core/services/auth';
 import { TemaService } from '../../core/services/tema';
 import { Icon } from '../../shared/ui/icon/icon';
@@ -11,7 +11,7 @@ import { MiCuenta } from '../../shared/ui/mi-cuenta/mi-cuenta';
 const ESCRITORIO = '(min-width: 1024px)';
 
 /**
- * Marco común de los paneles (Administración, Bitácora, Inbound).
+ * Marco común de todos los paneles de Atlas (definidos en core/config/paneles).
  *
  * - Escritorio (≥1024px): sidebar fijo que empuja el contenido; el botón de
  *   menú lo colapsa a un riel de iconos (la preferencia se recuerda).
@@ -43,10 +43,7 @@ export class PanelShell {
   readonly ahora = signal(new Date());
   private readonly url = signal(this.router.url);
 
-  readonly modulos = computed(() => {
-    const permisos = this.auth.permisos();
-    return this.panel().modulos.filter((modulo) => permisos.includes(modulo.permiso));
-  });
+  readonly modulos = computed(() => modulosAccesibles(this.panel(), this.auth.permisos()));
 
   readonly moduloActual = computed(() => {
     const segmentos = this.url().split('?')[0].split('/').filter(Boolean);

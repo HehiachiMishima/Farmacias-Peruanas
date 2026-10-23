@@ -1,11 +1,14 @@
-# Control Tower · Ingeniería Logística (Farmacias Peruanas)
+# Atlas · Plataforma de Ingeniería Logística (Farmacias Peruanas)
 
-Plataforma de control operativo: gobierno de identidades, roles y permisos, y
+**Atlas** (*Interfaz Atlas*) es la plataforma de control operativo de
+Ingeniería Logística: gobierno de identidades, roles y permisos, y
 registro/seguimiento de incidencias (Bitácora e Inbound), con acceso por
-paneles según los permisos de cada usuario.
+paneles según los permisos de cada usuario. Su nombre es un acróstico:
+**A**nálisis · **T**razabilidad · **L**ogística · **A**utomatización ·
+**S**incronización.
 
 - **Frontend**: Angular 22 (standalone, zoneless, signals) + SCSS. Diseño
-  "Control Tower": cromo navy, rojo de marca y paleta de señales, modo claro/oscuro.
+  "Atlas": cromo navy, rojo y oro de marca, paleta de señales, modo claro/oscuro.
 - **Backend**: Spring Boot 4.1 (Java 21), API REST stateless con JWT (HS256),
   organizado **por paneles**.
 - **Base de datos**: MySQL 8 (Aiven en producción).
@@ -19,10 +22,28 @@ paneles según los permisos de cada usuario.
 | Administración | `/admin` | Dashboard, Usuarios, Roles, Permisos | `PANEL_ADMIN` |
 | Bitácora | `/bitacora` | Incidencias, Control (centros, sistemas, áreas, responsables), Dashboard | `PANEL_BITACORA` |
 | Inbound | `/inbound` | Incidencias, Control (proveedores, tipos de incidencia), Dashboard | `PANEL_INBOUND` |
+| Análisis | `/analisis` | Resumen *(en construcción)* | `PANEL_ANALISIS` |
+| Trazabilidad | `/trazabilidad` | Resumen *(en construcción)* | `PANEL_TRAZABILIDAD` |
+| Logística | `/logistica` | Resumen *(en construcción)* | `PANEL_LOGISTICA` |
+| Automatización | `/automatizacion` | Resumen *(en construcción)* | `PANEL_AUTOMATIZACION` |
+| Sincronización | `/sincronizacion` | Resumen *(en construcción)* | `PANEL_SINCRONIZACION` |
 
 El *launcher* (`/`) muestra los paneles y, en cada uno, los módulos habilitados
 para el usuario. Cada ruta protegida valida su permiso con `permisoGuard`, y
 cada endpoint con `@PreAuthorize`.
+
+Los cinco paneles nuevos aún **no tienen lógica**: están marcados `publico: true`
+en `core/config/paneles.ts` (visibles para cualquier usuario autenticado, vía
+`panelGuard`) y su página `pages/resumen` muestra la vista común
+`EnConstruccion`. Para darles lógica:
+
+1. Crea el permiso en el backend (`data.sql`) y quita `publico: true` del panel.
+2. Añade sus módulos en `paneles.ts` (id, ruta, icono, permiso).
+3. Registra cada módulo en `<panel>.routes.ts` con `permisoGuard` y reemplaza
+   `pages/resumen` por las páginas reales.
+
+La ruta raíz de cada panel redirige a su primer módulo accesible con
+`aPrimerModulo(panel)` (`features/panels/panel-rutas.ts`).
 
 ---
 
@@ -48,12 +69,39 @@ cada endpoint con `@PreAuthorize`.
 │       └── common/             # Transversal: config, security, exception, support, web
 └── frontend/src/app/
     ├── core/                   # config, guards, interceptors, models, services, utils
-    ├── features/               # auth, launcher, panels/{admin,bitacora,inbound}
+    ├── features/               # auth, launcher, panels/{admin,bitacora,inbound,analisis,…}
     └── shared/                 # directivas, pipes y UI (icon, modal, charts, …)
 ```
 
 Cada panel del backend tiene sus propias capas:
 `controller / service / repository / model / request / response`.
+
+---
+
+## Marca e interfaz
+
+| Recurso | Uso |
+| --- | --- |
+| `public/marca/atlas.webp` | Atlas recortado (fondo transparente, HD) — escena del login. |
+| `public/marca/atlas-marca.webp` | Emblema compacto — sidebar, launcher, tarjeta de acceso, pantalla de carga. |
+| `public/marca/atlas-icono.png`, `public/favicon.png` | Ícono de la app (`apple-touch-icon`) y favicon. |
+| `public/marca/atlas-carga.webp` | Fondo de la pantalla de carga. |
+| `public/marca/fp-nombre.webp` | Logotipo Farmacias Peruanas (HD, fondo transparente). |
+
+Los originales (`atlasLogo.jpg`, `atlasCarga.jpg`, `FarmaciasPeruanasName.jpg`)
+quedan en `public/` como fuente; la app usa las versiones `webp` optimizadas.
+
+- **Login**: split-screen con hero animado (letras con volumen, acróstico en
+  ciclo, Atlas flotando sobre la red logística del Perú, órbitas, piso con luces
+  y parallax con el puntero) y tarjeta de acceso con sombras por capas. En
+  tablet/móvil el Atlas pasa a ser fondo decorativo del encabezado y la barra
+  de capas se oculta. Respeta `prefers-reduced-motion`.
+- **Pantalla de carga** (`ui-loader` + servicio `Carga`): "Ingresando a Atlas" /
+  "Saliendo de Atlas", con un tiempo mínimo en pantalla para que no parpadee.
+- **Modales** (`ui-modal`): sombra por capas, filete de marca, bloqueo del
+  scroll del documento y, en móvil (< 640 px), hoja inferior con pie fijo.
+- **Mi cuenta**: datos del usuario y cambio de contraseña, responsivo.
+- Los listados en móvil se mantienen como **registros** (filas), no tarjetas.
 
 ---
 

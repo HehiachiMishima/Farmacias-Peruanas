@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   effect,
   inject,
@@ -11,6 +12,9 @@ import {
 import { Icon } from '../icon/icon';
 
 export type AnchoModal = 'sm' | 'md' | 'lg' | 'xl';
+
+/** Diálogos abiertos a la vez: el scroll del documento se bloquea mientras haya alguno. */
+let abiertos = 0;
 
 const ENFOCABLES =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -75,10 +79,17 @@ export class Modal {
       const caja = this.caja();
       if (caja && this.focoPrevio === null) {
         this.focoPrevio = document.activeElement as HTMLElement | null;
+        this.bloquearScroll(true);
         this.enfocarPrimero(caja.nativeElement);
       } else if (!caja && this.focoPrevio !== null) {
+        this.bloquearScroll(false);
         this.focoPrevio.focus();
         this.focoPrevio = null;
+      }
+    });
+    inject(DestroyRef).onDestroy(() => {
+      if (this.focoPrevio !== null) {
+        this.bloquearScroll(false);
       }
     });
   }
@@ -102,6 +113,11 @@ export class Modal {
     if (evento.key === 'Tab') {
       this.atraparFoco(evento, caja.nativeElement);
     }
+  }
+
+  private bloquearScroll(bloquear: boolean): void {
+    abiertos = Math.max(0, abiertos + (bloquear ? 1 : -1));
+    document.documentElement.style.overflow = abiertos > 0 ? 'hidden' : '';
   }
 
   private enfocarPrimero(raiz: HTMLElement): void {
