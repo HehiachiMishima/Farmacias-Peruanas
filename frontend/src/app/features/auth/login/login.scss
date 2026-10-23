@@ -259,8 +259,8 @@ $salida: cubic-bezier(0.16, 1, 0.3, 1);
     /* 2 colores puros: Rojo arriba (travesaño) y Amarillo abajo (tallo) */
     background-image: linear-gradient(
       180deg,
-      var(--l-rojo) 26%,
-      var(--l-oro) 20%,
+      var(--l-rojo) 0 26%,
+      var(--l-oro) 26% 100%
     );
 
     /* Mantenemos la sombra 3D con el tono rojo para que el volumen coincida */

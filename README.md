@@ -83,8 +83,9 @@ Cada panel del backend tiene sus propias capas:
 | Recurso | Uso |
 | --- | --- |
 | `public/marca/login-almacen{-800,,-2704}.webp` | Foto del almacén con robots (800 / 1352 / 2704 px, escalada 4× con Real-ESRGAN) — parte baja del hero del login, servida con `srcset`. |
-| `public/marca/atlas-marca.webp` | Emblema Atlas — sidebar, launcher y pantalla de carga. |
-| `public/faviconFape.png`, `public/marca/fp-icono-*.png`, `public/marca/fp-apple-touch.png` | Favicon e íconos de la app (corazón FP, fondo transparente; el de iOS sobre blanco). |
+| `public/atlasImg.png` | Logo Atlas — favicon, sidebar y launcher. |
+| `public/marca/atlas-logo.webp` | Logo Atlas optimizado — pantalla de carga. |
+| `public/marca/fp-apple-touch.png` | Ícono de iOS (corazón FP sobre blanco). |
 | `public/marca/atlas-carga.webp` | Fondo de la pantalla de carga. |
 | `public/marca/fp-nombre.webp` | Logotipo Farmacias Peruanas (HD, fondo transparente). |
 
