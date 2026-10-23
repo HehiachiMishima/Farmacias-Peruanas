@@ -56,7 +56,7 @@ export class Login {
     { texto: 'Integración de sistemas', icono: 'engranaje' },
     { texto: 'Datos y analítica', icono: 'base_datos' },
     { texto: 'Procesos logísticos', icono: 'nodos' },
-    { texto: 'Distribución', icono: 'truck' },
+    { texto: 'Slotting', icono: 'area' },
     { texto: 'Farmacias', icono: 'farmacia' },
     { texto: 'Indicadores de operación', icono: 'dashboard' },
   ];
