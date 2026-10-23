@@ -1,19 +1,31 @@
 @use 'breakpoints' as bp;
 
 /**
- * Login "Control Tower": escena navy con malla de color (rojo marca, azul
- * tracking, violeta), rejilla técnica, radar y rutas de distribución
- * animadas. Todo CSS/SVG (sin WebGL ni video): liviano y respeta
- * prefers-reduced-motion.
+ * Login "Atlas" — rediseño claro en verde y blanco.
+ *
+ * Split-screen: a la izquierda la escena de marca con el acróstico ATLAS; a la
+ * derecha la tarjeta de inicio de sesión en blanco con acento esmeralda. Todo
+ * CSS/SVG (sin WebGL) y respeta prefers-reduced-motion.
  */
+
+/* ---------------- Tokens locales (solo este login) ---------------- */
 .login {
+  --atlas-green: #0ea56b;
+  --atlas-green-deep: #047857;
+  --atlas-green-soft: #e7f6ef;
+  --atlas-mint: #34d399;
+  --atlas-lime: #7ee2b8;
+  --atlas-ink: #0b1f18;
+  --atlas-ink-2: #3f5a52;
+  --atlas-line: #d3e6dd;
+
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(380px, 0.85fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(400px, 0.9fr);
   min-height: 100dvh;
-  color: #e8eef8;
-  background: #050b16;
+  color: var(--atlas-ink-2);
+  background: #f4fbf7;
   overflow: hidden;
 
   @include bp.down(lg) {
@@ -22,7 +34,7 @@
   }
 }
 
-/* ---------------- Escena ---------------- */
+/* ---------------- Escena de fondo ---------------- */
 .login__scene {
   position: absolute;
   inset: 0;
@@ -34,37 +46,37 @@
 .login__blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(70px);
-  opacity: 0.75;
+  filter: blur(80px);
+  opacity: 0.6;
   will-change: transform;
 }
 
 .login__blob--1 {
-  width: 46vmax;
-  height: 46vmax;
-  left: -12vmax;
+  width: 44vmax;
+  height: 44vmax;
+  left: -14vmax;
   top: -16vmax;
-  background: radial-gradient(circle, #e11d2e 0%, rgba(225, 29, 46, 0) 68%);
-  animation: login-flotar-1 18s ease-in-out infinite alternate;
+  background: radial-gradient(circle, #34d399 0%, rgba(52, 211, 153, 0) 68%);
+  animation: login-flotar-1 20s ease-in-out infinite alternate;
 }
 
 .login__blob--2 {
   width: 40vmax;
   height: 40vmax;
-  right: -10vmax;
-  bottom: -14vmax;
-  background: radial-gradient(circle, #1d63ed 0%, rgba(29, 99, 237, 0) 68%);
-  animation: login-flotar-2 22s ease-in-out infinite alternate;
+  right: -12vmax;
+  bottom: -16vmax;
+  background: radial-gradient(circle, #7ee2b8 0%, rgba(126, 226, 184, 0) 70%);
+  animation: login-flotar-2 24s ease-in-out infinite alternate;
 }
 
 .login__blob--3 {
-  width: 28vmax;
-  height: 28vmax;
-  left: 34%;
-  top: 38%;
-  background: radial-gradient(circle, #7c3aed 0%, rgba(124, 58, 237, 0) 70%);
-  opacity: 0.55;
-  animation: login-flotar-3 26s ease-in-out infinite alternate;
+  width: 30vmax;
+  height: 30vmax;
+  left: 40%;
+  top: 44%;
+  background: radial-gradient(circle, #a7f3d0 0%, rgba(167, 243, 208, 0) 72%);
+  opacity: 0.5;
+  animation: login-flotar-3 28s ease-in-out infinite alternate;
 }
 
 @keyframes login-flotar-1 {
@@ -81,82 +93,13 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: radial-gradient(ellipse 80% 70% at 35% 45%, #000 30%, transparent 80%);
+    linear-gradient(rgba(14, 165, 107, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 165, 107, 0.08) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(ellipse 75% 70% at 32% 42%, #000 26%, transparent 78%);
 }
 
-.login__radar {
-  position: absolute;
-  left: 30%;
-  top: 52%;
-  width: min(62vmin, 620px);
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle, transparent 0 24%, rgba(76, 141, 255, 0.16) 24.2% 24.6%, transparent 25%),
-    radial-gradient(circle, transparent 0 49%, rgba(76, 141, 255, 0.14) 49.2% 49.6%, transparent 50%),
-    radial-gradient(circle, transparent 0 74%, rgba(76, 141, 255, 0.12) 74.2% 74.6%, transparent 75%),
-    radial-gradient(circle, transparent 0 98.6%, rgba(76, 141, 255, 0.18) 99% 100%);
-
-  @include bp.down(lg) {
-    left: 50%;
-    top: 22%;
-  }
-}
-
-.login__radar-sweep {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, rgba(255, 59, 78, 0.22), rgba(255, 59, 78, 0) 60deg, transparent 360deg);
-  mask-image: radial-gradient(circle, #000 0 70%, transparent 100%);
-  animation: login-barrido 6s linear infinite;
-}
-
-@keyframes login-barrido {
-  to { transform: rotate(360deg); }
-}
-
-.login__routes {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.login__route {
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-dasharray: 140 900;
-  animation: login-ruta 7s linear infinite;
-}
-
-.login__route--a { stroke: url(#ruta-a); }
-.login__route--b { stroke: url(#ruta-b); animation-duration: 9s; animation-delay: -3s; }
-.login__route--c { stroke: url(#ruta-a); animation-duration: 11s; animation-delay: -6s; opacity: 0.7; }
-
-@keyframes login-ruta {
-  from { stroke-dashoffset: 1040; }
-  to { stroke-dashoffset: 0; }
-}
-
-.login__node {
-  fill: #fff;
-  opacity: 0.85;
-  filter: drop-shadow(0 0 6px #4c8dff);
-  animation: login-nodo 2.6s ease-in-out infinite;
-  animation-delay: calc(var(--d, 0) * -0.35s);
-}
-
-@keyframes login-nodo {
-  50% { opacity: 0.25; }
-}
-
-/* ---------------- Hero ---------------- */
+/* ---------------- Hero (marca) ---------------- */
 .login__hero {
   display: flex;
   align-items: center;
@@ -168,7 +111,8 @@
 }
 
 .login__hero-inner {
-  max-width: 560px;
+  width: 100%;
+  max-width: 580px;
   animation: ui-rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -183,19 +127,12 @@
   height: 54px;
   flex: none;
   object-fit: contain;
-  filter: drop-shadow(0 14px 30px rgba(29, 99, 237, 0.55));
+  filter: drop-shadow(0 16px 30px rgba(4, 120, 87, 0.28));
   animation: login-flotar-logo 6s ease-in-out infinite alternate;
 }
 
 @keyframes login-flotar-logo {
   to { transform: translateY(-4px); }
-}
-
-.login__wordmark {
-  display: block;
-  width: min(220px, 70%);
-  height: auto;
-  margin: 0 auto var(--space-5);
 }
 
 .login__logo-text {
@@ -209,12 +146,12 @@
   font-weight: 800;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: #ff6b78;
+  color: var(--atlas-green);
 }
 
 .login__org {
   font-weight: 700;
-  color: #fff;
+  color: var(--atlas-ink);
 }
 
 .login__title {
@@ -224,7 +161,7 @@
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.04em;
-  color: #fff;
+  color: var(--atlas-ink);
 
   @include bp.down(lg) {
     margin-top: var(--space-5);
@@ -233,7 +170,7 @@
 }
 
 .login__title-accent {
-  background: linear-gradient(100deg, #ff6b78 0%, #ff3b4e 35%, #7c8dff 75%, #4c8dff 100%);
+  background: linear-gradient(100deg, #059669 0%, #0ea56b 42%, #34d399 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -241,10 +178,10 @@
 
 .login__lead {
   margin-top: var(--space-4);
-  max-width: 48ch;
+  max-width: 46ch;
   font-size: var(--fs-lg);
   line-height: 1.55;
-  color: #b4c1d6;
+  color: var(--atlas-ink-2);
 
   @include bp.down(lg) {
     font-size: var(--fs-base);
@@ -271,7 +208,7 @@
   gap: var(--space-4);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-lg);
-  background: linear-gradient(100deg, color-mix(in srgb, var(--c) 12%, transparent), transparent 62%);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--c) 10%, transparent), transparent 64%);
   border: 1px solid transparent;
   border-left: 2px solid color-mix(in srgb, var(--c) 55%, transparent);
   transition: background 0.35s ease, border-color 0.35s ease, transform 0.35s ease;
@@ -280,8 +217,8 @@
 
   &:hover {
     transform: translateX(4px);
-    background: linear-gradient(100deg, color-mix(in srgb, var(--c) 20%, transparent), transparent 70%);
-    border-color: color-mix(in srgb, var(--c) 30%, transparent);
+    background: linear-gradient(100deg, color-mix(in srgb, var(--c) 18%, transparent), transparent 72%);
+    border-color: color-mix(in srgb, var(--c) 32%, transparent);
   }
 
   &:nth-child(1) { --i: 0; }
@@ -309,22 +246,22 @@
   font-weight: 800;
   line-height: 0.85;
   letter-spacing: -0.04em;
-  color: color-mix(in srgb, var(--c) 32%, #0b1424);
+  color: color-mix(in srgb, var(--c) 55%, #0b1f18);
   text-shadow:
-    1px 1px 0 color-mix(in srgb, var(--c) 60%, #05070d),
-    2px 2px 0 color-mix(in srgb, var(--c) 50%, #05070d),
-    3px 3px 0 color-mix(in srgb, var(--c) 42%, #05070d),
-    4px 4px 0 color-mix(in srgb, var(--c) 34%, #05070d),
-    6px 8px 14px rgba(0, 0, 0, 0.55);
+    1px 1px 0 color-mix(in srgb, var(--c) 70%, #043b2a),
+    2px 2px 0 color-mix(in srgb, var(--c) 60%, #043b2a),
+    3px 3px 0 color-mix(in srgb, var(--c) 50%, #043b2a),
+    4px 4px 0 color-mix(in srgb, var(--c) 42%, #043b2a),
+    6px 8px 14px rgba(4, 59, 42, 0.28);
   transition: color 0.35s ease, text-shadow 0.35s ease;
 
   .atlas__item:hover & {
     color: var(--c);
     text-shadow:
-      1px 1px 0 color-mix(in srgb, var(--c) 80%, #05070d),
-      2px 2px 0 color-mix(in srgb, var(--c) 70%, #05070d),
-      3px 3px 0 color-mix(in srgb, var(--c) 60%, #05070d),
-      4px 4px 0 color-mix(in srgb, var(--c) 50%, #05070d),
+      1px 1px 0 color-mix(in srgb, var(--c) 85%, #043b2a),
+      2px 2px 0 color-mix(in srgb, var(--c) 75%, #043b2a),
+      3px 3px 0 color-mix(in srgb, var(--c) 65%, #043b2a),
+      4px 4px 0 color-mix(in srgb, var(--c) 55%, #043b2a),
       6px 10px 18px color-mix(in srgb, var(--c) 45%, transparent);
   }
 }
@@ -340,12 +277,12 @@
   font-size: var(--fs-lg);
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: #fff;
+  color: var(--atlas-ink);
 }
 
 .atlas__desc {
   font-size: var(--fs-sm);
-  color: #8fa2c2;
+  color: var(--atlas-ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
 
@@ -364,38 +301,13 @@
   border-radius: var(--radius);
   color: var(--c);
   background: color-mix(in srgb, var(--c) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 28%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent);
   transition: box-shadow 0.35s ease, background 0.35s ease;
 
   .atlas__item:hover & {
     background: color-mix(in srgb, var(--c) 22%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent), 0 0 20px -4px var(--c);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 48%, transparent), 0 0 20px -4px var(--c);
   }
-}
-
-.login__ticker {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3) var(--space-5);
-  margin-top: var(--space-6);
-  font-size: var(--fs-sm);
-  color: #8fa2c2;
-
-  .ct-live {
-    color: #34d399;
-    background: rgba(52, 211, 153, 0.12);
-  }
-
-  @include bp.down(lg) {
-    display: none;
-  }
-}
-
-.login__ticker-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
 }
 
 /* ---------------- Panel / tarjeta ---------------- */
@@ -412,17 +324,19 @@
 }
 
 .login__card {
+  position: relative;
   width: 100%;
   max-width: 420px;
   padding: clamp(var(--space-6), 3vw, var(--space-8));
-  border-radius: 20px;
+  border-radius: 24px;
   color: var(--text);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
-  backdrop-filter: blur(18px) saturate(1.3);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--atlas-line);
+  box-shadow:
+    0 30px 70px -28px rgba(4, 90, 66, 0.35),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  backdrop-filter: blur(18px) saturate(1.2);
   animation: ui-rise 700ms 120ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  position: relative;
   overflow: hidden;
 
   &::before {
@@ -430,40 +344,33 @@
     position: absolute;
     inset: 0 0 auto 0;
     height: 4px;
-    background: linear-gradient(90deg, #e11d2e, #7c3aed, #1d63ed);
+    background: linear-gradient(90deg, #047857, #0ea56b, #34d399);
   }
+}
+
+.login__wordmark {
+  display: block;
+  width: min(220px, 70%);
+  height: auto;
+  margin: 0 auto var(--space-5);
 }
 
 .login__header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
   margin-bottom: var(--space-6);
+  text-align: center;
 
   h2 {
-    font-size: var(--fs-xl);
+    font-size: var(--fs-2xl);
     font-weight: 800;
     letter-spacing: -0.03em;
+    color: var(--atlas-ink);
   }
 
   p {
-    margin-top: 2px;
+    margin-top: 4px;
     font-size: var(--fs-sm);
     color: var(--text-3);
   }
-}
-
-.login__header-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  flex: none;
-  border-radius: 12px;
-  color: #fff;
-  background: var(--gradient-brand);
-  box-shadow: 0 10px 24px -8px rgba(225, 29, 46, 0.8);
 }
 
 .login__alert {
@@ -492,10 +399,16 @@
   align-items: center;
 
   .ui-input {
-    min-height: 46px;
+    min-height: 48px;
     padding-left: 42px;
     padding-right: 44px;
     font-size: var(--fs-base);
+    border-radius: var(--radius-lg);
+
+    &:focus {
+      border-color: var(--atlas-green);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--atlas-green) 18%, transparent);
+    }
   }
 }
 
@@ -521,19 +434,24 @@
   cursor: pointer;
 
   &:hover {
-    background: var(--surface-3);
-    color: var(--text);
+    background: var(--atlas-green-soft);
+    color: var(--atlas-green-deep);
   }
 }
 
 .login__submit {
   margin-top: var(--space-2);
-  height: 50px;
-  background: var(--gradient-brand);
+  height: 52px;
   font-size: var(--fs-base);
+  font-weight: 700;
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(100deg, #059669 0%, #0ea56b 55%, #10b981 100%);
+  box-shadow: 0 16px 30px -12px rgba(5, 150, 105, 0.7);
 
   &:hover:not(:disabled) {
-    filter: brightness(1.08);
+    filter: brightness(1.06);
+    box-shadow: 0 18px 34px -12px rgba(5, 150, 105, 0.8);
   }
 }
 
@@ -551,16 +469,10 @@
   gap: var(--space-3);
   margin-top: var(--space-6);
   padding-top: var(--space-4);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--atlas-line);
   font-size: var(--fs-xs);
   color: var(--text-3);
   text-align: center;
-}
-
-.login__foot-aviso {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .login__foot-fp {
@@ -571,9 +483,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .login__blob,
-  .login__radar-sweep,
-  .login__route,
-  .login__node,
   .login__logo-nube {
     animation: none !important;
   }

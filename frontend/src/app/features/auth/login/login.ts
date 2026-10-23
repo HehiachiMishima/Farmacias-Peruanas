@@ -32,11 +32,11 @@ export class Login {
 
   /** Concepto de la plataforma: acróstico ATLAS, letra por letra. */
   readonly letras: ReadonlyArray<{ letra: string; palabra: string; descripcion: string; color: string; icono: string }> = [
-    { letra: 'A', palabra: 'Análisis', descripcion: 'Indicadores, Fill Rate, incidencias y desempeño operativo.', color: '#ff3b4e', icono: 'dashboard' },
-    { letra: 'T', palabra: 'Trazabilidad', descripcion: 'Seguimiento de pedidos, rutas, procesos e incidencias.', color: '#4c8dff', icono: 'truck' },
+    { letra: 'A', palabra: 'Análisis', descripcion: 'Indicadores, Fill Rate, incidencias y desempeño operativo.', color: '#0ea56b', icono: 'dashboard' },
+    { letra: 'T', palabra: 'Trazabilidad', descripcion: 'Seguimiento de pedidos, rutas, procesos e incidencias.', color: '#10b981', icono: 'truck' },
     { letra: 'L', palabra: 'Logística', descripcion: 'Gestión de las herramientas y procesos de la operación.', color: '#34d399', icono: 'paquete' },
-    { letra: 'A', palabra: 'Automatización', descripcion: 'Reducción de tareas manuales y consolidación de reportes.', color: '#a855f7', icono: 'rayo' },
-    { letra: 'S', palabra: 'Sincronización', descripcion: 'Integración de información de diferentes sistemas y fuentes.', color: '#f59e0b', icono: 'globo' },
+    { letra: 'A', palabra: 'Automatización', descripcion: 'Reducción de tareas manuales y consolidación de reportes.', color: '#059669', icono: 'automatizacion' },
+    { letra: 'S', palabra: 'Sincronización', descripcion: 'Integración de información de diferentes sistemas y fuentes.', color: '#22c55e', icono: 'sincronizacion' },
   ];
 
   readonly formulario = this.fb.nonNullable.group({

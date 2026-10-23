@@ -1,31 +1,10 @@
 <div class="login">
-  <!-- Escena de fondo: malla de color + rejilla + radar + rutas (CSS/SVG, sin WebGL). -->
+  <!-- Escena de fondo: degradados suaves + rejilla + destellos (CSS puro). -->
   <div class="login__scene" aria-hidden="true">
     <span class="login__blob login__blob--1"></span>
     <span class="login__blob login__blob--2"></span>
     <span class="login__blob login__blob--3"></span>
     <span class="login__grid"></span>
-    <span class="login__radar"><span class="login__radar-sweep"></span></span>
-    <svg class="login__routes" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
-      <defs>
-        <linearGradient id="ruta-a" x1="0" x2="1">
-          <stop offset="0" stop-color="#ff3b4e" stop-opacity="0" />
-          <stop offset=".5" stop-color="#ff3b4e" />
-          <stop offset="1" stop-color="#ff3b4e" stop-opacity="0" />
-        </linearGradient>
-        <linearGradient id="ruta-b" x1="0" x2="1">
-          <stop offset="0" stop-color="#4c8dff" stop-opacity="0" />
-          <stop offset=".5" stop-color="#4c8dff" />
-          <stop offset="1" stop-color="#4c8dff" stop-opacity="0" />
-        </linearGradient>
-      </defs>
-      <path class="login__route login__route--a" d="M-20 420 C 140 360, 220 470, 360 380 S 600 250, 820 300" />
-      <path class="login__route login__route--b" d="M-20 180 C 120 240, 260 120, 400 200 S 640 360, 820 220" />
-      <path class="login__route login__route--c" d="M80 620 C 160 500, 300 540, 420 460 S 620 420, 760 -20" />
-      @for (nodo of nodos; track $index) {
-      <circle class="login__node" [attr.cx]="nodo[0]" [attr.cy]="nodo[1]" r="4" [style.--d]="$index" />
-      }
-    </svg>
   </div>
 
   <section class="login__hero">
@@ -41,8 +20,12 @@
       <h1 class="login__title">
         <span class="login__title-accent">Interfaz Atlas</span>
       </h1>
+      <p class="login__lead">
+        Una sola plataforma para analizar, trazar y sincronizar la operación
+        logística de Farmacias Peruanas.
+      </p>
 
-      <!-- Concepto de la plataforma: acróstico ATLAS en relieve. -->
+      <!-- Concepto de la plataforma: acróstico ATLAS. -->
       <ul class="atlas" aria-label="Qué significa Atlas">
         @for (l of letras; track $index) {
           <li class="atlas__item" [style.--c]="l.color">
@@ -55,26 +38,23 @@
           </li>
         }
       </ul>
-
     </div>
   </section>
 
   <section class="login__panel">
     <div class="login__card">
       <img class="login__wordmark" src="marca/cloudhub-nombre.webp" alt="Cloud Hub" width="220" height="84" />
+
       <header class="login__header">
-        <span class="login__header-icon"><ui-icon name="lock" [size]="20" /></span>
-        <div>
-          <h2>Iniciar sesión</h2>
-          <p>Accede con tu usuario corporativo o tu email.</p>
-        </div>
+        <h2>Inicia sesión</h2>
+        <p>Accede con tu usuario corporativo o tu email.</p>
       </header>
 
       @if (error()) {
-      <div class="login__alert" role="alert">
-        <ui-icon name="alertTriangle" [size]="18" />
-        <span>{{ error() }}</span>
-      </div>
+        <div class="login__alert" role="alert">
+          <ui-icon name="alertTriangle" [size]="18" />
+          <span>{{ error() }}</span>
+        </div>
       }
 
       <form class="login__form" [formGroup]="formulario" (ngSubmit)="enviar()" novalidate>
@@ -86,7 +66,7 @@
               formControlName="usuario" autocomplete="username" placeholder="@usuario" autofocus />
           </div>
           @if (campoInvalido('usuario')) {
-          <span class="ui-error">Ingresa tu usuario.</span>
+            <span class="ui-error">Ingresa tu usuario.</span>
           }
         </div>
 
@@ -104,18 +84,17 @@
             </button>
           </div>
           @if (campoInvalido('contrasena')) {
-          <span class="ui-error">Ingresa tu contraseña.</span>
+            <span class="ui-error">Ingresa tu contraseña.</span>
           }
         </div>
 
-        <button type="submit" class="ui-btn ui-btn--primary ui-btn--lg ui-btn--block login__submit"
-          [disabled]="cargando()">
+        <button type="submit" class="ui-btn ui-btn--lg ui-btn--block login__submit" [disabled]="cargando()">
           @if (cargando()) {
-          <span class="ui-spinner login__spinner"></span>
-          Verificando…
+            <span class="ui-spinner login__spinner"></span>
+            Verificando…
           } @else {
-          Ingresar a la interfaz de Atlas
-          <ui-icon name="flecha" [size]="18" />
+            Ingresar a la interfaz de Atlas
+            <ui-icon name="flecha" [size]="18" />
           }
         </button>
       </form>
