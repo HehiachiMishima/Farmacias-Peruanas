@@ -1,7 +1,12 @@
 <div class="login">
   <section #hero class="login__hero">
     <div class="login__foto" aria-hidden="true">
-      <img src="marca/login-almacen.webp" alt="" width="1352" height="440" fetchpriority="high" />
+      <img
+        src="marca/login-almacen.webp"
+        srcset="marca/login-almacen-800.webp 800w, marca/login-almacen.webp 1352w, marca/login-almacen-2704.webp 2704w"
+        sizes="(max-width: 1023px) 100vw, 69vw"
+        alt="" width="2704" height="880" fetchpriority="high" decoding="async" />
+
       <span class="login__laser"></span>
     </div>
     <span class="login__cinta" aria-hidden="true"></span>
