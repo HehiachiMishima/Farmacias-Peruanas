@@ -46,7 +46,7 @@
         <span class="shell__nav-icon"><ui-icon name="panel" [size]="18" /></span>
         <span class="shell__nav-text"><span class="shell__nav-name">Cambiar de panel</span></span>
       </button>
-      <p class="shell__foot-meta">Cloud Hub · Farmacias Peruanas</p>
+      <p class="shell__foot-meta">Atlas · Farmacias Peruanas</p>
     </div>
   </aside>
 
@@ -87,13 +87,18 @@
         </button>
 
         @if (usuario(); as u) {
-          <div class="shell__user">
+          <button
+            type="button"
+            class="shell__user"
+            (click)="abrirCuenta()"
+            [attr.aria-label]="'Mi cuenta: ' + u.nombre + ' ' + u.apellido"
+          >
             <span class="ui-avatar">{{ iniciales() }}</span>
             <span class="shell__user-info">
               <span class="shell__user-name">{{ u.nombre }} {{ u.apellido }}</span>
               <span class="shell__user-mail">{{ u.email }}</span>
             </span>
-          </div>
+          </button>
         }
 
         <button type="button" class="ui-icon-btn shell__logout" (click)="cerrarSesion()" aria-label="Cerrar sesión">
@@ -106,4 +111,6 @@
       <router-outlet />
     </main>
   </div>
+
+  <ui-mi-cuenta [abierto]="cuentaAbierta()" (cerrar)="cuentaAbierta.set(false)" />
 </div>

@@ -1823,3 +1823,25 @@ $pf-entrada: cubic-bezier(0.7, 0, 0.84, 0);
   min-width: 0;
 }
 
+
+/* 5 KPIs (p. ej. Bitácora): filas siempre completas, sin tarjetas huérfanas.
+   Escritorio ancho: 5 en línea · intermedio: 3 + 2 · móvil: 2 + 2 + 1 a lo ancho. */
+.dash-kpis:has(> :last-child:nth-child(5)) {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+
+  > :nth-child(-n + 3) { grid-column: span 2; }
+  > :nth-child(n + 4) { grid-column: span 3; }
+
+  @media (min-width: 1280px) {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+
+    > :nth-child(n) { grid-column: auto; }
+  }
+
+  @include bp.down(md) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    > :nth-child(n) { grid-column: auto; }
+    > :nth-child(5):nth-child(n) { grid-column: span 2; }
+  }
+}

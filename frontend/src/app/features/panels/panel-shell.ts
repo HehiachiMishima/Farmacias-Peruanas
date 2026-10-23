@@ -6,6 +6,7 @@ import { PanelDef } from '../../core/config/paneles';
 import { Auth } from '../../core/services/auth';
 import { TemaService } from '../../core/services/tema';
 import { Icon } from '../../shared/ui/icon/icon';
+import { MiCuenta } from '../../shared/ui/mi-cuenta/mi-cuenta';
 
 const ESCRITORIO = '(min-width: 1024px)';
 
@@ -18,7 +19,7 @@ const ESCRITORIO = '(min-width: 1024px)';
  */
 @Component({
   selector: 'app-panel-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon, MiCuenta],
   templateUrl: './panel-shell.html',
   styleUrl: './panel-shell.scss',
 })
@@ -36,6 +37,8 @@ export class PanelShell {
   readonly expandido = signal(this.leerPreferencia());
   /** Móvil: drawer visible. */
   readonly drawerAbierto = signal(false);
+  /** Modal "Mi cuenta". */
+  readonly cuentaAbierta = signal(false);
 
   readonly ahora = signal(new Date());
   private readonly url = signal(this.router.url);
@@ -123,6 +126,10 @@ export class PanelShell {
 
   irAPaneles(): void {
     void this.router.navigateByUrl('/');
+  }
+
+  abrirCuenta(): void {
+    this.cuentaAbierta.set(true);
   }
 
   cerrarSesion(): void {

@@ -30,6 +30,15 @@ export class Login {
     [140, 362], [360, 380], [600, 268], [120, 236], [400, 200], [640, 330], [300, 525], [520, 440],
   ];
 
+  /** Concepto de la plataforma: acróstico ATLAS, letra por letra. */
+  readonly letras: ReadonlyArray<{ letra: string; palabra: string; descripcion: string; color: string; icono: string }> = [
+    { letra: 'A', palabra: 'Análisis', descripcion: 'Indicadores, Fill Rate, incidencias y desempeño operativo.', color: '#ff3b4e', icono: 'dashboard' },
+    { letra: 'T', palabra: 'Trazabilidad', descripcion: 'Seguimiento de pedidos, rutas, procesos e incidencias.', color: '#4c8dff', icono: 'truck' },
+    { letra: 'L', palabra: 'Logística', descripcion: 'Gestión de las herramientas y procesos de la operación.', color: '#34d399', icono: 'paquete' },
+    { letra: 'A', palabra: 'Automatización', descripcion: 'Reducción de tareas manuales y consolidación de reportes.', color: '#a855f7', icono: 'rayo' },
+    { letra: 'S', palabra: 'Sincronización', descripcion: 'Integración de información de diferentes sistemas y fuentes.', color: '#f59e0b', icono: 'globo' },
+  ];
+
   readonly formulario = this.fb.nonNullable.group({
     usuario: ['', [Validators.required]],
     contrasena: ['', [Validators.required]],

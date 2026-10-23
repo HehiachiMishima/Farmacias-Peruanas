@@ -3,13 +3,15 @@ import { Service, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { Observable, map, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ApiResponse, AuthResponse, LoginRequest } from '../models';
+import { ApiResponse, AuthResponse, CambiarContrasenaRequest, LoginRequest } from '../models';
+import { Api } from './api';
 import { Carga } from './carga';
 import { SesionStore } from './sesion';
 
 @Service()
 export class Auth {
   private readonly http = inject(HttpClient);
+  private readonly api = inject(Api);
   private readonly router = inject(Router);
   private readonly sesionStore = inject(SesionStore);
   private readonly carga = inject(Carga);
@@ -35,6 +37,11 @@ export class Auth {
           }),
         ),
       );
+  }
+
+  /** Cambia la contraseña de la propia cuenta (exige la actual). */
+  cambiarContrasena(peticion: CambiarContrasenaRequest): Observable<void> {
+    return this.api.put<void>('/auth/contrasena', peticion);
   }
 
   cerrarSesion(redirigir = true): void {

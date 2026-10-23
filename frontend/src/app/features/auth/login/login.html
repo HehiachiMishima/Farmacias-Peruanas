@@ -23,7 +23,7 @@
       <path class="login__route login__route--b" d="M-20 180 C 120 240, 260 120, 400 200 S 640 360, 820 220" />
       <path class="login__route login__route--c" d="M80 620 C 160 500, 300 540, 420 460 S 620 420, 760 -20" />
       @for (nodo of nodos; track $index) {
-        <circle class="login__node" [attr.cx]="nodo[0]" [attr.cy]="nodo[1]" r="4" [style.--d]="$index" />
+      <circle class="login__node" [attr.cx]="nodo[0]" [attr.cy]="nodo[1]" r="4" [style.--d]="$index" />
       }
     </svg>
   </div>
@@ -39,42 +39,23 @@
       </div>
 
       <h1 class="login__title">
-        Cloud <span class="login__title-accent">Hub</span>
+        <span class="login__title-accent">Interfaz Atlas</span>
       </h1>
-      <p class="login__lead">
-        Centro de control operativo: registra incidencias, gobierna accesos y mide cada cadena de
-        abastecimiento en tiempo real.
-      </p>
 
-      <ul class="login__modules">
-        <li class="login__module" style="--c: #ff3b4e">
-          <span class="login__module-icon"><ui-icon name="bitacora" [size]="20" /></span>
-          <span>
-            <strong>Bitácora</strong>
-            <small>Incidencias por centro y sistema</small>
-          </span>
-        </li>
-        <li class="login__module" style="--c: #4c8dff">
-          <span class="login__module-icon"><ui-icon name="truck" [size]="20" /></span>
-          <span>
-            <strong>Inbound</strong>
-            <small>Recepción y proveedores</small>
-          </span>
-        </li>
-        <li class="login__module" style="--c: #34d399">
-          <span class="login__module-icon"><ui-icon name="shieldCheck" [size]="20" /></span>
-          <span>
-            <strong>Accesos</strong>
-            <small>Usuarios, roles y permisos</small>
-          </span>
-        </li>
+      <!-- Concepto de la plataforma: acróstico ATLAS en relieve. -->
+      <ul class="atlas" aria-label="Qué significa Atlas">
+        @for (l of letras; track $index) {
+          <li class="atlas__item" [style.--c]="l.color">
+            <span class="atlas__letra" aria-hidden="true">{{ l.letra }}</span>
+            <span class="atlas__info">
+              <span class="atlas__palabra">{{ l.palabra }}</span>
+              <span class="atlas__desc">{{ l.descripcion }}</span>
+            </span>
+            <span class="atlas__icono"><ui-icon [name]="l.icono" [size]="18" /></span>
+          </li>
+        }
       </ul>
 
-      <div class="login__ticker">
-        <span class="ct-live"><span class="ct-live__dot"></span>Sistema operativo</span>
-        <span class="login__ticker-item"><ui-icon name="servidor" [size]="14" /> API segura JWT</span>
-        <span class="login__ticker-item"><ui-icon name="rayo" [size]="14" /> Tiempo real</span>
-      </div>
     </div>
   </section>
 
@@ -90,10 +71,10 @@
       </header>
 
       @if (error()) {
-        <div class="login__alert" role="alert">
-          <ui-icon name="alertTriangle" [size]="18" />
-          <span>{{ error() }}</span>
-        </div>
+      <div class="login__alert" role="alert">
+        <ui-icon name="alertTriangle" [size]="18" />
+        <span>{{ error() }}</span>
+      </div>
       }
 
       <form class="login__form" [formGroup]="formulario" (ngSubmit)="enviar()" novalidate>
@@ -101,19 +82,11 @@
           <label class="ui-label" for="usuario">Usuario o email</label>
           <div class="login__control">
             <ui-icon name="user" [size]="18" class="login__control-icon" />
-            <input
-              id="usuario"
-              type="text"
-              class="ui-input"
-              [class.ui-input--invalid]="campoInvalido('usuario')"
-              formControlName="usuario"
-              autocomplete="username"
-              placeholder="@usuario"
-              autofocus
-            />
+            <input id="usuario" type="text" class="ui-input" [class.ui-input--invalid]="campoInvalido('usuario')"
+              formControlName="usuario" autocomplete="username" placeholder="@usuario" autofocus />
           </div>
           @if (campoInvalido('usuario')) {
-            <span class="ui-error">Ingresa tu usuario.</span>
+          <span class="ui-error">Ingresa tu usuario.</span>
           }
         </div>
 
@@ -121,46 +94,33 @@
           <label class="ui-label" for="contrasena">Contraseña</label>
           <div class="login__control">
             <ui-icon name="key" [size]="18" class="login__control-icon" />
-            <input
-              id="contrasena"
-              [type]="verContrasena() ? 'text' : 'password'"
-              class="ui-input"
-              [class.ui-input--invalid]="campoInvalido('contrasena')"
-              formControlName="contrasena"
-              autocomplete="current-password"
-              placeholder="••••••••"
-            />
-            <button
-              type="button"
-              class="login__toggle"
-              (click)="toggleContrasena()"
+            <input id="contrasena" [type]="verContrasena() ? 'text' : 'password'" class="ui-input"
+              [class.ui-input--invalid]="campoInvalido('contrasena')" formControlName="contrasena"
+              autocomplete="current-password" placeholder="••••••••" />
+            <button type="button" class="login__toggle" (click)="toggleContrasena()"
               [attr.aria-label]="verContrasena() ? 'Ocultar contraseña' : 'Mostrar contraseña'"
-              [attr.aria-pressed]="verContrasena()"
-            >
+              [attr.aria-pressed]="verContrasena()">
               <ui-icon [name]="verContrasena() ? 'ojoOff' : 'ojo'" [size]="18" />
             </button>
           </div>
           @if (campoInvalido('contrasena')) {
-            <span class="ui-error">Ingresa tu contraseña.</span>
+          <span class="ui-error">Ingresa tu contraseña.</span>
           }
         </div>
 
-        <button type="submit" class="ui-btn ui-btn--primary ui-btn--lg ui-btn--block login__submit" [disabled]="cargando()">
+        <button type="submit" class="ui-btn ui-btn--primary ui-btn--lg ui-btn--block login__submit"
+          [disabled]="cargando()">
           @if (cargando()) {
-            <span class="ui-spinner login__spinner"></span>
-            Verificando…
+          <span class="ui-spinner login__spinner"></span>
+          Verificando…
           } @else {
-            Ingresar a Cloud Hub
-            <ui-icon name="flecha" [size]="18" />
+          Ingresar a la interfaz de Atlas
+          <ui-icon name="flecha" [size]="18" />
           }
         </button>
       </form>
 
       <footer class="login__foot">
-        <p class="login__foot-aviso">
-          <ui-icon name="shield" [size]="14" />
-          Acceso restringido. Cada operación queda registrada con tu usuario.
-        </p>
         <img class="login__foot-fp" src="marca/fp-nombre.webp" alt="Farmacias Peruanas" width="150" height="39" />
       </footer>
     </div>

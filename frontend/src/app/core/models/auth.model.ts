@@ -5,6 +5,11 @@ export interface LoginRequest {
   contrasena: string;
 }
 
+export interface CambiarContrasenaRequest {
+  contrasenaActual: string;
+  contrasenaNueva: string;
+}
+
 export interface AuthResponse {
   token: string;
   tipo: string;
