@@ -17,7 +17,7 @@ import { Carga } from '../../../core/services/carga';
         <div class="loader__box">
           <span class="loader__emblema" aria-hidden="true">
             <span class="loader__anillo"></span>
-            <img src="marca/atlas-marca.webp" alt="" width="256" height="256" />
+            <img src="marca/atlas-logo.webp" alt="" width="256" height="256" />
           </span>
 
           <p class="loader__marca">AT<span>L</span>AS</p>
