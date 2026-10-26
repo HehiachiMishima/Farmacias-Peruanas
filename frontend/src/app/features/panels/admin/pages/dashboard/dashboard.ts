@@ -1,15 +1,12 @@
 import { Component, computed, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
-import { PANEL_ADMIN } from '../../../../../core/config/paneles';
 import { AnaliticaAdmin } from '../../../../../core/models';
 import { AdminAnaliticaApi } from '../../../../../core/services/admin-analitica.api';
 import { Auth } from '../../../../../core/services/auth';
 import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
 import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
-import { SERIES, entero, porcentaje } from '../../../../../shared/ui/charts/formato';
+import { entero, porcentaje } from '../../../../../shared/ui/charts/formato';
 import { GaugeChart } from '../../../../../shared/ui/charts/gauge-chart';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
-import { LineChart, SerieLinea } from '../../../../../shared/ui/charts/line-chart';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 
@@ -27,18 +24,14 @@ const COLOR_PANEL: Record<string, string> = {
   PANEL_SIMULACION: 'var(--cyan)',
 };
 
-/** Roles visibles en el cuadro de reparto; el resto se agrupa en «Otros». */
-const MAX_ROLES = 4;
-
 /**
- * Dashboard ejecutivo de Administración: salud del gobierno de accesos.
- *
- * Tres indicadores (cuentas activas, usuarios sin rol, excepciones) y cuatro
- * cuadros: cuentas habilitadas, acceso por panel, reparto por rol y altas.
+ * Dashboard ejecutivo de Administración: lo mínimo para saber si el acceso
+ * está sano. Tres indicadores (cuentas activas, usuarios sin rol,
+ * excepciones) y dos cuadros: cuentas habilitadas y acceso por panel.
  */
 @Component({
   selector: 'app-admin-dashboard',
-  imports: [RouterLink, BarChart, EmptyState, GaugeChart, Icon, Kpi, LineChart],
+  imports: [BarChart, EmptyState, GaugeChart, Icon, Kpi],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
@@ -46,18 +39,12 @@ export class Dashboard {
   private readonly auth = inject(Auth);
   private readonly api = inject(AdminAnaliticaApi);
 
-  private readonly permisos = this.auth.permisos;
   readonly usuario = this.auth.usuario;
-  readonly panelRuta = PANEL_ADMIN.ruta;
 
   private readonly recurso = new RecursoRemoto<AnaliticaAdmin>(() => this.api.analitica());
   readonly cargando = this.recurso.cargando;
   readonly error = this.recurso.error;
   readonly datos = this.recurso.valor;
-
-  readonly modulos = computed(() =>
-    PANEL_ADMIN.modulos.filter((modulo) => this.permisos().includes(modulo.permiso)),
-  );
 
   readonly saludo = computed(() => {
     const hora = new Date().getHours();
@@ -107,21 +94,6 @@ export class Dashboard {
     };
   });
 
-  /** Top de roles por usuarios; los demás se suman en «Otros». */
-  readonly barrasRoles = computed<BarraDato[]>(() => {
-    const roles = (this.datos()?.usuariosPorRol ?? []).filter((c) => c.valor > 0);
-    const total = this.kpis()?.usuarios ?? 0;
-    const visibles = roles.slice(0, MAX_ROLES);
-    const resto = roles.slice(MAX_ROLES).reduce((suma, c) => suma + c.valor, 0);
-    const lista = resto > 0 ? [...visibles, { etiqueta: 'Otros', valor: resto }] : visibles;
-    return lista.map((c, i) => ({
-      etiqueta: c.etiqueta,
-      valor: c.valor,
-      color: c.etiqueta === 'Otros' ? 'var(--chart-otros)' : SERIES[i % SERIES.length],
-      detalle: porcentaje(total ? c.valor / total : 0),
-    }));
-  });
-
   /** Usuarios activos con acceso a cada panel, en % del total de activos. */
   readonly barrasCobertura = computed<BarraDato[]>(() => {
     const activos = this.kpis()?.usuariosActivos ?? 0;
@@ -135,17 +107,6 @@ export class Dashboard {
         detalle: `${porcentaje(activos ? valor / activos : 0)} de los activos`,
       };
     });
-  });
-
-  readonly altas = computed(() => {
-    const serie = this.datos()?.altasPorMes ?? [];
-    return {
-      etiquetas: serie.map((p) => p.periodo),
-      series: [
-        { nombre: 'Altas', color: 'var(--accent)', valores: serie.map((p) => p.valor) },
-        { nombre: 'Siguen activas', color: 'var(--success)', valores: serie.map((p) => p.secundario) },
-      ] as SerieLinea[],
-    };
   });
 
   constructor() {

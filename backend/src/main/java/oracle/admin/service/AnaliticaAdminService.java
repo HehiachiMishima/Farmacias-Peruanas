@@ -39,12 +39,9 @@ public class AnaliticaAdminService {
 
     private Mono<AnaliticaAdminResponse> calcular() {
         return Mono.zip(
-                r -> new AnaliticaAdminResponse((AnaliticaAdminResponse.Kpis) r[0],
-                        lista(r[1]), lista(r[2]), lista(r[3])),
+                r -> new AnaliticaAdminResponse((AnaliticaAdminResponse.Kpis) r[0], lista(r[1])),
                 ejecutor.consulta(repo::kpis),
-                ejecutor.consulta(repo::usuariosPorRol),
-                ejecutor.consulta(repo::coberturaPaneles),
-                ejecutor.consulta(repo::altasPorMes));
+                ejecutor.consulta(repo::coberturaPaneles));
     }
 
     @SuppressWarnings("unchecked")

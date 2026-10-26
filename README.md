@@ -308,7 +308,7 @@ Base: `/api`
 | `GET/POST/PUT/DELETE` | `/inbound/incidencias`, `/inbound/control/*` | JWT + permisos `*_INBOUND` |
 | `GET` | `/incidencias/analitica` | `VER_DASHBOARD` — KPIs, Pareto de sistemas, matriz centro × sistema, tipos, tendencia y horas |
 | `GET` | `/inbound/incidencias/analitica` | `VER_DASHBOARD_INBOUND` — ranking/Pareto de proveedores, matriz proveedor × tipo, SKUs, tendencias |
-| `GET` | `/admin/analitica` | `DASHBOARD_ADMIN` — cuentas, roles, permisos, cobertura por panel y altas |
+| `GET` | `/admin/analitica` | `DASHBOARD_ADMIN` — cuentas activas, usuarios sin rol, excepciones y cobertura por panel |
 | `GET/POST/PUT/DELETE` | `/simulacion/registros` (+ `/opciones`) | `*_REGISTRO_SIMULACION` — carga multipart (.xlsx/.xls/.csv, 20 MB, 100 000 filas) |
 | `GET/PUT` | `/simulacion/registros/{id}/configuracion` | `VER/MODIFICAR_CONFIGURACION_SIMULACION` — parámetros y carga agregada por cluster/chute |
 | `GET` | `/simulacion/registros/{id}/rutas` | `VER_CONFIGURACION_SIMULACION` — rutas paginadas (filtros cluster, chute y prefijo de código) |

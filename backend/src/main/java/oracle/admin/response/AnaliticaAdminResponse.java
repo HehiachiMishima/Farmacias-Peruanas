@@ -1,14 +1,11 @@
 package oracle.admin.response;
 
 import java.util.List;
-import oracle.common.response.PuntoSerie;
 
 /** Indicadores ejecutivos del gobierno de accesos (RBAC + overrides). */
 public record AnaliticaAdminResponse(
         Kpis kpis,
-        List<Conteo> usuariosPorRol,
-        List<Conteo> coberturaPaneles,
-        List<PuntoSerie> altasPorMes) {
+        List<Conteo> coberturaPaneles) {
 
     /**
      * @param usuariosSinRol riesgo: cuentas que solo dependen de overrides o no tienen acceso.
@@ -18,10 +15,6 @@ public record AnaliticaAdminResponse(
             long usuarios,
             long usuariosActivos,
             long usuariosSinRol,
-            long roles,
-            long rolesActivos,
-            long permisos,
-            long permisosActivos,
             long overridesGrant,
             long overridesDeny) {
     }

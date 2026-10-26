@@ -3,29 +3,44 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
-import { ArchivoSimulacion, DashboardSimulacion } from '../../../../../core/models';
+import {
+  ArchivoSimulacion,
+  ChuteComparativoSimulacion,
+  DashboardSimulacion,
+} from '../../../../../core/models';
 import { SimulacionApi } from '../../../../../core/services/simulacion.api';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
-import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
-import { BulletChart, ItemBullet } from '../../../../../shared/ui/charts/bullet-chart';
+import { ComparativoChart, GrupoComparativo } from '../../../../../shared/ui/charts/comparativo-chart';
 import { porcentaje } from '../../../../../shared/ui/charts/formato';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
-import { RingChart, SegmentoAnillo } from '../../../../../shared/ui/charts/ring-chart';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 import { etiquetaRegistro, formatearHoras, formatearNumero } from '../../simulacion-formato';
 
-interface Hallazgo {
-  kicker: string;
-  texto: string;
-  icono: string;
-  color: string;
-}
+type Metrica = 'bultos' | 'unidades' | 'lineas' | 'cod';
 
+/** Métricas de carga por chute: qué campos comparar y cómo se llaman. */
+const METRICAS: ReadonlyArray<{
+  id: Metrica;
+  nombre: string;
+  antes: (c: ChuteComparativoSimulacion) => number;
+  despues: (c: ChuteComparativoSimulacion) => number;
+}> = [
+  { id: 'bultos', nombre: 'Bultos', antes: (c) => c.bultosOriginal, despues: (c) => c.bultosBalanceado },
+  { id: 'unidades', nombre: 'Unidades', antes: (c) => c.unidadesOriginal, despues: (c) => c.unidadesBalanceado },
+  { id: 'lineas', nombre: 'Líneas', antes: (c) => c.lineasOriginal, despues: (c) => c.lineasBalanceado },
+  { id: 'cod', nombre: 'COD', antes: (c) => c.codOriginal, despues: (c) => c.codBalanceado },
+];
+
+/**
+ * Dashboard ejecutivo de simulación: comparativo antes vs. después del
+ * balanceo. Por chute se compara la carga (bultos, unidades, líneas, COD);
+ * por cluster, solo el tiempo de cierre frente a su límite.
+ */
 @Component({
   selector: 'app-simulacion-dashboard',
-  imports: [HasPermiso, Kpi, BarChart, BulletChart, RingChart, EmptyState, Icon, SelectBuscable],
+  imports: [HasPermiso, Kpi, ComparativoChart, EmptyState, Icon, SelectBuscable],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
@@ -35,8 +50,11 @@ export class SimulacionDashboard {
   private readonly router = inject(Router);
 
   readonly permisos = PERMISOS;
+  readonly metricas = METRICAS;
   readonly formatearHoras = formatearHoras;
   readonly formatearNumero = formatearNumero;
+  /** Valores de carga en el gráfico: enteros con separador de miles. */
+  readonly formatoCarga = (valor: number): string => formatearNumero(valor);
 
   readonly registros = signal<ArchivoSimulacion[]>([]);
   readonly seleccionado = signal<number | null>(null);
@@ -48,6 +66,9 @@ export class SimulacionDashboard {
   readonly errorOpciones = signal<string | null>(null);
   /** Descarta respuestas viejas si el usuario cambia de registro rápido. */
   private solicitud = 0;
+
+  readonly metrica = signal<Metrica>('bultos');
+  readonly metricaActual = computed(() => METRICAS.find((m) => m.id === this.metrica()) ?? METRICAS[0]);
 
   readonly opcionesRegistro = computed(() =>
     this.registros().map((registro) => ({ id: registro.id, etiqueta: etiquetaRegistro(registro) })),
@@ -62,13 +83,10 @@ export class SimulacionDashboard {
   readonly estaBalanceado = computed(() => this.registroSeleccionado()?.estado === 'BALANCEADO');
 
   readonly tarjetas = computed(() => {
-    const datos = this.dashboard();
-    if (!datos) {
+    const kpis = this.dashboard()?.kpis;
+    if (!kpis) {
       return [];
     }
-    const { kpis, clusters } = datos;
-    const conLimite = clusters.filter((cluster) => cluster.limiteHoras > 0);
-    const cumplen = conLimite.filter((cluster) => !cluster.excede).length;
     return [
       {
         etiqueta: 'Cierre de la operación',
@@ -88,142 +106,43 @@ export class SimulacionDashboard {
             : 'Sin proyección de referencia',
       },
       {
-        etiqueta: 'Clusters en su límite',
-        valor: conLimite.length ? `${cumplen} de ${conLimite.length}` : '—',
-        icono: 'checkCircleFilled',
-        color: cumplen === conLimite.length ? 'var(--success)' : 'var(--danger)',
-        detalle: !conLimite.length
-          ? 'Sin límites definidos'
-          : cumplen === conLimite.length
-            ? 'Todos cumplen su límite'
-            : `${conLimite.length - cumplen} todavía ${conLimite.length - cumplen === 1 ? 'excede' : 'exceden'}`,
-      },
-      {
-        etiqueta: 'Rutas movidas',
-        valor: formatearNumero(kpis.rutasMovidas),
+        etiqueta: 'Ajustes realizados',
+        valor: `${formatearNumero(kpis.rutasMovidas)} rutas`,
         icono: 'flecha',
-        color: 'var(--cyan)',
-        detalle: 'Entre chutes (balanceo y manual)',
-      },
-      {
-        etiqueta: 'Operarios añadidos',
-        valor: formatearNumero(kpis.operariosAgregados),
-        icono: 'usuarios',
         color: 'var(--violet)',
-        detalle: 'En los chutes cuello de botella',
-      },
-      {
-        etiqueta: 'Bultos proyectados',
-        valor: formatearNumero(kpis.bultos),
-        icono: 'paquete',
-        color: 'var(--brand)',
-        detalle: `${formatearNumero(kpis.unidades)} unidades · ${formatearNumero(kpis.cod)} COD`,
+        detalle: `${formatearNumero(kpis.operariosAgregados)} operario(s) añadido(s)`,
       },
     ];
   });
 
-  /** Tres conclusiones en lenguaje de negocio, calculadas de los mismos datos. */
-  readonly hallazgos = computed<Hallazgo[]>(() => {
-    const datos = this.dashboard();
-    if (!datos || datos.clusters.length === 0) {
-      return [];
-    }
-    const lista: Hallazgo[] = [];
-    const masLento = [...datos.clusters].sort((a, b) => b.tiempoBalanceado - a.tiempoBalanceado)[0];
-    lista.push({
-      kicker: 'Marca el cierre',
-      texto: `<strong>${escapar(masLento.cluster)}</strong> termina en <strong>${formatearHoras(masLento.tiempoBalanceado)}</strong>${
-        masLento.limiteHoras > 0 ? ` con un límite de ${formatearHoras(masLento.limiteHoras)}` : ''
-      }.`,
-      icono: 'reloj',
-      color: masLento.excede ? 'var(--danger)' : 'var(--accent)',
-    });
-
-    const cuello = [...datos.chutes].sort((a, b) => b.tiempoBalanceado - a.tiempoBalanceado)[0];
-    if (cuello) {
-      lista.push({
-        kicker: 'Chute más cargado',
-        texto: `<strong>${escapar(cuello.chute)}</strong> necesita <strong>${formatearHoras(cuello.tiempoBalanceado)}</strong> con ${cuello.operariosBalanceado} operario(s).`,
-        icono: 'alerta',
-        color: 'var(--warning)',
-      });
-    }
-
-    const mejoraron = datos.chutes.filter((chute) => chute.estado === 'MEJORO').length;
-    lista.push({
-      kicker: 'Resultado del ajuste',
-      texto:
-        datos.kpis.tiempoAhorrado > 0.01
-          ? `El cierre baja <strong>${formatearHoras(datos.kpis.tiempoAhorrado)}</strong> y <strong>${mejoraron}</strong> chute(s) reducen su tiempo.`
-          : 'Los ajustes no cambian el tiempo de cierre de la operación.',
-      icono: 'tendencia',
-      color: datos.kpis.tiempoAhorrado > 0.01 ? 'var(--success)' : 'var(--text-3)',
-    });
-    return lista;
-  });
-
-  /**
-   * Cierre por cluster: barra del tiempo balanceado sobre la del original
-   * (atenuada) y una marca en el límite. Todas comparten escala.
-   */
-  readonly cierres = computed(() => {
-    const clusters = this.dashboard()?.clusters ?? [];
-    const escala = Math.max(
-      0.01,
-      ...clusters.map((cluster) =>
-        Math.max(cluster.tiempoOriginal, cluster.tiempoBalanceado, cluster.limiteHoras),
-      ),
-    );
-    return clusters.map((cluster) => ({
-      cluster: cluster.cluster,
-      tiempoOriginal: cluster.tiempoOriginal,
-      tiempoBalanceado: cluster.tiempoBalanceado,
-      limiteHoras: cluster.limiteHoras,
-      excede: cluster.excede,
-      pctOriginal: Math.min(100, (cluster.tiempoOriginal / escala) * 100),
-      pctBalanceado: Math.min(100, (cluster.tiempoBalanceado / escala) * 100),
-      pctLimite: cluster.limiteHoras > 0 ? Math.min(100, (cluster.limiteHoras / escala) * 100) : 0,
-      ahorro: Math.max(0, cluster.tiempoOriginal - cluster.tiempoBalanceado),
+  /** Carga por chute (métrica elegida): antes vs. después. */
+  readonly gruposChute = computed<GrupoComparativo[]>(() => {
+    const metrica = this.metricaActual();
+    return (this.dashboard()?.chutes ?? []).map((chute) => ({
+      etiqueta: chute.chute,
+      antes: Number(metrica.antes(chute)),
+      despues: Number(metrica.despues(chute)),
     }));
   });
 
-  readonly cargaClusters = computed<SegmentoAnillo[]>(() =>
+  /** Tiempo de cierre por cluster: antes vs. después, con su límite. */
+  readonly gruposCluster = computed<GrupoComparativo[]>(() =>
     (this.dashboard()?.clusters ?? []).map((cluster) => ({
       etiqueta: cluster.cluster,
-      valor: Number(cluster.bultosBalanceado),
+      antes: Number(cluster.tiempoOriginal),
+      despues: Number(cluster.tiempoBalanceado),
+      limite: Number(cluster.limiteHoras),
     })),
   );
 
-  /** Tiempo de cada chute frente al promedio de los chutes con carga. */
-  readonly tiemposChute = computed(() => {
-    const chutes = (this.dashboard()?.chutes ?? []).filter((chute) => chute.tiempoBalanceado > 0);
-    const promedio = chutes.length
-      ? chutes.reduce((total, chute) => total + chute.tiempoBalanceado, 0) / chutes.length
-      : 0;
-    const items: ItemBullet[] = chutes.map((chute) => ({
-      etiqueta: chute.chute,
-      valor: chute.tiempoBalanceado,
-      texto: formatearHoras(chute.tiempoBalanceado),
-      detalle: `${chute.operariosBalanceado} operario(s) · ${formatearNumero(chute.bultosBalanceado)} bultos`,
+  /** Totales de las cuatro métricas (fila final del cuadro por chute). */
+  readonly totalesChute = computed(() => {
+    const chutes = this.dashboard()?.chutes ?? [];
+    return METRICAS.map((m) => ({
+      antes: chutes.reduce((total, chute) => total + Number(m.antes(chute)), 0),
+      despues: chutes.reduce((total, chute) => total + Number(m.despues(chute)), 0),
     }));
-    return { items, promedio, texto: formatearHoras(promedio) };
   });
-
-  readonly operariosAnadidos = computed<BarraDato[]>(() =>
-    (this.dashboard()?.chutes ?? [])
-      .filter((chute) => chute.operariosBalanceado > chute.operariosOriginal)
-      .sort(
-        (a, b) =>
-          b.operariosBalanceado - b.operariosOriginal - (a.operariosBalanceado - a.operariosOriginal),
-      )
-      .slice(0, 5)
-      .map((chute) => ({
-        etiqueta: chute.chute,
-        valor: chute.operariosBalanceado - chute.operariosOriginal,
-        color: 'var(--violet)',
-        detalle: `${chute.operariosOriginal} → ${chute.operariosBalanceado} operarios`,
-      })),
-  );
 
   constructor() {
     this.cargarOpciones();
@@ -310,23 +229,28 @@ export class SimulacionDashboard {
       });
   }
 
-  estadoChute(estado: string): { texto: string; clase: string } {
-    if (estado === 'MEJORO') {
-      return { texto: 'Mejoró', clase: 'ui-badge--success' };
-    }
-    if (estado === 'AUMENTO') {
-      return { texto: 'Aumentó', clase: 'ui-badge--warning' };
-    }
-    return { texto: 'Igual', clase: 'ui-badge--neutral' };
-  }
-
-  /** Variación del tiempo del chute en % («−25 %»); vacío si no había tiempo base. */
+  /** Variación relativa «+12 %» / «−8 %»; «—» si no había base. */
   variacion(antes: number, despues: number): string {
     if (antes <= 0) {
-      return '—';
+      return despues > 0 ? 'nuevo' : '—';
     }
     const relativa = (despues - antes) / antes;
     return Math.abs(relativa) < 0.0005 ? '0 %' : `${relativa > 0 ? '+' : ''}${porcentaje(relativa)}`;
+  }
+
+  /**
+   * Color de la variación. En tiempo, bajar es bueno (verde) y subir es malo
+   * (ámbar); en carga, mover bultos no es bueno ni malo: solo se marca el sentido.
+   */
+  claseVariacion(antes: number, despues: number, bajarEsBueno: boolean): string {
+    if (Math.abs(despues - antes) < 0.005) {
+      return '';
+    }
+    const baja = despues < antes;
+    if (!bajarEsBueno) {
+      return baja ? 'dash-delta--menos' : 'dash-delta--mas';
+    }
+    return baja ? 'dash-delta--baja' : 'dash-delta--sube';
   }
 
   irAConfiguracion(): void {
@@ -339,9 +263,4 @@ export class SimulacionDashboard {
   irARegistro(): void {
     void this.router.navigate(['/simulacion/registro']);
   }
-}
-
-/** Los nombres de cluster/chute vienen del Excel: se escapan antes de usarlos en [innerHTML]. */
-function escapar(texto: string): string {
-  return texto.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }

@@ -84,16 +84,10 @@ export interface AnaliticaAdmin {
     usuarios: number;
     usuariosActivos: number;
     usuariosSinRol: number;
-    roles: number;
-    rolesActivos: number;
-    permisos: number;
-    permisosActivos: number;
     overridesGrant: number;
     overridesDeny: number;
   };
-  usuariosPorRol: Conteo[];
   coberturaPaneles: Conteo[];
-  altasPorMes: PuntoSerie[];
 }
 
 export interface Conteo {

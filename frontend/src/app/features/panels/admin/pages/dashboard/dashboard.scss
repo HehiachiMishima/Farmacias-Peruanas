@@ -1,10 +1,4 @@
-@use 'breakpoints' as bp;
-
 /* Layout común de dashboards en styles/_components.scss (.dash-*). */
-
-.admin-grid {
-  margin-bottom: var(--space-10);
-}
 
 /* Gauge centrado con su desglose debajo; no se estira con la altura de la fila. */
 .admin-centro {
@@ -16,11 +10,11 @@
 
   ui-gauge {
     width: 100%;
-    max-width: 200px;
+    max-width: 220px;
   }
 }
 
-/* Gráficos centrados verticalmente para que las tarjetas de una fila se vean parejas. */
+/* Barras centradas verticalmente para que la pareja de tarjetas se vea pareja. */
 .admin-medio {
   display: flex;
   flex-direction: column;
@@ -65,120 +59,4 @@
   &--ok {
     background: var(--success);
   }
-}
-
-.admin-error {
-  margin-bottom: var(--space-8);
-}
-
-.section-title {
-  font-size: var(--fs-lg);
-  margin-bottom: var(--space-4);
-}
-
-.quick {
-  margin-bottom: var(--space-10);
-}
-
-.quick__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
-  gap: var(--space-4);
-}
-
-.quick__card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xs);
-  transition: border-color var(--transition), background var(--transition);
-
-  &:hover {
-    background: var(--surface-2);
-    border-color: var(--border-strong);
-  }
-}
-
-.quick__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-3);
-  color: var(--text-2);
-  flex: none;
-}
-
-.quick__text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  flex: 1;
-}
-
-.quick__name {
-  font-weight: 600;
-  color: var(--text);
-}
-
-.quick__desc {
-  font-size: var(--fs-sm);
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.quick__arrow {
-  color: var(--text-3);
-  flex: none;
-}
-
-.quick__card:hover .quick__arrow {
-  color: var(--text-2);
-}
-
-.info__card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  padding: var(--space-6);
-}
-
-.info__list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-
-  @include bp.up(md) {
-    flex-direction: row;
-  }
-
-  li {
-    display: flex;
-    gap: var(--space-3);
-    min-width: 0;
-
-    div { min-width: 0; }
-  }
-}
-
-.info__step {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-pill);
-  background: var(--brand-soft);
-  color: var(--text-2);
-  font-weight: 700;
-  flex: none;
 }
