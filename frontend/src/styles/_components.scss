@@ -1921,6 +1921,16 @@ $pf-entrada: cubic-bezier(0.7, 0, 0.84, 0);
 }
 
 
+/* 3 KPIs (p. ej. Administración): una fila de 3 en cualquier ancho de escritorio
+   (sin ocupar media rejilla de 6) y apiladas en móvil. */
+.dash-kpis:has(> :last-child:nth-child(3)) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+
+  @include bp.down(sm) {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* 5 KPIs (p. ej. Bitácora): filas siempre completas, sin tarjetas huérfanas.
    Escritorio ancho: 5 en línea · intermedio: 3 + 2 · móvil: 2 + 2 + 1 a lo ancho. */
 .dash-kpis:has(> :last-child:nth-child(5)) {

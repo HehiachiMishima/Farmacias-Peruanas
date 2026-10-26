@@ -20,6 +20,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -117,6 +118,14 @@ public class GlobalExceptionHandler {
             HttpMediaTypeNotSupportedException ex, HttpServletRequest req) {
         return cuerpo(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
                 "El Content-Type de la peticion no esta soportado. Use application/json.", req);
+    }
+
+    /** Archivo mayor que spring.servlet.multipart.max-file-size: 413 con mensaje claro. */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> archivoDemasiadoGrande(
+            MaxUploadSizeExceededException ex, HttpServletRequest req) {
+        return cuerpo(HttpStatus.CONTENT_TOO_LARGE,
+                "El archivo supera el tamano maximo permitido (20 MB).", req);
     }
 
     /** Ruta inexistente: ninguna coincidencia de handler ni recurso estatico. */

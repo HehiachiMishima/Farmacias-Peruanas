@@ -20,6 +20,8 @@ export const SIMULACION_ROUTES: Routes = [
       {
         path: 'configuracion',
         canActivate: [permisoGuard(PERMISOS.VER_CONFIGURACION_SIMULACION)],
+        // Avisa antes de salir con parámetros sin guardar (sidebar, atrás, enlaces).
+        canDeactivate: [(pagina: { puedeSalir(): boolean }) => pagina.puedeSalir()],
         loadComponent: () =>
           import('./pages/configuracion/configuracion').then((m) => m.SimulacionConfiguracion),
       },

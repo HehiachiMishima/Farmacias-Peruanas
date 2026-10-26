@@ -92,7 +92,6 @@ export interface AnaliticaAdmin {
     overridesDeny: number;
   };
   usuariosPorRol: Conteo[];
-  permisosMasOtorgados: Conteo[];
   coberturaPaneles: Conteo[];
   altasPorMes: PuntoSerie[];
 }

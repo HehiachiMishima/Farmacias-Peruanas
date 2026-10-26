@@ -12,7 +12,7 @@ import oracle.simulacion.response.BalanceoResponse;
 import oracle.simulacion.response.ConfiguracionSimulacionResponse;
 import oracle.simulacion.response.DashboardSimulacionResponse;
 import oracle.simulacion.response.HistorialSimulacionResponse;
-import oracle.simulacion.response.ResumenSimulacionResponse;
+import oracle.simulacion.response.RutaSimulacionResponse;
 import oracle.simulacion.service.SimulacionConfiguracionService;
 import oracle.simulacion.service.SimulacionRegistroService;
 import org.springframework.http.MediaType;
@@ -54,23 +54,11 @@ public class SimulacionController {
     return registroService.listar(pagina, tamano, texto);
   }
 
-  @GetMapping("/registros/resumen")
-  @PreAuthorize("hasAuthority('VER_REGISTRO_SIMULACION')")
-  public Mono<ApiResponse<ResumenSimulacionResponse>> resumen() {
-    return registroService.resumen();
-  }
-
   @GetMapping("/registros/opciones")
   @PreAuthorize(
       "hasAnyAuthority('VER_REGISTRO_SIMULACION','VER_CONFIGURACION_SIMULACION','VER_DASHBOARD_SIMULACION')")
   public Mono<ApiResponse<List<ArchivoSimulacionResponse>>> opciones() {
     return registroService.opciones();
-  }
-
-  @GetMapping("/registros/{id}")
-  @PreAuthorize("hasAuthority('VER_REGISTRO_SIMULACION')")
-  public Mono<ApiResponse<ArchivoSimulacionResponse>> obtener(@PathVariable Long id) {
-    return registroService.obtener(id);
   }
 
   @PostMapping(value = "/registros", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -107,6 +95,18 @@ public class SimulacionController {
   public Mono<ApiResponse<ConfiguracionSimulacionResponse>> guardarConfiguracion(
       @PathVariable Long id, @Valid @RequestBody ConfiguracionActualizarRequest req) {
     return configuracionService.guardar(id, req);
+  }
+
+  @GetMapping("/registros/{id}/rutas")
+  @PreAuthorize("hasAuthority('VER_CONFIGURACION_SIMULACION')")
+  public Mono<ApiResponse<PaginaResponse<RutaSimulacionResponse>>> rutas(
+      @PathVariable Long id,
+      @RequestParam(defaultValue = "1") int pagina,
+      @RequestParam(defaultValue = "25") int tamano,
+      @RequestParam(required = false) String texto,
+      @RequestParam(required = false) Long clusterId,
+      @RequestParam(required = false) Long chuteId) {
+    return configuracionService.rutas(id, pagina, tamano, texto, clusterId, chuteId);
   }
 
   @PutMapping("/registros/{id}/rutas/{rutaId}/mover")

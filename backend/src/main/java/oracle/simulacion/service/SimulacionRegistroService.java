@@ -2,15 +2,15 @@ package oracle.simulacion.service;
 
 import jakarta.persistence.criteria.Predicate;
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import oracle.common.config.Transacciones;
 import oracle.common.exception.ConflictoException;
+import oracle.common.exception.LimiteExcedidoException;
 import oracle.common.exception.RecursoNoEncontradoException;
 import oracle.common.response.ApiResponse;
 import oracle.common.response.PaginaResponse;
@@ -19,26 +19,12 @@ import oracle.common.support.Auditoria;
 import oracle.common.support.Filtros;
 import oracle.common.support.Trazas;
 import oracle.simulacion.model.ArchivoExcel;
-import oracle.simulacion.model.Chute;
-import oracle.simulacion.model.Cluster;
-import oracle.simulacion.model.ParametroChute;
-import oracle.simulacion.model.ParametroChuteId;
-import oracle.simulacion.model.ParametroCluster;
-import oracle.simulacion.model.ParametroClusterId;
-import oracle.simulacion.model.RutaProyeccion;
-import oracle.simulacion.model.SimulacionConfig;
 import oracle.simulacion.repository.ArchivoExcelRepository;
-import oracle.simulacion.repository.ChuteRepository;
-import oracle.simulacion.repository.ClusterRepository;
-import oracle.simulacion.repository.ParametroChuteRepository;
-import oracle.simulacion.repository.ParametroClusterRepository;
-import oracle.simulacion.repository.ResumenGlobal;
 import oracle.simulacion.repository.ResumenRutasArchivo;
 import oracle.simulacion.repository.RutaProyeccionRepository;
-import oracle.simulacion.repository.SimulacionConfigRepository;
+import oracle.simulacion.repository.SimulacionLotesRepository;
 import oracle.simulacion.request.RegistroActualizarRequest;
 import oracle.simulacion.response.ArchivoSimulacionResponse;
-import oracle.simulacion.response.ResumenSimulacionResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -54,36 +40,30 @@ import reactor.core.scheduler.Schedulers;
 public class SimulacionRegistroService {
 
   private static final int MAX_TAMANO_PAGINA = 100;
-  private static final int MAX_OPCIONES = 200;
   private static final BigDecimal VELOCIDAD_INICIAL = new BigDecimal("100.00");
   private static final int OPERARIOS_INICIALES = 2;
   private static final String COLOR_INICIAL = "#1d63ed";
+  /**
+   * Cargas que se procesan a la vez por instancia. Leer y guardar un libro
+   * grande usa CPU, memoria y una conexión durante segundos: con un tope, una
+   * ráfaga de subidas responde 429 en lugar de agotar el pool para todos.
+   */
+  private static final int MAX_CARGAS_SIMULTANEAS = 4;
 
   private final ArchivoExcelRepository archivoRepo;
-  private final SimulacionConfigRepository configRepo;
-  private final ClusterRepository clusterRepo;
-  private final ChuteRepository chuteRepo;
-  private final ParametroClusterRepository parametroClusterRepo;
-  private final ParametroChuteRepository parametroChuteRepo;
   private final RutaProyeccionRepository rutaRepo;
+  private final SimulacionLotesRepository lotes;
   private final Transacciones transacciones;
+  private final Semaphore cargas = new Semaphore(MAX_CARGAS_SIMULTANEAS);
 
   public SimulacionRegistroService(
       ArchivoExcelRepository archivoRepo,
-      SimulacionConfigRepository configRepo,
-      ClusterRepository clusterRepo,
-      ChuteRepository chuteRepo,
-      ParametroClusterRepository parametroClusterRepo,
-      ParametroChuteRepository parametroChuteRepo,
       RutaProyeccionRepository rutaRepo,
+      SimulacionLotesRepository lotes,
       Transacciones transacciones) {
     this.archivoRepo = archivoRepo;
-    this.configRepo = configRepo;
-    this.clusterRepo = clusterRepo;
-    this.chuteRepo = chuteRepo;
-    this.parametroClusterRepo = parametroClusterRepo;
-    this.parametroChuteRepo = parametroChuteRepo;
     this.rutaRepo = rutaRepo;
+    this.lotes = lotes;
     this.transacciones = transacciones;
   }
 
@@ -111,15 +91,13 @@ public class SimulacionRegistroService {
                 Trazas.medir(
                     log,
                     "SimulacionRegistroService.listar",
-                    () -> {
-                      Page<ArchivoExcel> page = archivoRepo.findAll(spec, pageable);
-                      Map<Long, ResumenRutasArchivo> resumenes = resumenes(page.getContent());
-                      List<ArchivoSimulacionResponse> lista =
-                          page.getContent().stream()
-                              .map((archivo) -> aResponse(archivo, resumenes.get(archivo.getId())))
-                              .toList();
-                      return PaginaResponse.de(page, lista);
-                    }))
+                    () ->
+                        transacciones.consultar(
+                            () -> {
+                              Page<ArchivoExcel> page = archivoRepo.findAll(spec, pageable);
+                              List<ArchivoSimulacionResponse> lista = aResponses(page.getContent());
+                              return PaginaResponse.de(page, lista);
+                            })))
         .subscribeOn(Schedulers.boundedElastic())
         .map((datos) -> ApiResponse.ok("Registros listados.", datos));
   }
@@ -130,101 +108,31 @@ public class SimulacionRegistroService {
                 Trazas.medir(
                     log,
                     "SimulacionRegistroService.opciones",
-                    () -> {
-                      List<ArchivoExcel> todos =
-                          archivoRepo.findAllByOrderByCreadoEnDescIdDesc().stream()
-                              .limit(MAX_OPCIONES)
-                              .toList();
-                      Map<Long, ResumenRutasArchivo> resumenes = resumenes(todos);
-                      return todos.stream()
-                          .map((archivo) -> aResponse(archivo, resumenes.get(archivo.getId())))
-                          .toList();
-                    }))
+                    () ->
+                        transacciones.consultar(
+                            () -> aResponses(archivoRepo.findTop200ByOrderByCreadoEnDescIdDesc()))))
         .subscribeOn(Schedulers.boundedElastic())
         .map((datos) -> ApiResponse.ok("Registros disponibles.", datos));
-  }
-
-  public Mono<ApiResponse<ResumenSimulacionResponse>> resumen() {
-    return Mono.fromCallable(
-            () ->
-                Trazas.medir(
-                    log,
-                    "SimulacionRegistroService.resumen",
-                    () -> {
-                      ResumenGlobal global = rutaRepo.resumenGlobal();
-                      long rutas = rutaRepo.count();
-                      long chutes =
-                          global == null || global.getChutes() == null ? 0 : global.getChutes();
-                      BigDecimal bultos =
-                          global == null || global.getBultos() == null
-                              ? BigDecimal.ZERO
-                              : global.getBultos();
-                      BigDecimal unidades =
-                          global == null || global.getUnidades() == null
-                              ? BigDecimal.ZERO
-                              : global.getUnidades();
-                      BigDecimal lineas =
-                          global == null || global.getLineas() == null
-                              ? BigDecimal.ZERO
-                              : global.getLineas();
-                      return new ResumenSimulacionResponse(
-                          archivoRepo.count(),
-                          rutas,
-                          chutes,
-                          archivoRepo.contarEtiquetas(),
-                          bultos,
-                          unidades,
-                          lineas);
-                    }))
-        .subscribeOn(Schedulers.boundedElastic())
-        .map((datos) -> ApiResponse.ok("Resumen de simulación.", datos));
-  }
-
-  public Mono<ApiResponse<ArchivoSimulacionResponse>> obtener(Long id) {
-    return Mono.fromCallable(
-            () ->
-                Trazas.medir(
-                    log,
-                    "SimulacionRegistroService.obtener id=" + id,
-                    () -> {
-                      ArchivoExcel archivo = buscar(id);
-                      Map<Long, ResumenRutasArchivo> resumenes = resumenes(List.of(archivo));
-                      return aResponse(archivo, resumenes.get(archivo.getId()));
-                    }))
-        .subscribeOn(Schedulers.boundedElastic())
-        .map((datos) -> ApiResponse.ok("Registro encontrado.", datos));
   }
 
   public Mono<ApiResponse<ArchivoSimulacionResponse>> subir(
       MultipartFile archivo, String nombreRegistro, String etiqueta, String colorHex) {
     Long actor = ActorActual.id();
     return Mono.fromCallable(
-            () ->
-                Trazas.medir(
+            () -> {
+              if (!cargas.tryAcquire()) {
+                throw new LimiteExcedidoException(
+                    "Hay varias cargas en proceso. Intenta de nuevo en unos segundos.");
+              }
+              try {
+                return Trazas.medir(
                     log,
                     "SimulacionRegistroService.subir",
-                    () -> {
-                      if (archivo == null || archivo.isEmpty()) {
-                        throw new ConflictoException("Selecciona un archivo para registrar.");
-                      }
-                      String nombreOriginal = archivo.getOriginalFilename();
-                      if (nombreOriginal == null || nombreOriginal.isBlank()) {
-                        throw new ConflictoException("El archivo no tiene nombre.");
-                      }
-                      SimulacionExcel.Analisis analisis = SimulacionExcel.analizar(archivo);
-                      ArchivoExcel guardado =
-                          transacciones.ejecutar(
-                              () ->
-                                  persistir(
-                                      archivo,
-                                      nombreOriginal,
-                                      nombreRegistro,
-                                      etiqueta,
-                                      colorHex,
-                                      analisis,
-                                      actor));
-                      return aResponse(guardado, resumenDe(analisis));
-                    }))
+                    () -> registrar(archivo, nombreRegistro, etiqueta, colorHex, actor));
+              } finally {
+                cargas.release();
+              }
+            })
         .subscribeOn(Schedulers.boundedElastic())
         .map((datos) -> ApiResponse.ok("Registro creado.", datos));
   }
@@ -245,8 +153,7 @@ public class SimulacionRegistroService {
                               archivo.setEtiqueta(normalizarEtiqueta(req.etiqueta()));
                               archivo.setColorHex(normalizarColor(req.colorHex()));
                               Auditoria.alActualizar(archivo, actor);
-                              ArchivoExcel guardado = archivoRepo.save(archivo);
-                              return aResponse(guardado, resumenes(List.of(guardado)).get(id));
+                              return aResponses(List.of(archivoRepo.save(archivo))).get(0);
                             })))
         .subscribeOn(Schedulers.boundedElastic())
         .map((datos) -> ApiResponse.ok("Registro actualizado.", datos));
@@ -255,190 +162,90 @@ public class SimulacionRegistroService {
   public Mono<ApiResponse<Void>> eliminar(Long id) {
     return Mono.fromCallable(
             () ->
-                transacciones.ejecutar(
-                    () -> {
-                      if (!archivoRepo.existsById(id)) {
-                        throw new RecursoNoEncontradoException("No existe el registro con id " + id + ".");
-                      }
-                      archivoRepo.deleteById(id);
-                      return null;
-                    }))
+                Trazas.medir(
+                    log,
+                    "SimulacionRegistroService.eliminar id=" + id,
+                    () ->
+                        transacciones.<Void>ejecutar(
+                            () -> {
+                              // Bloquea el registro: no se borra a mitad de un balanceo.
+                              archivoRepo.delete(
+                                  archivoRepo
+                                      .bloquear(id)
+                                      .orElseThrow(() -> noExiste(id)));
+                              return null;
+                            })))
         .subscribeOn(Schedulers.boundedElastic())
         .thenReturn(ApiResponse.ok("Registro eliminado.", null));
   }
 
+  /** Lee el archivo fuera de la transacción y guarda todo en una sola. */
+  private ArchivoSimulacionResponse registrar(
+      MultipartFile archivo, String nombreRegistro, String etiqueta, String colorHex, Long actor) {
+    if (archivo == null || archivo.isEmpty()) {
+      throw new ConflictoException("Selecciona un archivo para registrar.");
+    }
+    String nombreOriginal = archivo.getOriginalFilename();
+    if (nombreOriginal == null || nombreOriginal.isBlank()) {
+      throw new ConflictoException("El archivo no tiene nombre.");
+    }
+    String color = normalizarColor(colorHex);
+    SimulacionExcel.Analisis analisis = SimulacionExcel.analizar(archivo);
+    ArchivoExcel guardado =
+        transacciones.ejecutar(
+            () -> persistir(nombreOriginal, nombreRegistro, etiqueta, color, analisis, actor));
+    return aResponses(List.of(guardado)).get(0);
+  }
+
   private ArchivoExcel persistir(
-      MultipartFile archivo,
       String nombreOriginal,
       String nombreRegistro,
       String etiqueta,
-      String colorHex,
+      String color,
       SimulacionExcel.Analisis analisis,
       Long actor) {
     ArchivoExcel entidad = new ArchivoExcel();
     entidad.setNombreArchivo(limitar(nombreOriginal, 255));
     entidad.setNombreRegistro(limitar(nombreRegistro(nombreRegistro, nombreOriginal), 150));
     entidad.setEtiqueta(normalizarEtiqueta(etiqueta));
-    entidad.setColorHex(normalizarColor(colorHex));
+    entidad.setColorHex(color);
     entidad.setEstado(ArchivoExcel.ESTADO_PROYECCION);
     Auditoria.alCrear(entidad, actor);
-    ArchivoExcel guardado = archivoRepo.save(entidad);
+    ArchivoExcel guardado = archivoRepo.saveAndFlush(entidad);
+    Long archivoId = guardado.getId();
 
-    SimulacionConfig config = new SimulacionConfig();
-    config.setArchivoId(guardado.getId());
-    config.setVelocidadBase(VELOCIDAD_INICIAL);
-    Auditoria.alCrear(config, actor);
-    configRepo.save(config);
+    List<SimulacionExcel.FilaRuta> rutas = analisis.rutas();
+    Map<String, Long> clusters =
+        lotes.asegurarClusters(rutas.stream().map(SimulacionExcel.FilaRuta::cluster).toList());
+    Map<String, Long> chutes =
+        lotes.asegurarChutes(rutas.stream().map(SimulacionExcel.FilaRuta::chute).toList());
 
-    Map<String, Cluster> clusters = new HashMap<>();
-    Map<String, Chute> chutes = new HashMap<>();
-    for (SimulacionExcel.FilaRuta fila : analisis.rutas()) {
-      String claveCluster = fila.cluster().toUpperCase(Locale.ROOT);
-      String claveChute = fila.chute().toUpperCase(Locale.ROOT);
-      clusters.computeIfAbsent(claveCluster, (clave) -> obtenerOCrearCluster(fila.cluster()));
-      chutes.computeIfAbsent(claveChute, (clave) -> obtenerOCrearChute(fila.chute()));
-    }
-
-    Map<Long, Cluster> clustersUnicos = new HashMap<>();
-    clusters.values().forEach((cluster) -> clustersUnicos.put(cluster.getId(), cluster));
-    Map<Long, Chute> chutesUnicos = new HashMap<>();
-    chutes.values().forEach((chute) -> chutesUnicos.put(chute.getId(), chute));
-
-    List<ParametroCluster> parametrosClusters = new ArrayList<>();
-    for (Cluster cluster : clustersUnicos.values()) {
-      ParametroCluster parametro = new ParametroCluster();
-      parametro.setId(new ParametroClusterId(guardado.getId(), cluster.getId()));
-      parametro.setLimiteHoras(BigDecimal.ZERO);
-      parametrosClusters.add(parametro);
-    }
-    parametroClusterRepo.saveAll(parametrosClusters);
-
-    List<ParametroChute> parametrosChutes = new ArrayList<>();
-    for (Chute chute : chutesUnicos.values()) {
-      ParametroChute parametro = new ParametroChute();
-      parametro.setId(new ParametroChuteId(guardado.getId(), chute.getId()));
-      parametro.setOperarios(OPERARIOS_INICIALES);
-      parametrosChutes.add(parametro);
-    }
-    parametroChuteRepo.saveAll(parametrosChutes);
-
-    List<RutaProyeccion> rutas = new ArrayList<>(analisis.rutas().size());
-    for (SimulacionExcel.FilaRuta fila : analisis.rutas()) {
-      RutaProyeccion ruta = new RutaProyeccion();
-      ruta.setArchivoId(guardado.getId());
-      ruta.setClusterId(clusters.get(fila.cluster().toUpperCase(Locale.ROOT)).getId());
-      ruta.setChuteId(chutes.get(fila.chute().toUpperCase(Locale.ROOT)).getId());
-      ruta.setCodigoRuta(fila.codigoRuta());
-      ruta.setTotalBultos(fila.bultos());
-      ruta.setTotalUnidades(fila.unidades());
-      ruta.setTotalLineas(fila.lineas());
-      ruta.setConteoCod(fila.conteoCod());
-      rutas.add(ruta);
-    }
-    rutaRepo.saveAll(rutas);
+    lotes.insertarConfig(archivoId, VELOCIDAD_INICIAL, actor);
+    lotes.insertarParametrosCluster(archivoId, clusters.values());
+    lotes.insertarParametrosChute(archivoId, chutes.values(), OPERARIOS_INICIALES);
+    lotes.insertarRutas(archivoId, rutas, clusters, chutes);
     return guardado;
   }
 
-  private Cluster obtenerOCrearCluster(String nombre) {
-    return clusterRepo
-        .findByNombreIgnoreCase(nombre)
-        .orElseGet(
-            () -> {
-              Cluster cluster = new Cluster();
-              cluster.setNombre(nombre);
-              cluster.setActivo(Boolean.TRUE);
-              return clusterRepo.save(cluster);
-            });
-  }
-
-  private Chute obtenerOCrearChute(String nombre) {
-    return chuteRepo
-        .findByNombreIgnoreCase(nombre)
-        .orElseGet(
-            () -> {
-              Chute chute = new Chute();
-              chute.setNombre(nombre);
-              chute.setActivo(Boolean.TRUE);
-              return chuteRepo.save(chute);
-            });
-  }
-
   private ArchivoExcel buscar(Long id) {
-    return archivoRepo
-        .findById(id)
-        .orElseThrow(
-            () -> new RecursoNoEncontradoException("No existe el registro con id " + id + "."));
+    return archivoRepo.findById(id).orElseThrow(() -> noExiste(id));
   }
 
-  private Map<Long, ResumenRutasArchivo> resumenes(List<ArchivoExcel> archivos) {
+  private static RecursoNoEncontradoException noExiste(Long id) {
+    return new RecursoNoEncontradoException("No existe el registro con id " + id + ".");
+  }
+
+  /** Respuestas con los totales de rutas de cada registro (una consulta agregada). */
+  private List<ArchivoSimulacionResponse> aResponses(List<ArchivoExcel> archivos) {
     if (archivos.isEmpty()) {
-      return Map.of();
+      return List.of();
     }
-    List<Long> ids = archivos.stream().map(ArchivoExcel::getId).toList();
-    return rutaRepo.resumenPorArchivos(ids).stream()
-        .collect(Collectors.toMap(ResumenRutasArchivo::getArchivoId, (fila) -> fila));
-  }
-
-  private ArchivoSimulacionResponse aResponse(ArchivoExcel archivo, ResumenRutasArchivo resumen) {
-    return new ArchivoSimulacionResponse(
-        archivo.getId(),
-        archivo.getNombreRegistro(),
-        archivo.getNombreArchivo(),
-        archivo.getEtiqueta(),
-        archivo.getColorHex(),
-        archivo.getEstado(),
-        resumen == null || resumen.getRutas() == null ? 0 : resumen.getRutas(),
-        resumen == null || resumen.getChutes() == null ? 0 : resumen.getChutes(),
-        resumen == null || resumen.getBultos() == null ? BigDecimal.ZERO : resumen.getBultos(),
-        resumen == null || resumen.getUnidades() == null ? BigDecimal.ZERO : resumen.getUnidades(),
-        resumen == null || resumen.getLineas() == null ? BigDecimal.ZERO : resumen.getLineas(),
-        archivo.getCreadoEn(),
-        archivo.getActualizadoEn(),
-        archivo.getCreadoPor(),
-        archivo.getActualizadoPor());
-  }
-
-  private ResumenRutasArchivo resumenDe(SimulacionExcel.Analisis analisis) {
-    BigDecimal unidades =
-        analisis.rutas().stream()
-            .map(SimulacionExcel.FilaRuta::unidades)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-    BigDecimal lineas =
-        analisis.rutas().stream()
-            .map(SimulacionExcel.FilaRuta::lineas)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-    long chutes = analisis.rutas().stream().map(SimulacionExcel.FilaRuta::chute).distinct().count();
-    return new ResumenRutasArchivo() {
-      @Override
-      public Long getArchivoId() {
-        return 0L;
-      }
-
-      @Override
-      public Long getRutas() {
-        return (long) analisis.rutas().size();
-      }
-
-      @Override
-      public Long getChutes() {
-        return chutes;
-      }
-
-      @Override
-      public BigDecimal getBultos() {
-        return analisis.totalBultos();
-      }
-
-      @Override
-      public BigDecimal getUnidades() {
-        return unidades;
-      }
-
-      @Override
-      public BigDecimal getLineas() {
-        return lineas;
-      }
-    };
+    Map<Long, ResumenRutasArchivo> resumenes =
+        rutaRepo.resumenPorArchivos(archivos.stream().map(ArchivoExcel::getId).toList()).stream()
+            .collect(Collectors.toMap(ResumenRutasArchivo::getArchivoId, (fila) -> fila));
+    return archivos.stream()
+        .map((archivo) -> SimulacionRespuestas.archivo(archivo, resumenes.get(archivo.getId())))
+        .toList();
   }
 
   private String nombreRegistro(String nombreRegistro, String nombreArchivo) {

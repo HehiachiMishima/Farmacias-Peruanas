@@ -235,8 +235,6 @@ export class LineChart {
   readonly periodos = input<boolean>(true);
   /** Máximo de etiquetas visibles en el eje X (se reparten). */
   readonly maxEtiquetas = input<number>(8);
-  /** Formato propio de los valores (p. ej. horas con minutos). Si falta, se usan enteros. */
-  readonly formatoValor = input<((valor: number) => string) | null>(null);
 
   readonly activo = signal<number | null>(null);
 
@@ -251,11 +249,7 @@ export class LineChart {
 
   readonly ticks = computed(() => {
     const max = this.maximo();
-    const formato = this.formatoValor();
-    return [0, 0.25, 0.5, 0.75, 1].map((f) => ({
-      pct: f * 100,
-      texto: formato ? formato(max * f) : compacto(Math.round(max * f)),
-    }));
+    return [0, 0.25, 0.5, 0.75, 1].map((f) => ({ pct: f * 100, texto: compacto(Math.round(max * f)) }));
   });
 
   private x(i: number): number {
@@ -303,20 +297,14 @@ export class LineChart {
       valores: this.series().map((s) => ({
         nombre: s.nombre,
         color: s.color,
-        texto: this.formatoValor()
-          ? this.formatoValor()!(s.valores[i] ?? 0)
-          : entero(s.valores[i] ?? 0),
+        texto: entero(s.valores[i] ?? 0),
       })),
     };
   });
 
   readonly resumen = computed(() => {
-    const formato = this.formatoValor();
     return this.series()
-      .map((s) => {
-        const total = s.valores.reduce((a, b) => a + b, 0);
-        return `${s.nombre}: total ${formato ? formato(total) : entero(total)}`;
-      })
+      .map((s) => `${s.nombre}: total ${entero(s.valores.reduce((a, b) => a + b, 0))}`)
       .join('. ');
   });
 }

@@ -7,7 +7,6 @@ import oracle.common.response.PuntoSerie;
 public record AnaliticaAdminResponse(
         Kpis kpis,
         List<Conteo> usuariosPorRol,
-        List<Conteo> permisosMasOtorgados,
         List<Conteo> coberturaPaneles,
         List<PuntoSerie> altasPorMes) {
 

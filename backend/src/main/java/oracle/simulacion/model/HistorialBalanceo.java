@@ -47,4 +47,8 @@ public class HistorialBalanceo {
 
   @Column(name = "creado_en", nullable = false)
   private LocalDateTime creadoEn;
+
+  public boolean esMovimiento() {
+    return ACCION_MOVER_RUTA.equals(tipoAccion);
+  }
 }

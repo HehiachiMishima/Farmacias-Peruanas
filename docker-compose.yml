@@ -4,9 +4,10 @@
 #   docker compose up --build
 #   -> app en http://localhost:10000  (health: /api/health)
 #
-# - MySQL aplica al crearse el volumen: schema.sql, panel.bitacora.sql y
-#   panel.inbound.sql (en ese orden). protection.admin.sql y data.sql se
-#   ejecutan DESPUES del primer arranque (ver README > Base de datos).
+# - MySQL aplica al crearse el volumen: schema.sql, panel.bitacora.sql,
+#   panel.inbound.sql y panel.simulacion.sql (en ese orden).
+#   protection.admin.sql, data.sql y permisos.simulacion.sql se ejecutan
+#   DESPUES del primer arranque (ver README > Base de datos).
 # - Secretos (JWT_SECRET, USER_*) se leen de backend/.env si existe; las
 #   variables DB_* de abajo lo sobrescriben para apuntar al MySQL del compose.
 # ============================================================
@@ -25,6 +26,7 @@ services:
       - ./backend/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./backend/panel.bitacora.sql:/docker-entrypoint-initdb.d/02-panel.bitacora.sql:ro
       - ./backend/panel.inbound.sql:/docker-entrypoint-initdb.d/03-panel.inbound.sql:ro
+      - ./backend/panel.simulacion.sql:/docker-entrypoint-initdb.d/04-panel.simulacion.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD:-root-local}"]
       interval: 5s

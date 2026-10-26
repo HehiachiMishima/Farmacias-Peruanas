@@ -13,7 +13,6 @@ import org.springframework.stereotype.Repository;
 public class AnaliticaAdminRepository {
 
     private static final RowMapper<Conteo> CONTEO = (rs, n) -> new Conteo(rs.getString("etiqueta"), rs.getLong("valor"));
-    private static final int TOP_PERMISOS = 12;
     private static final int MESES_ALTAS = 12;
 
     private final JdbcTemplate jdbc;
@@ -50,21 +49,8 @@ public class AnaliticaAdminRepository {
                 """, CONTEO);
     }
 
-    /** Permisos con mas usuarios que los tienen efectivamente (deny-wins aplicado). */
-    public List<Conteo> permisosMasOtorgados() {
-        return jdbc.query("""
-                SELECT p.nombre AS etiqueta, COUNT(*) AS valor
-                FROM v_permisos_finales v
-                JOIN permisos p ON p.id = v.permiso_id
-                WHERE v.permitido = TRUE
-                GROUP BY p.id, p.nombre
-                ORDER BY valor DESC, etiqueta ASC
-                LIMIT %d
-                """.formatted(TOP_PERMISOS), CONTEO);
-    }
-
     /** Usuarios ACTIVOS con acceso efectivo a cada panel. */
-     public List<Conteo> coberturaPaneles() {
+    public List<Conteo> coberturaPaneles() {
         return jdbc.query("""
                 SELECT p.nombre AS etiqueta, COUNT(*) AS valor
                 FROM v_permisos_finales v

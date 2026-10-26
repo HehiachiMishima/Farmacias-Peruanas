@@ -22,6 +22,7 @@ paneles según los permisos de cada usuario. Su nombre es un acróstico:
 | Administración | `/admin` | Dashboard, Usuarios, Roles, Permisos | `PANEL_ADMIN` |
 | Bitácora | `/bitacora` | Incidencias, Control (centros, sistemas, áreas, responsables), Dashboard | `PANEL_BITACORA` |
 | Inbound | `/inbound` | Incidencias, Control (proveedores, tipos de incidencia), Dashboard | `PANEL_INBOUND` |
+| Simulación | `/simulacion` | Registro (Excel/CSV), Configuración (límites, operarios, rutas, balanceo), Dashboard | `PANEL_SIMULACION` |
 | Análisis | `/analisis` | Resumen *(en construcción)* | `PANEL_ANALISIS` |
 | Trazabilidad | `/trazabilidad` | Resumen *(en construcción)* | `PANEL_TRAZABILIDAD` |
 | Logística | `/logistica` | Resumen *(en construcción)* | `PANEL_LOGISTICA` |
@@ -59,13 +60,16 @@ La ruta raíz de cada panel redirige a su primer módulo accesible con
 │   ├── schema.sql              # 1) RBAC: usuarios, roles, permisos, vistas, triggers
 │   ├── panel.bitacora.sql      # 2) Tablas del panel Bitácora
 │   ├── panel.inbound.sql       # 3) Tablas del panel Inbound
-│   ├── protection.admin.sql    # 4) Protección del usuario @admin (triggers)
-│   ├── data.sql                # 5) Permisos de paneles, catálogos y datos de ejemplo
+│   ├── panel.simulacion.sql    # 4) Tablas del panel Simulación
+│   ├── protection.admin.sql    # 5) Protección del usuario @admin (triggers)
+│   ├── data.sql                # 6) Permisos de paneles, catálogos y datos de ejemplo
+│   ├── permisos.simulacion.sql # 7) Permisos del panel Simulación
 │   └── src/main/java/oracle/
 │       ├── auth/               # Login y sesión vigente
 │       ├── admin/              # Panel Administración (usuarios, roles, permisos, resolución)
 │       ├── bitacora/           # Panel Bitácora (incidencias + catálogos de control)
 │       ├── inbound/            # Panel Inbound (incidencias + proveedores/tipos)
+│       ├── simulacion/         # Panel Simulación (registros Excel, configuración, balanceo)
 │       └── common/             # Transversal: config, security, exception, support, web
 └── frontend/src/app/
     ├── core/                   # config, guards, interceptors, models, services, utils
@@ -121,9 +125,11 @@ quedan en `public/` como fuente; la app usa las versiones `webp` optimizadas.
 | 1 | `schema.sql` | Crea la BD `farmacias_peruanas`, RBAC, vistas de resolución y triggers. Re-ejecutable. |
 | 2 | `panel.bitacora.sql` | Catálogos e `incidencias`. `CREATE TABLE IF NOT EXISTS`. |
 | 3 | `panel.inbound.sql` | Proveedores, tipos e `incidencias_inbound`. |
-| 4 | **Arrancar el backend una vez** | Crea el usuario semilla `USER_ADMIN` (id = 1) con BCrypt y le asigna `USER_ROL`. |
-| 5 | `protection.admin.sql` | Triggers que blindan a `@admin`. Re-ejecutable. |
-| 6 | `data.sql` | Permisos de Bitácora/Inbound, catálogos y registros de ejemplo. Requiere el usuario id = 1 (FK de `creado_por`). |
+| 4 | `panel.simulacion.sql` | Registros Excel, catálogos de clusters/chutes, rutas e historial de balanceo. Si las tablas ya existían, aplica a mano el bloque *MIGRACIÓN* del final. |
+| 5 | **Arrancar el backend una vez** | Crea el usuario semilla `USER_ADMIN` (id = 1) con BCrypt y le asigna `USER_ROL`. |
+| 6 | `protection.admin.sql` | Triggers que blindan a `@admin`. Re-ejecutable. |
+| 7 | `data.sql` | Permisos de Bitácora/Inbound, catálogos y registros de ejemplo. Requiere el usuario id = 1 (FK de `creado_por`). |
+| 8 | `permisos.simulacion.sql` | Permisos del panel Simulación (asignados a ADMINISTRADOR). Idempotente. |
 
 Con el cliente `mysql` (respeta `DELIMITER`):
 
@@ -230,9 +236,9 @@ docker compose up --build
 ```
 
 - MySQL 8.4 en `localhost:3307`; al crear el volumen aplica `schema.sql`,
-  `panel.bitacora.sql` y `panel.inbound.sql`.
+  `panel.bitacora.sql`, `panel.inbound.sql` y `panel.simulacion.sql`.
 - La app arranca, crea `@admin` y queda en `http://localhost:10000`.
-- Luego aplica `protection.admin.sql` y `data.sql`:
+- Luego aplica `protection.admin.sql`, `data.sql` y `permisos.simulacion.sql`:
 
 ```bash
 docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" farmacias_peruanas' < backend/protection.admin.sql
@@ -240,6 +246,10 @@ docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" farmac
 
 ```bash
 docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" farmacias_peruanas' < backend/data.sql
+```
+
+```bash
+docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" farmacias_peruanas' < backend/permisos.simulacion.sql
 ```
 
 Los secretos (`JWT_SECRET`, `USER_*`) se leen de `backend/.env` si existe.
@@ -299,6 +309,11 @@ Base: `/api`
 | `GET` | `/incidencias/analitica` | `VER_DASHBOARD` — KPIs, Pareto de sistemas, matriz centro × sistema, tipos, tendencia y horas |
 | `GET` | `/inbound/incidencias/analitica` | `VER_DASHBOARD_INBOUND` — ranking/Pareto de proveedores, matriz proveedor × tipo, SKUs, tendencias |
 | `GET` | `/admin/analitica` | `DASHBOARD_ADMIN` — cuentas, roles, permisos, cobertura por panel y altas |
+| `GET/POST/PUT/DELETE` | `/simulacion/registros` (+ `/opciones`) | `*_REGISTRO_SIMULACION` — carga multipart (.xlsx/.xls/.csv, 20 MB, 100 000 filas) |
+| `GET/PUT` | `/simulacion/registros/{id}/configuracion` | `VER/MODIFICAR_CONFIGURACION_SIMULACION` — parámetros y carga agregada por cluster/chute |
+| `GET` | `/simulacion/registros/{id}/rutas` | `VER_CONFIGURACION_SIMULACION` — rutas paginadas (filtros cluster, chute y prefijo de código) |
+| `PUT/POST` | `/simulacion/registros/{id}/rutas/{rutaId}/mover`, `/balancear`, `/restablecer` | `MODIFICAR_CONFIGURACION_SIMULACION` — serializados por registro (`SELECT … FOR UPDATE`) |
+| `GET` | `/simulacion/registros/{id}/historial`, `/dashboard` | `VER_CONFIGURACION_SIMULACION` / `VER_DASHBOARD_SIMULACION` |
 
 ---
 

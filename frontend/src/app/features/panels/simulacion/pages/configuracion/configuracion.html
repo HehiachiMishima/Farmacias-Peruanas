@@ -21,24 +21,27 @@
 <section class="config-panel">
   <div class="config-panel__fila">
     <div class="config-panel__registro">
-      <label class="ui-label">Registro guardado</label>
+      <label class="ui-label" for="config-registro">Registro guardado</label>
       <ui-select-buscable
+        campoId="config-registro"
         [opciones]="opcionesRegistro()"
         [valor]="seleccionado()"
-        [deshabilitado]="cargandoOpciones() || guardando() || balanceando() || restableciendo()"
+        [deshabilitado]="cargandoOpciones() || ocupado()"
         placeholder="Elegir registro…"
         (valorCambia)="seleccionarDesdeSelector($event)"
       />
     </div>
     <div class="config-panel__velocidad">
-      <label class="ui-label">Velocidad base (bultos/h por operario)</label>
+      <label class="ui-label" for="config-velocidad">Velocidad base (bultos/h por operario)</label>
       <input
+        id="config-velocidad"
         type="number"
         class="ui-input"
-        min="1"
-        step="1"
+        min="0.01"
+        step="any"
+        inputmode="decimal"
         [value]="velocidad()"
-        [disabled]="!config() || !puedeModificar()"
+        [disabled]="!config() || !puedeModificar() || ocupado()"
         (change)="setVelocidad($event)"
       />
     </div>
@@ -47,9 +50,7 @@
         type="button"
         class="ui-btn ui-btn--secondary"
         (click)="actualizar()"
-        [disabled]="
-          cargandoOpciones() || guardando() || balanceando() || restableciendo() || moviendo()
-        "
+        [disabled]="cargandoOpciones() || ocupado()"
       >
         <ui-icon name="refresh" [size]="16" />
         Actualizar
@@ -59,10 +60,10 @@
         type="button"
         class="ui-btn ui-btn--secondary"
         (click)="guardar()"
-        [disabled]="!dirty() || guardando() || balanceando()"
+        [disabled]="!dirty() || ocupado()"
       >
         @if (guardando()) {
-          <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+          <span class="ui-spinner config-spinner"></span>
         }
         Guardar parámetros
       </button>
@@ -71,11 +72,11 @@
         type="button"
         class="ui-btn ui-btn--primary"
         (click)="balancear()"
-        [disabled]="!config() || balanceando() || guardando()"
+        [disabled]="!config() || ocupado()"
         [title]="tieneLimites() ? '' : 'Define al menos un límite de horas por cluster'"
       >
         @if (balanceando()) {
-          <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+          <span class="ui-spinner config-spinner"></span>
         }
         Calcular y balancear
       </button>
@@ -86,7 +87,7 @@
     <div class="config-info">
       <span class="config-info__icono"><ui-icon name="paquete" [size]="18" /></span>
       <div class="config-info__datos">
-        <span class="config-info__nombre">{{ cfg.archivo.nombreRegistro }}</span>
+        <span class="config-info__nombre" [title]="cfg.archivo.nombreRegistro">{{ cfg.archivo.nombreRegistro }}</span>
         <span class="config-info__meta">
           {{ formatearNumero(cfg.archivo.rutas) }} rutas ·
           {{ formatearNumero(cfg.archivo.chutes) }} chutes ·
@@ -159,7 +160,7 @@
     </ui-empty>
   </div>
 } @else if (config(); as cfg) {
-  @if (cfg.rutas.length === 0) {
+  @if (cfg.archivo.rutas === 0) {
     <div class="table-card">
       <ui-empty
         icono="paquete"
@@ -177,7 +178,7 @@
           [style.--cluster-color]="cluster.color"
         >
           <header class="cluster-card__head">
-            <span class="cluster-card__nombre">{{ cluster.nombre }}</span>
+            <span class="cluster-card__nombre" [title]="cluster.nombre">{{ cluster.nombre }}</span>
             @if (cluster.excede) {
               <span class="ui-badge ui-badge--danger">Excede</span>
             } @else if (cluster.sinLimite) {
@@ -198,8 +199,9 @@
               class="ui-input"
               min="0"
               step="0.1"
+              inputmode="decimal"
               [value]="cluster.limite"
-              [disabled]="!puedeModificar()"
+              [disabled]="!puedeModificar() || ocupado()"
               (change)="setLimite(cluster.id, $event)"
             />
           </div>
@@ -230,6 +232,17 @@
     </section>
 
     <div class="toolbar">
+      <div class="ui-search toolbar__grow">
+        <ui-icon name="search" [size]="18" />
+        <input
+          type="search"
+          class="ui-input"
+          placeholder="Buscar ruta por código…"
+          aria-label="Buscar ruta por código"
+          [value]="filtroTexto()"
+          (input)="buscarRuta($any($event.target).value)"
+        />
+      </div>
       <div class="filtros-fila">
         <ui-select-buscable
           [opciones]="opcionesChute()"
@@ -242,12 +255,6 @@
           [valor]="filtroCluster()"
           placeholder="Todos los clusters"
           (valorCambia)="setFiltroCluster($event)"
-        />
-        <ui-select-buscable
-          [opciones]="opcionesRuta()"
-          [valor]="filtroRuta()"
-          placeholder="Todas las rutas"
-          (valorCambia)="setFiltroRuta($event)"
         />
       </div>
       <button
@@ -264,91 +271,110 @@
           type="button"
           class="ui-btn ui-btn--secondary ui-btn--sm"
           (click)="confirmarRestablecer()"
+          [disabled]="ocupado()"
         >
           <ui-icon name="refresh" [size]="16" />
           Restablecer
         </button>
-        <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="verCambios()">
+        <button
+          type="button"
+          class="ui-btn ui-btn--secondary ui-btn--sm"
+          (click)="verCambios()"
+          [disabled]="ocupado()"
+        >
           <ui-icon name="ver" [size]="16" />
           Mostrar cambios
         </button>
       </div>
     </div>
 
-    <div class="table-card">
-      <div class="ui-table-wrap">
-        <table class="ui-table" appColumnasRedimensionables>
-          <thead>
-            <tr>
-              <th>Chute</th>
-              <th class="num">Operarios</th>
-              <th>Cluster</th>
-              <th>Ruta</th>
-              <th class="num">Bultos</th>
-              <th class="num">Unidades</th>
-              <th class="num">Líneas</th>
-              <th class="num">COD</th>
-              <th class="num">Tiempo</th>
-              <th class="col-actions">Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (ruta of filasPagina(); track ruta.id) {
+    <div class="table-card" [class.table-card--refrescando]="rutas.refrescando()">
+      @if (rutas.cargaInicial()) {
+        <div class="loading"><span class="ui-spinner"></span> Cargando rutas…</div>
+      } @else if (rutas.error() && rutas.items().length === 0) {
+        <ui-empty icono="alerta" titulo="No se pudieron cargar las rutas" [mensaje]="rutas.error()!">
+          <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="rutas.recargar()">
+            <ui-icon name="refresh" [size]="16" /> Reintentar
+          </button>
+        </ui-empty>
+      } @else {
+        <div class="ui-table-wrap">
+          <table class="ui-table" appColumnasRedimensionables>
+            <thead>
               <tr>
-                <td class="fuerte">{{ ruta.chute }}</td>
-                <td class="num">
-                  <input
-                    type="number"
-                    class="ui-input ops-input"
-                    min="1"
-                    step="1"
-                    [value]="getOperarios(ruta.chuteId)"
-                    [disabled]="!puedeModificar()"
-                    [attr.aria-label]="'Operarios de ' + ruta.chute"
-                    title="Se aplica a todas las rutas de este chute"
-                    (change)="setOperarios(ruta.chuteId, $event)"
-                  />
-                </td>
-                <td>
-                  <span
-                    class="cluster-chip"
-                    [style.--cluster-color]="colorDeCluster(ruta.clusterId)"
-                  >
-                    {{ ruta.cluster }}
-                  </span>
-                </td>
-                <td class="u-mono">{{ ruta.codigoRuta }}</td>
-                <td class="num">{{ formatearNumero(ruta.totalBultos, 2) }}</td>
-                <td class="num">{{ formatearNumero(ruta.totalUnidades, 2) }}</td>
-                <td class="num">{{ formatearNumero(ruta.totalLineas, 2) }}</td>
-                <td class="num">{{ formatearNumero(ruta.conteoCod) }}</td>
-                <td class="num">{{ formatearHoras(tiempoRuta(ruta)) }}</td>
-                <td>
-                  <button
-                    *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
-                    type="button"
-                    class="ui-btn ui-btn--ghost ui-btn--sm"
-                    (click)="abrirMover(ruta)"
-                  >
-                    Mover
-                  </button>
-                </td>
+                <th>Chute</th>
+                <th class="num">Operarios</th>
+                <th>Cluster</th>
+                <th>Ruta</th>
+                <th class="num">Bultos</th>
+                <th class="num">Unidades</th>
+                <th class="num">Líneas</th>
+                <th class="num">COD</th>
+                <th class="num">Tiempo</th>
+                <th class="col-actions">Acción</th>
               </tr>
-            } @empty {
-              <tr>
-                <td colspan="10" class="u-muted">Ninguna ruta coincide con los filtros.</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-      <ui-paginador
-        [pagina]="paginaActual()"
-        [total]="filas().length"
-        [porPagina]="porPagina()"
-        (paginaCambia)="cambiarPagina($event)"
-        (porPaginaCambia)="cambiarPorPagina($event)"
-      />
+            </thead>
+            <tbody>
+              @for (ruta of rutas.items(); track ruta.id) {
+                <tr>
+                  <td class="fuerte">{{ ruta.chute }}</td>
+                  <td class="num">
+                    <input
+                      type="number"
+                      class="ui-input ops-input"
+                      min="1"
+                      step="1"
+                      inputmode="numeric"
+                      [value]="getOperarios(ruta.chuteId)"
+                      [disabled]="!puedeModificar() || ocupado()"
+                      [attr.aria-label]="'Operarios de ' + ruta.chute"
+                      title="Se aplica a todas las rutas de este chute"
+                      (change)="setOperarios(ruta.chuteId, $event)"
+                    />
+                  </td>
+                  <td>
+                    <span
+                      class="cluster-chip"
+                      [style.--cluster-color]="colorDeCluster(ruta.clusterId)"
+                      [title]="ruta.cluster"
+                    >
+                      {{ ruta.cluster }}
+                    </span>
+                  </td>
+                  <td class="u-mono">{{ ruta.codigoRuta }}</td>
+                  <td class="num">{{ formatearNumero(ruta.totalBultos, 2) }}</td>
+                  <td class="num">{{ formatearNumero(ruta.totalUnidades, 2) }}</td>
+                  <td class="num">{{ formatearNumero(ruta.totalLineas, 2) }}</td>
+                  <td class="num">{{ formatearNumero(ruta.conteoCod) }}</td>
+                  <td class="num">{{ formatearHoras(tiempoRuta(ruta)) }}</td>
+                  <td>
+                    <button
+                      *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
+                      type="button"
+                      class="ui-btn ui-btn--ghost ui-btn--sm"
+                      [disabled]="ocupado()"
+                      (click)="abrirMover(ruta)"
+                    >
+                      Mover
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="10" class="u-muted">Ninguna ruta coincide con los filtros.</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <ui-paginador
+          [pagina]="pagina()"
+          [total]="rutas.total()"
+          [porPagina]="porPagina()"
+          (paginaCambia)="cambiarPagina($event)"
+          (porPaginaCambia)="cambiarPorPagina($event)"
+        />
+      }
     </div>
   }
 }
@@ -357,7 +383,7 @@
   [abierto]="historialAbierto()"
   ancho="lg"
   titulo="Cambios del balanceo"
-  subtitulo="Movimientos de rutas y operarios añadidos sobre el registro."
+  subtitulo="Últimos movimientos de rutas y operarios añadidos sobre el registro."
   (cerrar)="historialAbierto.set(false)"
 >
   @if (historialCargando()) {
@@ -366,37 +392,37 @@
     <ui-empty
       icono="info"
       titulo="Sin cambios registrados"
-      mensaje="El balanceo todavía no ha movido rutas ni añadido operarios."
+      mensaje="Todavía no se han movido rutas ni añadido operarios."
     />
   } @else {
-    <ul class="historial">
-      @for (cambio of historial(); track cambio.id) {
-        <li class="historial__item">
-          @if (cambio.tipoAccion === 'MOVER_RUTA') {
-            <span class="ui-badge ui-badge--warning">RUTA</span>
-            <div>
-              <p class="historial__titulo">
-                La ruta <strong>{{ cambio.ruta }}</strong> fue movida.
-              </p>
-              <p class="historial__detalle">
-                De <strong>{{ cambio.chuteOrigen }}</strong> a
-                <strong>{{ cambio.chuteDestino }}</strong
-                >.
-              </p>
-            </div>
-          } @else {
-            <span class="ui-badge ui-badge--success">OPERARIO</span>
-            <div>
-              <p class="historial__titulo">Se añadió 1 operario.</p>
-              <p class="historial__detalle">
-                Para reducir el cuello de botella en <strong>{{ cambio.chuteModificado }}</strong
-                >.
-              </p>
-            </div>
+    <div class="ui-table-wrap">
+      <table class="ui-table">
+        <thead>
+          <tr>
+            <th>Acción</th>
+            <th>Ruta</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (cambio of historial(); track cambio.id) {
+            <tr>
+              @if (cambio.tipoAccion === 'MOVER_RUTA') {
+                <td><span class="ui-badge ui-badge--warning">Ruta movida</span></td>
+                <td class="u-mono">{{ cambio.ruta ?? '—' }}</td>
+                <td>
+                  De <strong>{{ cambio.chuteOrigen }}</strong> a <strong>{{ cambio.chuteDestino }}</strong>
+                </td>
+              } @else {
+                <td><span class="ui-badge ui-badge--success">Operario +1</span></td>
+                <td class="u-muted">—</td>
+                <td>En <strong>{{ cambio.chuteModificado }}</strong> (cuello de botella)</td>
+              }
+            </tr>
           }
-        </li>
-      }
-    </ul>
+        </tbody>
+      </table>
+    </div>
   }
   <div modal-footer class="modal-foot">
     <button type="button" class="ui-btn ui-btn--secondary" (click)="historialAbierto.set(false)">
@@ -418,8 +444,9 @@
       <strong>{{ ruta.chute }}</strong>
     </p>
     <div class="ui-field">
-      <label class="ui-label">Chute destino</label>
+      <label class="ui-label" for="mover-destino">Chute destino</label>
       <ui-select-buscable
+        campoId="mover-destino"
         [opciones]="opcionesDestino()"
         [valor]="chuteDestino()"
         placeholder="Elegir chute…"
@@ -432,11 +459,11 @@
     <button
       type="button"
       class="ui-btn ui-btn--primary"
-      [disabled]="chuteDestino() === null || moviendo()"
+      [disabled]="chuteDestino() === null || ocupado()"
       (click)="confirmarMover()"
     >
       @if (moviendo()) {
-        <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+        <span class="ui-spinner config-spinner"></span>
       }
       Mover ruta
     </button>
@@ -457,6 +484,11 @@
       <p class="confirm__desc">
         Se revertirán todas las rutas movidas y los operarios añadidos por el balanceo.
       </p>
+      @if (dirty()) {
+        <p class="confirm__desc confirm__desc--aviso">
+          Los parámetros que editaste y no guardaste también se descartarán.
+        </p>
+      }
     </div>
   </div>
   <div modal-footer class="modal-foot">
@@ -467,10 +499,10 @@
       type="button"
       class="ui-btn ui-btn--danger"
       (click)="restablecer()"
-      [disabled]="restableciendo()"
+      [disabled]="ocupado()"
     >
       @if (restableciendo()) {
-        <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+        <span class="ui-spinner config-spinner"></span>
       }
       Restablecer
     </button>

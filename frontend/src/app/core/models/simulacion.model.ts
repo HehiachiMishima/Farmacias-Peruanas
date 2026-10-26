@@ -16,24 +16,6 @@ export interface ArchivoSimulacion {
   actualizadoPor: number | null;
 }
 
-export interface PaginaSimulacion<T> {
-  contenido: T[];
-  total: number;
-  pagina: number;
-  tamano: number;
-  totalPaginas: number;
-}
-
-export interface ResumenSimulacion {
-  registros: number;
-  rutas: number;
-  chutes: number;
-  etiquetas: number;
-  bultos: number;
-  unidades: number;
-  lineas: number;
-}
-
 export interface ClusterParametroSimulacion {
   id: number;
   nombre: string;
@@ -59,12 +41,32 @@ export interface RutaSimulacion {
   conteoCod: number;
 }
 
+/** Rutas y totales de un cluster asignados a un chute. */
+export interface CargaSimulacion {
+  clusterId: number;
+  chuteId: number;
+  rutas: number;
+  bultos: number;
+  unidades: number;
+  lineas: number;
+  cod: number;
+}
+
+/** Parámetros y carga agregada; las rutas se piden aparte, paginadas. */
 export interface ConfiguracionSimulacion {
   archivo: ArchivoSimulacion;
   velocidadBase: number;
   clusters: ClusterParametroSimulacion[];
   chutes: ChuteParametroSimulacion[];
-  rutas: RutaSimulacion[];
+  carga: CargaSimulacion[];
+}
+
+export interface RutasSimulacionFiltros {
+  pagina: number;
+  tamano: number;
+  texto: string;
+  clusterId: number | null;
+  chuteId: number | null;
 }
 
 export interface RegistroSimulacionActualizarRequest {
@@ -108,6 +110,9 @@ export interface BalanceoSimulacion {
 }
 
 export interface SimulacionKpis {
+  /** Tiempo del cluster más lento (h) antes y después de los ajustes. */
+  tiempoOriginal: number;
+  tiempoBalanceado: number;
   tiempoAhorrado: number;
   rutasMovidas: number;
   operariosAgregados: number;

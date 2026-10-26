@@ -6,8 +6,8 @@ import { AdminAnaliticaApi } from '../../../../../core/services/admin-analitica.
 import { Auth } from '../../../../../core/services/auth';
 import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
 import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
-import { DonutChart, SegmentoDonut } from '../../../../../shared/ui/charts/donut-chart';
 import { SERIES, entero, porcentaje } from '../../../../../shared/ui/charts/formato';
+import { GaugeChart } from '../../../../../shared/ui/charts/gauge-chart';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
 import { LineChart, SerieLinea } from '../../../../../shared/ui/charts/line-chart';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
@@ -27,16 +27,18 @@ const COLOR_PANEL: Record<string, string> = {
   PANEL_SIMULACION: 'var(--cyan)',
 };
 
+/** Roles visibles en el cuadro de reparto; el resto se agrupa en «Otros». */
+const MAX_ROLES = 4;
+
 /**
  * Dashboard ejecutivo de Administración: salud del gobierno de accesos.
  *
- * Responde: ¿cuántas cuentas están habilitadas y cuáles son un riesgo (sin
- * rol, excepciones)?, ¿cómo se reparten los usuarios por rol y por panel?,
- * ¿qué permisos están más extendidos? y ¿cómo crece la base de usuarios?
+ * Tres indicadores (cuentas activas, usuarios sin rol, excepciones) y cuatro
+ * cuadros: cuentas habilitadas, acceso por panel, reparto por rol y altas.
  */
 @Component({
   selector: 'app-admin-dashboard',
-  imports: [RouterLink, BarChart, DonutChart, EmptyState, Icon, Kpi, LineChart],
+  imports: [RouterLink, BarChart, EmptyState, GaugeChart, Icon, Kpi, LineChart],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
@@ -66,21 +68,14 @@ export class Dashboard {
 
   readonly tarjetas = computed(() => {
     const k = this.kpis();
-    const activosPct = k && k.usuarios ? k.usuariosActivos / k.usuarios : 0;
+    const excepciones = k ? k.overridesGrant + k.overridesDeny : 0;
     return [
       {
-        etiqueta: 'Usuarios',
-        valor: k ? entero(k.usuarios) : '—',
+        etiqueta: 'Cuentas activas',
+        valor: k ? `${entero(k.usuariosActivos)} de ${entero(k.usuarios)}` : '—',
         icono: 'usuarios',
         color: 'var(--accent)',
-        detalle: k ? `${entero(k.usuariosActivos)} activos (${porcentaje(activosPct)})` : '',
-      },
-      {
-        etiqueta: 'Cuentas inactivas',
-        valor: k ? entero(k.usuarios - k.usuariosActivos) : '—',
-        icono: 'power',
-        color: 'var(--color-graphite)',
-        detalle: 'Bloqueadas: no pueden iniciar sesión',
+        detalle: k ? `${porcentaje(k.usuarios ? k.usuariosActivos / k.usuarios : 0)} pueden iniciar sesión` : '',
       },
       {
         etiqueta: 'Usuarios sin rol',
@@ -90,83 +85,42 @@ export class Dashboard {
         detalle: k && k.usuariosSinRol > 0 ? 'Revisar: acceso solo por excepción' : 'Todos tienen un rol',
       },
       {
-        etiqueta: 'Roles',
-        valor: k ? entero(k.roles) : '—',
-        icono: 'roles',
-        color: 'var(--violet)',
-        detalle: k ? `${entero(k.rolesActivos)} activos` : '',
-      },
-      {
-        etiqueta: 'Permisos',
-        valor: k ? entero(k.permisos) : '—',
-        icono: 'permisos',
-        color: 'var(--cyan)',
-        detalle: k ? `${entero(k.permisosActivos)} activos en el catálogo` : '',
-      },
-      {
-        etiqueta: 'Excepciones',
-        valor: k ? entero(k.overridesGrant + k.overridesDeny) : '—',
+        etiqueta: 'Excepciones al RBAC',
+        valor: k ? entero(excepciones) : '—',
         icono: 'key',
-        color: 'var(--brand)',
+        color: excepciones > 0 ? 'var(--brand)' : 'var(--success)',
         detalle: k ? `${entero(k.overridesGrant)} concedidas · ${entero(k.overridesDeny)} denegadas` : '',
       },
     ];
   });
 
-  readonly hallazgos = computed(() => {
-    const d = this.datos();
-    if (!d) {
-      return [];
-    }
-    const k = d.kpis;
-    const salida: { icono: string; color: string; kicker: string; texto: string }[] = [];
-    if (k.usuariosSinRol > 0) {
-      salida.push({
-        icono: 'alertTriangle',
-        color: 'var(--warning)',
-        kicker: 'Riesgo de gobierno',
-        texto: `${entero(k.usuariosSinRol)} usuario(s) no tienen rol: su acceso depende de excepciones individuales o no tienen ninguno.`,
-      });
-    }
-    const rol = d.usuariosPorRol[0];
-    if (rol && rol.valor > 0) {
-      salida.push({
-        icono: 'roles',
-        color: 'var(--violet)',
-        kicker: 'Rol más asignado',
-        texto: `${rol.etiqueta} agrupa a ${entero(rol.valor)} usuario(s) (${porcentaje(k.usuarios ? rol.valor / k.usuarios : 0)} del total).`,
-      });
-    }
-    if (k.overridesDeny + k.overridesGrant > 0) {
-      salida.push({
-        icono: 'key',
-        color: 'var(--brand)',
-        kicker: 'Excepciones al RBAC',
-        texto: `Hay ${entero(k.overridesGrant)} permisos concedidos y ${entero(k.overridesDeny)} denegados de forma individual; lo ideal es modelarlos como roles.`,
-      });
-    }
-    return salida;
-  });
-
-  readonly segmentosEstado = computed<SegmentoDonut[]>(() => {
+  /** % de cuentas habilitadas (gauge) y su desglose. */
+  readonly estadoCuentas = computed(() => {
     const k = this.kpis();
-    if (!k || k.usuarios === 0) {
-      return [];
-    }
-    return [
-      { etiqueta: 'Activos', valor: k.usuariosActivos, color: 'var(--success)' },
-      { etiqueta: 'Inactivos', valor: k.usuarios - k.usuariosActivos, color: 'var(--danger)' },
-    ].filter((s) => s.valor > 0);
+    const total = k?.usuarios ?? 0;
+    const activos = k?.usuariosActivos ?? 0;
+    return {
+      pct: total ? Math.round((activos / total) * 100) : 0,
+      activos: entero(activos),
+      inactivos: entero(total - activos),
+      hay: total > 0,
+    };
   });
 
-  readonly barrasRoles = computed<BarraDato[]>(() =>
-    (this.datos()?.usuariosPorRol ?? []).slice(0, 10).map((c, i) => ({
+  /** Top de roles por usuarios; los demás se suman en «Otros». */
+  readonly barrasRoles = computed<BarraDato[]>(() => {
+    const roles = (this.datos()?.usuariosPorRol ?? []).filter((c) => c.valor > 0);
+    const total = this.kpis()?.usuarios ?? 0;
+    const visibles = roles.slice(0, MAX_ROLES);
+    const resto = roles.slice(MAX_ROLES).reduce((suma, c) => suma + c.valor, 0);
+    const lista = resto > 0 ? [...visibles, { etiqueta: 'Otros', valor: resto }] : visibles;
+    return lista.map((c, i) => ({
       etiqueta: c.etiqueta,
       valor: c.valor,
-      color: SERIES[i % SERIES.length],
-      detalle: porcentaje(this.kpis()?.usuarios ? c.valor / this.kpis()!.usuarios : 0),
-    })),
-  );
+      color: c.etiqueta === 'Otros' ? 'var(--chart-otros)' : SERIES[i % SERIES.length],
+      detalle: porcentaje(total ? c.valor / total : 0),
+    }));
+  });
 
   /** Usuarios activos con acceso a cada panel, en % del total de activos. */
   readonly barrasCobertura = computed<BarraDato[]>(() => {
@@ -182,15 +136,6 @@ export class Dashboard {
       };
     });
   });
-
-  readonly barrasPermisos = computed<BarraDato[]>(() =>
-    (this.datos()?.permisosMasOtorgados ?? []).map((c) => ({
-      etiqueta: c.etiqueta,
-      valor: c.valor,
-      color: 'var(--cyan)',
-      detalle: 'usuarios',
-    })),
-  );
 
   readonly altas = computed(() => {
     const serie = this.datos()?.altasPorMes ?? [];

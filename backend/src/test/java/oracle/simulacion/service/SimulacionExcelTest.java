@@ -1,10 +1,13 @@
 package oracle.simulacion.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
+import oracle.common.exception.ConflictoException;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
@@ -119,6 +122,94 @@ class SimulacionExcelTest {
 
     assertEquals("1500.00", analisis.rutas().get(0).bultos().toPlainString());
     assertEquals("1500.00", analisis.totalBultos().toPlainString());
+  }
+
+  @Test
+  void interpretaMilesConComaEnCsvConPuntoYComa() {
+    String csv = "RUTA;CLUSTER;CHUTE;BULTOS\n3030;CL1;CHUTE 1;1,500\n3031;CL1;CHUTE 1;\"12,5\"\n";
+
+    SimulacionExcel.Analisis analisis = SimulacionExcel.analizar(csv(csv));
+
+    assertEquals("1500.00", analisis.rutas().get(0).bultos().toPlainString());
+    assertEquals("12.50", analisis.rutas().get(1).bultos().toPlainString());
+  }
+
+  @Test
+  void rechazaValoresNoNumericosIndicandoLaFila() {
+    String csv = "RUTA,CLUSTER,CHUTE,BULTOS\n3030,CL1,CHUTE 1,doce\n";
+
+    ConflictoException error =
+        assertThrows(ConflictoException.class, () -> SimulacionExcel.analizar(csv(csv)));
+
+    assertTrue(error.getMessage().contains("Fila 2"));
+  }
+
+  @Test
+  void rechazaUnaRutaConDosClusters() {
+    String csv = "RUTA,CLUSTER,CHUTE,BULTOS\n3030,CL1,CHUTE 1,5\n3030,CL2,CHUTE 1,5\n";
+
+    assertThrows(ConflictoException.class, () -> SimulacionExcel.analizar(csv(csv)));
+  }
+
+  @Test
+  void cuentaCodsDistintosYAceptaComillasConSaltoDeLinea() {
+    String csv =
+        "COD,RUTA,CLUSTER,CHUTE,BULTOS\n"
+            + "A1,3030,\"CL\n1\",CHUTE 1,5\n"
+            + "A1,3030,\"CL\n1\",CHUTE 1,5\n"
+            + "A2,3030,\"CL\n1\",CHUTE 1,5\n";
+
+    SimulacionExcel.Analisis analisis = SimulacionExcel.analizar(csv(csv));
+
+    assertEquals(1, analisis.rutas().size());
+    assertEquals(2, analisis.rutas().get(0).conteoCod());
+    assertEquals("15.00", analisis.totalBultos().toPlainString());
+  }
+
+  @Test
+  void ignoraColumnasMasAllaDelTope() throws Exception {
+    byte[] contenido;
+    try (XSSFWorkbook libro = new XSSFWorkbook();
+        ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
+      Sheet hoja = libro.createSheet("Proyección");
+      Row cabecera = hoja.createRow(0);
+      String[] columnas = {"RUTA", "CLUSTER", "CHUTE", "BULTOS"};
+      for (int i = 0; i < columnas.length; i++) {
+        cabecera.createCell(i).setCellValue(columnas[i]);
+      }
+      Row fila = hoja.createRow(1);
+      fila.createCell(0).setCellValue("3030");
+      fila.createCell(1).setCellValue("CL1");
+      fila.createCell(2).setCellValue("CHUTE 1");
+      fila.createCell(3).setCellValue(7);
+      fila.createCell(16_383).setCellValue("XFD");
+      libro.write(salida);
+      contenido = salida.toByteArray();
+    }
+
+    SimulacionExcel.Analisis analisis = SimulacionExcel.analizar(xlsx(contenido));
+
+    assertEquals("7.00", analisis.totalBultos().toPlainString());
+  }
+
+  @Test
+  void rechazaUnXlsxQueNoEsUnLibro() {
+    MockMultipartFile falso =
+        new MockMultipartFile("archivo", "proyeccion.xlsx", "application/octet-stream", "hola".getBytes());
+
+    assertThrows(ConflictoException.class, () -> SimulacionExcel.analizar(falso));
+  }
+
+  private static MockMultipartFile csv(String contenido) {
+    return new MockMultipartFile("archivo", "proyeccion.csv", "text/csv", contenido.getBytes());
+  }
+
+  private static MockMultipartFile xlsx(byte[] contenido) {
+    return new MockMultipartFile(
+        "archivo",
+        "proyeccion.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        contenido);
   }
 
   private static void escribirFila(

@@ -32,8 +32,9 @@ export class DirectorioUsuarios {
     }
     // El catálogo de usuarios exige VER_USUARIOS: sin él la petición daría
     // 403 y un toast de error en pantallas que solo necesitan el fallback.
+    // No se marca como cargado: si en la misma pestaña entra después alguien
+    // con el permiso, el directorio se carga normalmente.
     if (!this.sesion.tienePermiso(PERMISOS.VER_USUARIOS)) {
-      this.cargado = true;
       return;
     }
     this.cargando = true;

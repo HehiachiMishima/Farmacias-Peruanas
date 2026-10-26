@@ -1,6 +1,7 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { switchMap, finalize } from 'rxjs';
+import { Observable, Subject, debounceTime, distinctUntilChanged, finalize, of, switchMap } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import {
@@ -8,11 +9,13 @@ import {
   ConfiguracionSimulacion,
   ConfiguracionSimulacionRequest,
   HistorialSimulacion,
+  Pagina,
   RutaSimulacion,
 } from '../../../../../core/models';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
 import { SesionStore } from '../../../../../core/services/sesion';
 import { SimulacionApi } from '../../../../../core/services/simulacion.api';
+import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
 import { ColumnasRedimensionables } from '../../../../../shared/directives/columnas-redimensionables.directive';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
@@ -20,7 +23,16 @@ import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
-import { colorCluster, formatearHoras, formatearNumero } from '../../simulacion-formato';
+import {
+  OPERARIOS_INICIALES,
+  VELOCIDAD_INICIAL,
+  colorCluster,
+  compararNombre,
+  etiquetaRegistro,
+  formatearHoras,
+  formatearNumero,
+  horas,
+} from '../../simulacion-formato';
 
 @Component({
   selector: 'app-simulacion-configuracion',
@@ -61,14 +73,15 @@ export class SimulacionConfiguracion {
   /** Descarta respuestas viejas si el usuario cambia de registro rápido. */
   private solicitud = 0;
 
-  readonly velocidad = signal(100);
+  readonly velocidad = signal(VELOCIDAD_INICIAL);
   readonly limites = signal<Record<number, number>>({});
   readonly operarios = signal<Record<number, number>>({});
   readonly dirty = signal(false);
 
   readonly filtroChute = signal<number | null>(null);
   readonly filtroCluster = signal<number | null>(null);
-  readonly filtroRuta = signal<number | null>(null);
+  readonly filtroTexto = signal('');
+  private readonly busqueda$ = new Subject<string>();
 
   readonly pagina = signal(1);
   readonly porPagina = signal(25);
@@ -76,6 +89,11 @@ export class SimulacionConfiguracion {
   readonly guardando = signal(false);
   readonly balanceando = signal(false);
   readonly restableciendo = signal(false);
+  readonly moviendo = signal(false);
+  /** Una sola escritura a la vez: los botones de acción se deshabilitan juntos. */
+  readonly ocupado = computed(
+    () => this.guardando() || this.balanceando() || this.restableciendo() || this.moviendo(),
+  );
 
   readonly historial = signal<HistorialSimulacion[]>([]);
   readonly historialAbierto = signal(false);
@@ -86,89 +104,59 @@ export class SimulacionConfiguracion {
   readonly moverAbierto = signal(false);
   readonly rutaAMover = signal<RutaSimulacion | null>(null);
   readonly chuteDestino = signal<number | null>(null);
-  readonly moviendo = signal(false);
 
-  readonly opcionesRegistro = computed(() =>
-    this.registros().map((registro) => {
-      const etiqueta =
-        registro.etiqueta && registro.etiqueta !== 'SIN ETIQUETA' ? registro.etiqueta : null;
-      return {
-        id: registro.id,
-        etiqueta: etiqueta ? `${registro.nombreRegistro} · ${etiqueta}` : registro.nombreRegistro,
-      };
-    }),
+  /** Rutas paginadas en el servidor: un registro puede tener decenas de miles. */
+  readonly rutas = new ListadoRemoto<RutaSimulacion>(
+    () => this.fuenteRutas(),
+    (ultima) => this.pagina.set(ultima),
   );
 
-  private readonly compararNombre = (a: string, b: string): number =>
-    a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  readonly opcionesRegistro = computed(() =>
+    this.registros().map((registro) => ({ id: registro.id, etiqueta: etiquetaRegistro(registro) })),
+  );
 
   readonly opcionesChute = computed(() =>
     [...(this.config()?.chutes ?? [])]
-      .sort((a, b) => this.compararNombre(a.nombre, b.nombre))
+      .sort((a, b) => compararNombre(a.nombre, b.nombre))
       .map((chute) => ({ id: chute.id, etiqueta: chute.nombre })),
   );
 
   readonly opcionesCluster = computed(() =>
     [...(this.config()?.clusters ?? [])]
-      .sort((a, b) => this.compararNombre(a.nombre, b.nombre))
+      .sort((a, b) => compararNombre(a.nombre, b.nombre))
       .map((cluster) => ({ id: cluster.id, etiqueta: cluster.nombre })),
-  );
-
-  readonly opcionesRuta = computed(() =>
-    [...(this.config()?.rutas ?? [])]
-      .sort((a, b) => this.compararNombre(a.codigoRuta, b.codigoRuta))
-      .map((ruta) => ({ id: ruta.id, etiqueta: `${ruta.codigoRuta} · ${ruta.chute}` })),
   );
 
   readonly opcionesDestino = computed(() => {
     const ruta = this.rutaAMover();
-    return [...(this.config()?.chutes ?? [])]
-      .filter((chute) => chute.id !== ruta?.chuteId)
-      .sort((a, b) => this.compararNombre(a.nombre, b.nombre))
-      .map((chute) => ({ id: chute.id, etiqueta: chute.nombre }));
+    return this.opcionesChute().filter((chute) => chute.id !== ruta?.chuteId);
   });
 
   readonly filtrosActivos = computed(
     () =>
       (this.filtroChute() !== null ? 1 : 0) +
       (this.filtroCluster() !== null ? 1 : 0) +
-      (this.filtroRuta() !== null ? 1 : 0),
+      (this.filtroTexto().trim() ? 1 : 0),
   );
-
-  readonly filas = computed(() => {
-    const rutas = this.config()?.rutas ?? [];
-    const chute = this.filtroChute();
-    const cluster = this.filtroCluster();
-    const ruta = this.filtroRuta();
-    return rutas.filter(
-      (fila) =>
-        (chute === null || fila.chuteId === chute) &&
-        (cluster === null || fila.clusterId === cluster) &&
-        (ruta === null || fila.id === ruta),
-    );
-  });
-
-  readonly totalPaginas = computed(() =>
-    Math.max(1, Math.ceil(this.filas().length / this.porPagina())),
-  );
-  readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
-  readonly filasPagina = computed(() => {
-    const inicio = (this.paginaActual() - 1) * this.porPagina();
-    return this.filas().slice(inicio, inicio + this.porPagina());
-  });
 
   readonly tieneLimites = computed(() =>
     Object.values(this.limites()).some((limite) => Number(limite) > 0),
   );
 
-  readonly bultosPorChute = computed(() => {
+  /** Bultos por chute según la carga agregada del servidor. */
+  private readonly bultosPorChute = computed(() => {
     const mapa = new Map<number, number>();
-    for (const ruta of this.config()?.rutas ?? []) {
-      mapa.set(ruta.chuteId, (mapa.get(ruta.chuteId) ?? 0) + Number(ruta.totalBultos));
+    for (const fila of this.config()?.carga ?? []) {
+      mapa.set(fila.chuteId, (mapa.get(fila.chuteId) ?? 0) + Number(fila.bultos));
     }
     return mapa;
   });
 
+  /**
+   * Tiempo de cierre de cada cluster con los parámetros en edición (vista
+   * previa antes de guardar): el máximo de sus chutes, y cada chute tarda
+   * bultos / (velocidad × operarios).
+   */
   readonly resumenClusters = computed(() => {
     const cfg = this.config();
     if (!cfg) {
@@ -176,22 +164,16 @@ export class SimulacionConfiguracion {
     }
     const operarios = this.operarios();
     const limites = this.limites();
-    const velocidad = this.velocidad() || 100;
+    const velocidad = this.velocidad() || VELOCIDAD_INICIAL;
     const bultosPorChute = this.bultosPorChute();
+    const indices = new Map(cfg.clusters.map((cluster, indice) => [cluster.id, indice]));
 
     const acumulado = new Map<
       number,
-      {
-        bultos: number;
-        unidades: number;
-        lineas: number;
-        cod: number;
-        rutas: number;
-        chutes: Set<number>;
-      }
+      { bultos: number; unidades: number; lineas: number; cod: number; rutas: number; chutes: Set<number> }
     >();
-    for (const ruta of cfg.rutas) {
-      const actual = acumulado.get(ruta.clusterId) ?? {
+    for (const fila of cfg.carga) {
+      const actual = acumulado.get(fila.clusterId) ?? {
         bultos: 0,
         unidades: 0,
         lineas: 0,
@@ -199,50 +181,66 @@ export class SimulacionConfiguracion {
         rutas: 0,
         chutes: new Set<number>(),
       };
-      actual.bultos += Number(ruta.totalBultos);
-      actual.unidades += Number(ruta.totalUnidades);
-      actual.lineas += Number(ruta.totalLineas);
-      actual.cod += ruta.conteoCod;
-      actual.rutas += 1;
-      actual.chutes.add(ruta.chuteId);
-      acumulado.set(ruta.clusterId, actual);
+      actual.bultos += Number(fila.bultos);
+      actual.unidades += Number(fila.unidades);
+      actual.lineas += Number(fila.lineas);
+      actual.cod += Number(fila.cod);
+      actual.rutas += Number(fila.rutas);
+      actual.chutes.add(fila.chuteId);
+      acumulado.set(fila.clusterId, actual);
     }
 
-    return cfg.clusters
-      .map((cluster, indice) => {
-        const datos = acumulado.get(cluster.id);
-        let tiempo = 0;
-        for (const chuteId of datos?.chutes ?? []) {
-          const ops = Math.max(1, operarios[chuteId] ?? 2);
-          const tiempoChute = (bultosPorChute.get(chuteId) ?? 0) / (velocidad * ops);
-          tiempo = Math.max(tiempo, tiempoChute);
-        }
-        const limite = limites[cluster.id] ?? 0;
-        return {
-          id: cluster.id,
-          nombre: cluster.nombre,
-          color: colorCluster(indice),
-          limite,
+    return cfg.clusters.map((cluster) => {
+      const datos = acumulado.get(cluster.id);
+      let tiempo = 0;
+      for (const chuteId of datos?.chutes ?? []) {
+        tiempo = Math.max(
           tiempo,
-          excede: limite > 0 && tiempo > limite + 0.01,
-          sinLimite: limite <= 0,
-          bultos: datos?.bultos ?? 0,
-          unidades: datos?.unidades ?? 0,
-          lineas: datos?.lineas ?? 0,
-          cod: datos?.cod ?? 0,
-          rutas: datos?.rutas ?? 0,
-        };
-      })
-      .sort((a, b) => a.nombre.localeCompare(b.nombre, undefined, { numeric: true }));
-  });
-
-  readonly nombreSeleccionado = computed(() => {
-    const id = this.seleccionado();
-    return this.registros().find((registro) => registro.id === id) ?? null;
+          horas(bultosPorChute.get(chuteId) ?? 0, velocidad, operarios[chuteId] ?? OPERARIOS_INICIALES),
+        );
+      }
+      const limite = limites[cluster.id] ?? 0;
+      return {
+        id: cluster.id,
+        nombre: cluster.nombre,
+        color: colorCluster(indices.get(cluster.id) ?? 0),
+        limite,
+        tiempo,
+        excede: limite > 0 && tiempo > limite + 0.01,
+        sinLimite: limite <= 0,
+        bultos: datos?.bultos ?? 0,
+        unidades: datos?.unidades ?? 0,
+        lineas: datos?.lineas ?? 0,
+        cod: datos?.cod ?? 0,
+        rutas: datos?.rutas ?? 0,
+      };
+    });
   });
 
   constructor() {
+    this.busqueda$
+      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
+      .subscribe((texto) => {
+        this.filtroTexto.set(texto);
+        this.recargarRutasDesde(1);
+      });
     this.cargarOpciones();
+  }
+
+  /** Aviso del navegador al cerrar o recargar la pestaña con parámetros sin guardar. */
+  @HostListener('window:beforeunload', ['$event'])
+  alSalirDelNavegador(evento: BeforeUnloadEvent): void {
+    if (this.dirty()) {
+      evento.preventDefault();
+    }
+  }
+
+  /** Lo consulta el guard de la ruta antes de navegar a otra pantalla. */
+  puedeSalir(): boolean {
+    return (
+      !this.dirty() ||
+      window.confirm('Hay parámetros sin guardar. ¿Salir y descartar los cambios?')
+    );
   }
 
   cargarOpciones(): void {
@@ -272,15 +270,12 @@ export class SimulacionConfiguracion {
             lista[0].id;
           this.seleccionar(elegido);
         },
-        error: (err: unknown) => {
-          this.errorOpciones.set(mensajeDeError(err));
-          this.notificaciones.error('No se pudieron cargar los registros', mensajeDeError(err));
-        },
+        error: (err: unknown) => this.errorOpciones.set(mensajeDeError(err)),
       });
   }
 
   seleccionarDesdeSelector(id: number | null): void {
-    if (this.guardando() || this.balanceando() || this.moviendo() || this.restableciendo()) {
+    if (this.ocupado()) {
       this.notificaciones.advertencia('Operación en curso', 'Espera a que termine la operación.');
       return;
     }
@@ -295,7 +290,7 @@ export class SimulacionConfiguracion {
   }
 
   actualizar(): void {
-    if (this.guardando() || this.balanceando() || this.moviendo() || this.restableciendo()) {
+    if (this.ocupado()) {
       return;
     }
     if (this.dirty()) {
@@ -312,7 +307,9 @@ export class SimulacionConfiguracion {
     this.seleccionado.set(id);
     this.config.set(null);
     this.error.set(null);
-    this.limpiarFiltros();
+    this.filtroChute.set(null);
+    this.filtroCluster.set(null);
+    this.filtroTexto.set('');
     this.pagina.set(1);
     void this.router.navigate([], {
       relativeTo: this.route,
@@ -325,8 +322,19 @@ export class SimulacionConfiguracion {
       this.cargando.set(false);
       return;
     }
+    this.cargarConfiguracion(id, true);
+  }
+
+  /**
+   * Carga la configuración (parámetros + carga agregada) y la primera página
+   * de rutas. Con `inicial` muestra el estado de carga a pantalla completa;
+   * si no, recarga en segundo plano conservando la vista.
+   */
+  private cargarConfiguracion(id: number, inicial = false): void {
     const solicitud = ++this.solicitud;
-    this.cargando.set(true);
+    if (inicial) {
+      this.cargando.set(true);
+    }
     this.api
       .configuracion(id)
       .pipe(
@@ -340,14 +348,13 @@ export class SimulacionConfiguracion {
         next: (config) => {
           if (solicitud === this.solicitud) {
             this.aplicarConfiguracion(config);
+            this.rutas.recargar();
           }
         },
         error: (err: unknown) => {
-          if (solicitud !== this.solicitud) {
-            return;
+          if (solicitud === this.solicitud && inicial) {
+            this.error.set(mensajeDeError(err));
           }
-          this.error.set(mensajeDeError(err));
-          this.notificaciones.error('No se pudo cargar la configuración', mensajeDeError(err));
         },
       });
   }
@@ -356,18 +363,28 @@ export class SimulacionConfiguracion {
     this.config.set(config);
     this.velocidad.set(Number(config.velocidadBase));
     this.limites.set(
-      Object.fromEntries(
-        config.clusters.map((cluster) => [cluster.id, Number(cluster.limiteHoras)]),
-      ),
+      Object.fromEntries(config.clusters.map((cluster) => [cluster.id, Number(cluster.limiteHoras)])),
     );
-    this.operarios.set(
-      Object.fromEntries(config.chutes.map((chute) => [chute.id, chute.operarios])),
-    );
+    this.operarios.set(Object.fromEntries(config.chutes.map((chute) => [chute.id, chute.operarios])));
     this.dirty.set(false);
   }
 
+  private fuenteRutas(): Observable<Pagina<RutaSimulacion>> {
+    const id = this.seleccionado();
+    if (id === null) {
+      return of({ contenido: [], total: 0, pagina: 1, tamano: this.porPagina(), totalPaginas: 0 });
+    }
+    return this.api.rutas(id, {
+      pagina: this.pagina(),
+      tamano: this.porPagina(),
+      texto: this.filtroTexto().trim(),
+      clusterId: this.filtroCluster(),
+      chuteId: this.filtroChute(),
+    });
+  }
+
   getOperarios(chuteId: number): number {
-    return this.operarios()[chuteId] ?? 2;
+    return this.operarios()[chuteId] ?? OPERARIOS_INICIALES;
   }
 
   colorDeCluster(clusterId: number): string {
@@ -377,48 +394,42 @@ export class SimulacionConfiguracion {
 
   /** Tiempo que aporta esta ruta al chute (no el total acumulado del chute). */
   tiempoRuta(ruta: RutaSimulacion): number {
-    const velocidad = this.velocidad() || 100;
-    const ops = Math.max(1, this.getOperarios(ruta.chuteId));
-    return Number(ruta.totalBultos) / (velocidad * ops);
+    return horas(Number(ruta.totalBultos), this.velocidad() || VELOCIDAD_INICIAL, this.getOperarios(ruta.chuteId));
   }
 
   setVelocidad(evento: Event): void {
     const input = evento.target as HTMLInputElement;
-    const valor = Number(input.value);
+    const valor = Math.round(Number(input.value) * 100) / 100;
     if (!Number.isFinite(valor) || valor <= 0) {
       input.value = String(this.velocidad());
       return;
     }
+    input.value = String(valor);
     this.velocidad.set(valor);
     this.actualizarDirty();
   }
 
   setLimite(clusterId: number, evento: Event): void {
     const input = evento.target as HTMLInputElement;
-    const valor = Number(input.value);
+    const valor = Math.round(Number(input.value) * 100) / 100;
     const limite = Number.isFinite(valor) && valor >= 0 ? valor : 0;
     input.value = String(limite);
-    const limites = { ...this.limites() };
-    limites[clusterId] = limite;
-    this.limites.set(limites);
+    this.limites.set({ ...this.limites(), [clusterId]: limite });
     this.actualizarDirty();
   }
 
   setOperarios(chuteId: number, evento: Event): void {
     const input = evento.target as HTMLInputElement;
     const valor = Number.parseInt(input.value, 10);
-    const operariosAsignados = Number.isInteger(valor) && valor >= 1 ? valor : 1;
-    input.value = String(operariosAsignados);
-    const operarios = { ...this.operarios() };
-    operarios[chuteId] = operariosAsignados;
-    this.operarios.set(operarios);
+    const asignados = Number.isInteger(valor) && valor >= 1 ? valor : 1;
+    input.value = String(asignados);
+    this.operarios.set({ ...this.operarios(), [chuteId]: asignados });
     this.actualizarDirty();
   }
 
   /**
    * Los cambios se marcan comparando con lo último cargado del servidor: editar
-   * un valor y dejarlo igual (o reescribir el mismo número) no debe bloquear el
-   * cambio de registro ni la salida al dashboard.
+   * un valor y dejarlo igual no debe bloquear el cambio de registro ni la salida.
    */
   private actualizarDirty(): void {
     const config = this.config();
@@ -426,47 +437,48 @@ export class SimulacionConfiguracion {
       this.dirty.set(false);
       return;
     }
-    const velocidadIgual = Number(config.velocidadBase) === this.velocidad();
     const limites = this.limites();
-    const clustersIguales = config.clusters.every(
-      (cluster) => Number(cluster.limiteHoras) === (limites[cluster.id] ?? 0),
-    );
     const operarios = this.operarios();
-    const chutesIguales = config.chutes.every(
-      (chute) => chute.operarios === (operarios[chute.id] ?? 2),
-    );
-    this.dirty.set(!(velocidadIgual && clustersIguales && chutesIguales));
+    const iguales =
+      Number(config.velocidadBase) === this.velocidad() &&
+      config.clusters.every((cluster) => Number(cluster.limiteHoras) === (limites[cluster.id] ?? 0)) &&
+      config.chutes.every((chute) => chute.operarios === (operarios[chute.id] ?? OPERARIOS_INICIALES));
+    this.dirty.set(!iguales);
   }
 
   setFiltroChute(id: number | null): void {
     this.filtroChute.set(id);
-    this.pagina.set(1);
+    this.recargarRutasDesde(1);
   }
 
   setFiltroCluster(id: number | null): void {
     this.filtroCluster.set(id);
-    this.pagina.set(1);
+    this.recargarRutasDesde(1);
   }
 
-  setFiltroRuta(id: number | null): void {
-    this.filtroRuta.set(id);
-    this.pagina.set(1);
+  buscarRuta(texto: string): void {
+    this.busqueda$.next(texto);
   }
 
   limpiarFiltros(): void {
     this.filtroChute.set(null);
     this.filtroCluster.set(null);
-    this.filtroRuta.set(null);
-    this.pagina.set(1);
+    this.filtroTexto.set('');
+    this.recargarRutasDesde(1);
   }
 
   cambiarPagina(pagina: number): void {
-    this.pagina.set(pagina);
+    this.recargarRutasDesde(pagina);
   }
 
   cambiarPorPagina(valor: number): void {
     this.porPagina.set(valor);
-    this.pagina.set(1);
+    this.recargarRutasDesde(1);
+  }
+
+  private recargarRutasDesde(pagina: number): void {
+    this.pagina.set(pagina);
+    this.rutas.recargar();
   }
 
   private peticion(): ConfiguracionSimulacionRequest | null {
@@ -482,7 +494,7 @@ export class SimulacionConfiguracion {
       })),
       chutes: config.chutes.map((chute) => ({
         chuteId: chute.id,
-        operarios: Math.max(1, this.operarios()[chute.id] ?? 2),
+        operarios: Math.max(1, this.getOperarios(chute.id)),
       })),
     };
   }
@@ -490,7 +502,7 @@ export class SimulacionConfiguracion {
   guardar(): void {
     const id = this.seleccionado();
     const peticion = this.peticion();
-    if (!id || !peticion || this.guardando()) {
+    if (!id || !peticion || this.ocupado()) {
       return;
     }
     this.guardando.set(true);
@@ -503,20 +515,15 @@ export class SimulacionConfiguracion {
             return;
           }
           this.aplicarConfiguracion(config);
-          this.notificaciones.exito(
-            'Parámetros guardados',
-            'Los límites y operarios quedaron actualizados.',
-          );
+          this.notificaciones.exito('Parámetros guardados', 'Los límites y operarios quedaron actualizados.');
         },
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudieron guardar los parámetros', mensajeDeError(err)),
       });
   }
 
   balancear(): void {
     const id = this.seleccionado();
     const peticion = this.peticion();
-    if (!id || !peticion || this.balanceando()) {
+    if (!id || !peticion || this.ocupado()) {
       return;
     }
     if (!this.tieneLimites()) {
@@ -537,40 +544,7 @@ export class SimulacionConfiguracion {
           this.cargarConfiguracion(id);
         }
       },
-      error: (err: unknown) =>
-        this.notificaciones.error('No se pudo ejecutar el balanceo', mensajeDeError(err)),
     });
-  }
-
-  private cargarConfiguracion(id: number): void {
-    if (this.seleccionado() !== id) {
-      return;
-    }
-    const solicitud = ++this.solicitud;
-    this.cargando.set(true);
-    this.error.set(null);
-    this.api
-      .configuracion(id)
-      .pipe(
-        finalize(() => {
-          if (solicitud === this.solicitud) {
-            this.cargando.set(false);
-          }
-        }),
-      )
-      .subscribe({
-        next: (config) => {
-          if (solicitud === this.solicitud) {
-            this.aplicarConfiguracion(config);
-          }
-        },
-        error: (err: unknown) => {
-          if (solicitud !== this.solicitud) {
-            return;
-          }
-          this.notificaciones.error('No se pudo recargar la configuración', mensajeDeError(err));
-        },
-      });
   }
 
   verCambios(): void {
@@ -578,6 +552,7 @@ export class SimulacionConfiguracion {
     if (!id) {
       return;
     }
+    this.historial.set([]);
     this.historialAbierto.set(true);
     this.historialCargando.set(true);
     this.api
@@ -585,20 +560,19 @@ export class SimulacionConfiguracion {
       .pipe(finalize(() => this.historialCargando.set(false)))
       .subscribe({
         next: (historial) => this.historial.set(historial),
-        error: (err: unknown) => {
-          this.historialAbierto.set(false);
-          this.notificaciones.error('No se pudo cargar el historial', mensajeDeError(err));
-        },
+        error: () => this.historialAbierto.set(false),
       });
   }
 
   confirmarRestablecer(): void {
-    this.restablecerAbierto.set(true);
+    if (!this.ocupado()) {
+      this.restablecerAbierto.set(true);
+    }
   }
 
   restablecer(): void {
     const id = this.seleccionado();
-    if (!id || this.restableciendo()) {
+    if (!id || this.ocupado()) {
       return;
     }
     this.restableciendo.set(true);
@@ -608,20 +582,18 @@ export class SimulacionConfiguracion {
       .subscribe({
         next: () => {
           this.restablecerAbierto.set(false);
-          this.notificaciones.info(
-            'Datos restablecidos',
-            'Las rutas volvieron a su posición original.',
-          );
+          this.notificaciones.info('Datos restablecidos', 'Las rutas volvieron a su posición original.');
           if (this.seleccionado() === id) {
             this.cargarConfiguracion(id);
           }
         },
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudo restablecer', mensajeDeError(err)),
       });
   }
 
   abrirMover(ruta: RutaSimulacion): void {
+    if (this.ocupado()) {
+      return;
+    }
     this.rutaAMover.set(ruta);
     this.chuteDestino.set(null);
     this.moverAbierto.set(true);
@@ -638,12 +610,12 @@ export class SimulacionConfiguracion {
     const ruta = this.rutaAMover();
     const destino = this.chuteDestino();
     const peticion = this.peticion();
-    if (!id || !ruta || destino === null || !peticion || this.moviendo()) {
+    if (!id || !ruta || destino === null || !peticion || this.ocupado()) {
       return;
     }
     this.moviendo.set(true);
     // Mover devuelve la configuración del servidor: si hay parámetros sin
-    // guardar, se envían primero para no perderlos al refrescar la respuesta.
+    // guardar, se envían primero para no perderlos al aplicar la respuesta.
     const operacion = this.dirty()
       ? this.api
           .guardarConfiguracion(id, peticion)
@@ -653,23 +625,15 @@ export class SimulacionConfiguracion {
       next: (config) => {
         if (this.seleccionado() === id) {
           this.aplicarConfiguracion(config);
+          this.rutas.recargar();
         }
         this.cerrarMover();
         this.notificaciones.exito('Ruta movida', `La ruta ${ruta.codigoRuta} cambió de chute.`);
       },
-      error: (err: unknown) =>
-        this.notificaciones.error('No se pudo mover la ruta', mensajeDeError(err)),
     });
   }
 
   irADashboard(): void {
-    if (this.dirty()) {
-      this.notificaciones.advertencia(
-        'Cambios sin guardar',
-        'Guarda los parámetros antes de salir de la configuración.',
-      );
-      return;
-    }
     const id = this.seleccionado();
     void this.router.navigate(['/simulacion/dashboard'], {
       queryParams: id ? { registro: id } : {},

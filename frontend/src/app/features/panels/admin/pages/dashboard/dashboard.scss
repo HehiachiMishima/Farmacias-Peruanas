@@ -6,14 +6,64 @@
   margin-bottom: var(--space-10);
 }
 
+/* Gauge centrado con su desglose debajo; no se estira con la altura de la fila. */
 .admin-centro {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-4);
 
-  ui-donut {
+  ui-gauge {
     width: 100%;
-    max-width: 300px;
+    max-width: 200px;
+  }
+}
+
+/* Gráficos centrados verticalmente para que las tarjetas de una fila se vean parejas. */
+.admin-medio {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.admin-estado {
+  display: flex;
+  gap: var(--space-6);
+  margin: 0;
+
+  div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  dt {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fs-xs);
+    color: var(--text-3);
+  }
+
+  dd {
+    margin: 0;
+    font-size: var(--fs-lg);
+    font-weight: 800;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.admin-estado__punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+
+  &--ok {
+    background: var(--success);
   }
 }
 
@@ -131,9 +181,4 @@
   color: var(--text-2);
   font-weight: 700;
   flex: none;
-}
-
-@include bp.down(sm) {
-  .chart-card { padding: var(--space-4); }
-  .metrics { gap: var(--space-4); }
 }

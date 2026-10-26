@@ -14,6 +14,7 @@
       type="search"
       class="ui-input"
       placeholder="Buscar por nombre, archivo o etiqueta…"
+      aria-label="Buscar registros"
       [value]="busqueda()"
       (input)="buscar($any($event.target).value)"
     />
@@ -96,15 +97,16 @@
               <td>
                 <span
                   class="registro-tag"
-                  [class.registro-tag--vacia]="!a.etiqueta || a.etiqueta === 'SIN ETIQUETA'"
+                  [class.registro-tag--vacia]="!a.etiqueta"
                   [style.--tag-color]="colorRegistro(a.colorHex)"
+                  [title]="a.etiqueta || 'Sin etiqueta'"
                 >
                   {{ a.etiqueta || 'SIN ETIQUETA' }}
                 </span>
               </td>
               <td>
-                <span class="ui-table__primary">{{ a.nombreRegistro }}</span>
-                <span class="cell-sub">{{ a.nombreArchivo }}</span>
+                <span class="ui-table__primary" [title]="a.nombreRegistro">{{ a.nombreRegistro }}</span>
+                <span class="cell-sub" [title]="a.nombreArchivo">{{ a.nombreArchivo }}</span>
               </td>
               <td class="num">{{ formatearNumero(a.rutas) }}</td>
               <td class="num">{{ formatearNumero(a.chutes) }}</td>
@@ -187,8 +189,9 @@
 
   <div class="grid-form">
     <div class="ui-field">
-      <label class="ui-label">Nombre del registro <span class="ui-required">*</span></label>
+      <label class="ui-label" for="subir-nombre">Nombre del registro <span class="ui-required">*</span></label>
       <input
+        id="subir-nombre"
         class="ui-input"
         [class.ui-input--invalid]="campoInvalido('nombreRegistro')"
         [formControl]="formulario.controls.nombreRegistro"
@@ -199,8 +202,9 @@
       }
     </div>
     <div class="ui-field">
-      <label class="ui-label">Etiqueta</label>
+      <label class="ui-label" for="subir-etiqueta">Etiqueta</label>
       <input
+        id="subir-etiqueta"
         class="ui-input"
         [formControl]="formulario.controls.etiqueta"
         maxlength="50"
@@ -211,8 +215,8 @@
   </div>
 
   <div class="ui-field">
-    <label class="ui-label">Color del registro</label>
-    <div class="color-picker">
+    <span class="ui-label" id="color-registro">Color del registro</span>
+    <div class="color-picker" role="group" aria-labelledby="color-registro">
       @for (color of paleta; track color.hex) {
         <button
           type="button"
@@ -221,6 +225,7 @@
           [style.background]="color.hex"
           [title]="color.nombre"
           [attr.aria-label]="color.nombre"
+          [attr.aria-pressed]="formulario.controls.colorHex.value === color.hex"
           (click)="fijarColor(color.hex)"
         ></button>
       }
@@ -255,26 +260,27 @@
 >
   <div class="grid-form">
     <div class="ui-field">
-      <label class="ui-label">Nombre del registro <span class="ui-required">*</span></label>
+      <label class="ui-label" for="editar-nombre">Nombre del registro <span class="ui-required">*</span></label>
       <input
+        id="editar-nombre"
         class="ui-input"
         [class.ui-input--invalid]="campoEdicionInvalido('nombreRegistro')"
         [formControl]="formEdicion.controls.nombreRegistro"
         maxlength="150"
       />
       @if (campoEdicionInvalido('nombreRegistro')) {
-        <span class="ui-error">Obligatorio.</span>
+        <span class="ui-error">Escribe un nombre de hasta 150 caracteres.</span>
       }
     </div>
     <div class="ui-field">
-      <label class="ui-label">Etiqueta</label>
-      <input class="ui-input" [formControl]="formEdicion.controls.etiqueta" maxlength="50" />
+      <label class="ui-label" for="editar-etiqueta">Etiqueta</label>
+      <input id="editar-etiqueta" class="ui-input" [formControl]="formEdicion.controls.etiqueta" maxlength="50" />
     </div>
   </div>
 
   <div class="ui-field">
-    <label class="ui-label">Color del registro</label>
-    <div class="color-picker">
+    <span class="ui-label" id="color-registro">Color del registro</span>
+    <div class="color-picker" role="group" aria-labelledby="color-registro">
       @for (color of paleta; track color.hex) {
         <button
           type="button"
@@ -283,6 +289,7 @@
           [style.background]="color.hex"
           [title]="color.nombre"
           [attr.aria-label]="color.nombre"
+          [attr.aria-pressed]="formEdicion.controls.colorHex.value === color.hex"
           (click)="fijarColorEdicion(color.hex)"
         ></button>
       }

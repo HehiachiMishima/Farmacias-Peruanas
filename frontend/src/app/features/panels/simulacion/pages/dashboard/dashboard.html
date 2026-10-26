@@ -2,7 +2,7 @@
   <div>
     <h1 class="page-head__title">Dashboard de simulación</h1>
     <p class="page-head__sub">
-      Comparativo de tiempos, rutas y operarios antes y después del balanceo.
+      Resultado del balanceo: cierre de la operación, carga y operarios antes y después.
     </p>
   </div>
   @if (seleccionado()) {
@@ -20,8 +20,9 @@
 
 <section class="selector-panel">
   <div class="selector-panel__campo">
-    <label class="ui-label">Registro</label>
+    <label class="ui-label" for="dashboard-registro">Registro</label>
     <ui-select-buscable
+      campoId="dashboard-registro"
       [opciones]="opcionesRegistro()"
       [valor]="seleccionado()"
       [deshabilitado]="cargandoOpciones()"
@@ -73,8 +74,8 @@
   <div class="table-card">
     <ui-empty
       icono="dashboard"
-      titulo="Sin resultados de balanceo"
-      mensaje="Este registro todavía está en proyección. Configura los límites y ejecuta el balanceo para comparar."
+      titulo="Sin ajustes que comparar"
+      mensaje="Este registro sigue en proyección. Define los límites y ejecuta el balanceo (o mueve rutas) para ver el comparativo."
     >
       <button
         *hasPermiso="permisos.VER_CONFIGURACION_SIMULACION"
@@ -111,16 +112,29 @@
     }
   </section>
 
-  <div class="dash-grid">
-    <article class="dash-card">
+  @if (hallazgos().length > 0) {
+    <section class="dash-insights" aria-label="Hallazgos">
+      @for (h of hallazgos(); track h.kicker) {
+        <article class="dash-insight" [style.--c]="h.color">
+          <span class="dash-insight__icon"><ui-icon [name]="h.icono" [size]="18" /></span>
+          <p class="dash-insight__texto">
+            <span class="dash-insight__kicker">{{ h.kicker }}</span>
+            <span [innerHTML]="h.texto"></span>
+          </p>
+        </article>
+      }
+    </section>
+  }
+
+  <div class="dash-grid" [class.dash-grid--cargando]="cargando()">
+    <article class="dash-card dash-card--7" [class.dash-card--cargando]="cargando()">
       <header class="dash-card__head">
         <div class="dash-card__titulos">
           <h2 class="dash-card__titulo">
-            <ui-icon name="reloj" [size]="18" /> Tiempos de cierre por cluster
+            <ui-icon name="reloj" [size]="18" /> ¿Qué clusters cierran dentro de su límite?
           </h2>
           <p class="dash-card__sub">
-            Tiempo balanceado frente al límite. La marca vertical señala el límite configurado y
-            todas las barras comparten escala.
+            Barra sólida: tiempo tras el balanceo · fondo: tiempo original · marca: límite.
           </p>
         </div>
       </header>
@@ -130,14 +144,14 @@
             @for (c of cierres(); track c.cluster) {
               <article class="cierre__item" [class.cierre__item--excede]="c.excede">
                 <header class="cierre__head">
-                  <span class="cierre__cluster">{{ c.cluster }}</span>
+                  <span class="cierre__cluster" [title]="c.cluster">{{ c.cluster }}</span>
                   @if (c.limiteHoras > 0) {
                     <span
                       class="ui-badge"
                       [class.ui-badge--danger]="c.excede"
                       [class.ui-badge--success]="!c.excede"
                     >
-                      {{ c.excede ? 'Excede' : 'Óptimo' }}
+                      {{ c.excede ? 'Excede' : 'Cumple' }}
                     </span>
                   } @else {
                     <span class="ui-badge ui-badge--neutral">Sin límite</span>
@@ -146,18 +160,22 @@
 
                 <div class="cierre__cifra">
                   <span class="cierre__tiempo">{{ formatearHoras(c.tiempoBalanceado) }}</span>
-                  <span class="cierre__antes">Antes {{ formatearHoras(c.tiempoOriginal) }}</span>
+                  <span class="cierre__antes">antes {{ formatearHoras(c.tiempoOriginal) }}</span>
                 </div>
 
                 <div
                   class="cierre__track"
+                  role="img"
                   [attr.aria-label]="
                     c.cluster +
                     ': ' +
                     formatearHoras(c.tiempoBalanceado) +
-                    (c.limiteHoras > 0 ? ' de un límite de ' + formatearHoras(c.limiteHoras) : '')
+                    ', antes ' +
+                    formatearHoras(c.tiempoOriginal) +
+                    (c.limiteHoras > 0 ? ', límite ' + formatearHoras(c.limiteHoras) : '')
                   "
                 >
+                  <span class="cierre__original" [style.width.%]="c.pctOriginal"></span>
                   <span
                     class="cierre__fill"
                     [class.cierre__fill--excede]="c.excede"
@@ -172,9 +190,7 @@
                 <dl class="cierre__pie">
                   <div>
                     <dt>Límite</dt>
-                    <dd>
-                      {{ c.limiteHoras > 0 ? formatearHoras(c.limiteHoras) : 'Sin límite' }}
-                    </dd>
+                    <dd>{{ c.limiteHoras > 0 ? formatearHoras(c.limiteHoras) : 'Sin límite' }}</dd>
                   </div>
                   <div>
                     <dt>Ahorro</dt>
@@ -192,66 +208,70 @@
       </div>
     </article>
 
-    <article class="dash-card">
+    <article class="dash-card dash-card--5" [class.dash-card--cargando]="cargando()">
       <header class="dash-card__head">
         <div class="dash-card__titulos">
           <h2 class="dash-card__titulo">
-            <ui-icon name="control" [size]="18" /> Desglose comparativo por cluster
+            <ui-icon name="paquete" [size]="18" /> ¿Cómo se reparte la carga?
           </h2>
-          <p class="dash-card__sub">Tiempo y estado frente al límite configurado.</p>
+          <p class="dash-card__sub">Bultos proyectados por cluster y su participación.</p>
         </div>
       </header>
       <div class="dash-card__body">
-        <div class="dash-tabla-wrap">
-          <table class="dash-tabla">
-            <thead>
-              <tr>
-                <th>Cluster</th>
-                <th class="num">Tiempo original</th>
-                <th class="num">Tiempo balanceado</th>
-                <th class="num">Límite</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (cluster of datos.clusters; track cluster.cluster) {
-                <tr>
-                  <td class="fuerte">{{ cluster.cluster }}</td>
-                  <td class="num">{{ formatearHoras(cluster.tiempoOriginal) }}</td>
-                  <td class="num fuerte">{{ formatearHoras(cluster.tiempoBalanceado) }}</td>
-                  <td class="num">
-                    {{ cluster.limiteHoras > 0 ? formatearHoras(cluster.limiteHoras) : '—' }}
-                  </td>
-                  <td>
-                    @if (cluster.limiteHoras > 0) {
-                      <span
-                        class="ui-badge"
-                        [class.ui-badge--danger]="cluster.excede"
-                        [class.ui-badge--success]="!cluster.excede"
-                      >
-                        {{ cluster.excede ? 'Excede' : 'Óptimo' }}
-                      </span>
-                    } @else {
-                      <span class="ui-badge ui-badge--neutral">Sin límite</span>
-                    }
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
+        <ui-anillo [items]="cargaClusters()" [maximo]="6" centro="Bultos" titulo="Bultos por cluster" />
       </div>
     </article>
 
-    <article class="dash-card">
+    <article class="dash-card dash-card--7" [class.dash-card--cargando]="cargando()">
       <header class="dash-card__head">
         <div class="dash-card__titulos">
           <h2 class="dash-card__titulo">
-            <ui-icon name="paquete" [size]="18" /> Desglose comparativo por chute
+            <ui-icon name="alerta" [size]="18" /> ¿Qué chutes son el cuello de botella?
           </h2>
           <p class="dash-card__sub">
-            Impacto del balanceo en cada chute y en su plantilla de operarios.
+            Los 5 chutes más lentos tras el balanceo frente al promedio de los chutes con carga.
           </p>
+        </div>
+      </header>
+      <div class="dash-card__body">
+        @if (tiemposChute().items.length > 0) {
+          <ui-bullet
+            [items]="tiemposChute().items"
+            [referencia]="tiemposChute().promedio"
+            [textoReferencia]="tiemposChute().texto"
+            [maximo]="5"
+          />
+        } @else {
+          <div class="dash-card__vacio">Sin chutes con carga.</div>
+        }
+      </div>
+    </article>
+
+    <article class="dash-card dash-card--5" [class.dash-card--cargando]="cargando()">
+      <header class="dash-card__head">
+        <div class="dash-card__titulos">
+          <h2 class="dash-card__titulo">
+            <ui-icon name="usuarios" [size]="18" /> ¿Dónde se reforzó la plantilla?
+          </h2>
+          <p class="dash-card__sub">Operarios añadidos por chute para cumplir los límites.</p>
+        </div>
+      </header>
+      <div class="dash-card__body dash-card__body--centro">
+        @if (operariosAnadidos().length > 0) {
+          <ui-bars [datos]="operariosAnadidos()" [horizontal]="true" />
+        } @else {
+          <div class="dash-card__vacio">El balanceo no necesitó añadir operarios.</div>
+        }
+      </div>
+    </article>
+
+    <article class="dash-card" [class.dash-card--cargando]="cargando()">
+      <header class="dash-card__head">
+        <div class="dash-card__titulos">
+          <h2 class="dash-card__titulo">
+            <ui-icon name="control" [size]="18" /> Detalle por chute
+          </h2>
+          <p class="dash-card__sub">Antes y después del balanceo: plantilla, tiempo y carga.</p>
         </div>
       </header>
       <div class="dash-card__body">
@@ -260,30 +280,35 @@
             <thead>
               <tr>
                 <th>Chute</th>
-                <th class="num">Tiempo original</th>
-                <th class="num">Tiempo balanceado</th>
+                <th class="num">Operarios</th>
+                <th class="num">Tiempo antes</th>
+                <th class="num">Tiempo después</th>
+                <th class="num">Variación</th>
                 <th>Estado</th>
-                <th class="num">Bultos orig.</th>
-                <th class="num">Bultos bal.</th>
-                <th class="num">Unidades orig.</th>
-                <th class="num">Unidades bal.</th>
-                <th class="num">Líneas orig.</th>
-                <th class="num">Líneas bal.</th>
-                <th class="num">COD orig.</th>
-                <th class="num">COD bal.</th>
+                <th class="num">Bultos antes</th>
+                <th class="num">Bultos después</th>
               </tr>
             </thead>
             <tbody>
               @for (chute of datos.chutes; track chute.chute) {
                 <tr>
-                  <td class="fuerte">
-                    {{ chute.chute }}
-                    <span class="ops-detalle">
-                      (Ops: {{ chute.operariosOriginal }} → {{ chute.operariosBalanceado }})
-                    </span>
+                  <td class="fuerte">{{ chute.chute }}</td>
+                  <td class="num">
+                    @if (chute.operariosBalanceado !== chute.operariosOriginal) {
+                      {{ chute.operariosOriginal }} → <strong>{{ chute.operariosBalanceado }}</strong>
+                    } @else {
+                      {{ chute.operariosBalanceado }}
+                    }
                   </td>
                   <td class="num">{{ formatearHoras(chute.tiempoOriginal) }}</td>
                   <td class="num fuerte">{{ formatearHoras(chute.tiempoBalanceado) }}</td>
+                  <td
+                    class="num"
+                    [class.dash-delta--baja]="chute.estado === 'MEJORO'"
+                    [class.dash-delta--sube]="chute.estado === 'AUMENTO'"
+                  >
+                    {{ variacion(chute.tiempoOriginal, chute.tiempoBalanceado) }}
+                  </td>
                   <td>
                     <span [class]="'ui-badge ' + estadoChute(chute.estado).clase">
                       {{ estadoChute(chute.estado).texto }}
@@ -291,12 +316,6 @@
                   </td>
                   <td class="num">{{ formatearNumero(chute.bultosOriginal) }}</td>
                   <td class="num fuerte">{{ formatearNumero(chute.bultosBalanceado) }}</td>
-                  <td class="num">{{ formatearNumero(chute.unidadesOriginal) }}</td>
-                  <td class="num">{{ formatearNumero(chute.unidadesBalanceado) }}</td>
-                  <td class="num">{{ formatearNumero(chute.lineasOriginal) }}</td>
-                  <td class="num">{{ formatearNumero(chute.lineasBalanceado) }}</td>
-                  <td class="num">{{ formatearNumero(chute.codOriginal) }}</td>
-                  <td class="num">{{ formatearNumero(chute.codBalanceado) }}</td>
                 </tr>
               }
             </tbody>

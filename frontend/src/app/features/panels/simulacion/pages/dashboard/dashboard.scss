@@ -25,23 +25,25 @@
   }
 }
 
-.dash-kpis {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-
-  @include bp.down(lg) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  @include bp.down(sm) {
-    grid-template-columns: 1fr;
-  }
+/* Contenido corto centrado: la tarjeta acompaña la altura de su pareja sin quedar vacía arriba. */
+.dash-card__body--centro {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.dash-tabla .num {
-  text-align: right;
+/* Variación del tiempo por chute en el detalle: bajar es bueno. */
+.dash-delta--baja {
+  color: var(--success);
+  font-weight: 700;
 }
 
-/* Vista ejecutiva del cierre por cluster: barra + marca del límite. */
+.dash-delta--sube {
+  color: var(--warning);
+  font-weight: 700;
+}
+
+/* Vista ejecutiva del cierre por cluster: barra actual sobre la original + marca del límite. */
 .cierre {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
@@ -71,6 +73,10 @@
 }
 
 .cierre__cluster {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--fs-sm);
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -106,7 +112,15 @@
   background: var(--surface-3);
 }
 
+.cierre__original {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--text-3) 28%, transparent);
+}
+
 .cierre__fill {
+  position: relative;
   display: block;
   height: 100%;
   border-radius: inherit;
@@ -161,11 +175,4 @@
 
 .cierre__ok {
   color: var(--success);
-}
-
-.ops-detalle {
-  margin-left: 4px;
-  font-size: 0.66rem;
-  font-weight: 600;
-  color: var(--text-3);
 }

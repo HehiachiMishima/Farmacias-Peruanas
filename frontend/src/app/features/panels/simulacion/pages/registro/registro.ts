@@ -1,11 +1,11 @@
 import { DatePipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Subject, debounceTime, finalize } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
-import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { ArchivoSimulacion, RegistroSimulacionActualizarRequest } from '../../../../../core/models';
 import { DirectorioUsuarios } from '../../../../../core/services/directorio-usuarios';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
@@ -22,6 +22,8 @@ import { PALETA_REGISTROS, colorRegistro, formatearNumero } from '../../simulaci
 
 const MAX_BYTES = 20 * 1024 * 1024;
 const FORMATOS = /\.(xlsx|xls|csv)$/i;
+/** Al menos un carácter visible: un nombre solo con espacios no es válido. */
+const CON_TEXTO = /\S/;
 
 @Component({
   selector: 'app-simulacion-registro',
@@ -80,6 +82,7 @@ export class SimulacionRegistro {
   readonly formulario = this.fb.group({
     nombreRegistro: this.fb.nonNullable.control('', [
       Validators.required,
+      Validators.pattern(CON_TEXTO),
       Validators.maxLength(150),
     ]),
     etiqueta: this.fb.nonNullable.control('', [Validators.maxLength(50)]),
@@ -93,6 +96,7 @@ export class SimulacionRegistro {
   readonly formEdicion = this.fb.group({
     nombreRegistro: this.fb.nonNullable.control('', [
       Validators.required,
+      Validators.pattern(CON_TEXTO),
       Validators.maxLength(150),
     ]),
     etiqueta: this.fb.nonNullable.control('', [Validators.maxLength(50)]),
@@ -133,7 +137,6 @@ export class SimulacionRegistro {
 
   limpiarBusqueda(): void {
     this.busqueda.set('');
-    this.busqueda$.next('');
     this.cargarDesde(1);
   }
 
@@ -232,8 +235,17 @@ export class SimulacionRegistro {
           this.cerrarSubida();
           this.cargarDesde(1);
         },
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudo cargar el archivo', mensajeDeError(err)),
+        error: (err: unknown) => {
+          // 503/504: la respuesta expiró pero el servidor pudo terminar de
+          // guardar. Se refresca la lista para no duplicar el registro al reintentar.
+          if (err instanceof HttpErrorResponse && (err.status === 503 || err.status === 504)) {
+            this.notificaciones.info(
+              'Revisa la lista antes de reintentar',
+              'La carga tardó más de lo esperado y pudo haberse completado.',
+            );
+            this.cargarDesde(1);
+          }
+        },
       });
   }
 
@@ -241,7 +253,7 @@ export class SimulacionRegistro {
     this.editando.set(registro);
     this.formEdicion.reset({
       nombreRegistro: registro.nombreRegistro,
-      etiqueta: registro.etiqueta && registro.etiqueta !== 'SIN ETIQUETA' ? registro.etiqueta : '',
+      etiqueta: registro.etiqueta ?? '',
       colorHex: colorRegistro(registro.colorHex),
     });
     this.editarAbierto.set(true);
@@ -267,8 +279,8 @@ export class SimulacionRegistro {
     }
     const valores = this.formEdicion.getRawValue();
     const peticion: RegistroSimulacionActualizarRequest = {
-      nombreRegistro: valores.nombreRegistro,
-      etiqueta: valores.etiqueta,
+      nombreRegistro: valores.nombreRegistro.trim(),
+      etiqueta: valores.etiqueta.trim(),
       colorHex: valores.colorHex,
     };
     this.guardandoEdicion.set(true);
@@ -281,8 +293,6 @@ export class SimulacionRegistro {
           this.cerrarEdicion();
           this.cargar();
         },
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudo actualizar', mensajeDeError(err)),
       });
   }
 
@@ -307,8 +317,6 @@ export class SimulacionRegistro {
           this.aEliminar.set(null);
           this.cargar();
         },
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
       });
   }
 

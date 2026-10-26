@@ -4,24 +4,33 @@ import { finalize } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { ArchivoSimulacion, DashboardSimulacion } from '../../../../../core/models';
-import { Notificaciones } from '../../../../../core/services/notificaciones';
 import { SimulacionApi } from '../../../../../core/services/simulacion.api';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
+import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
+import { BulletChart, ItemBullet } from '../../../../../shared/ui/charts/bullet-chart';
+import { porcentaje } from '../../../../../shared/ui/charts/formato';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
+import { RingChart, SegmentoAnillo } from '../../../../../shared/ui/charts/ring-chart';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
-import { formatearHoras, formatearNumero } from '../../simulacion-formato';
+import { etiquetaRegistro, formatearHoras, formatearNumero } from '../../simulacion-formato';
+
+interface Hallazgo {
+  kicker: string;
+  texto: string;
+  icono: string;
+  color: string;
+}
 
 @Component({
   selector: 'app-simulacion-dashboard',
-  imports: [HasPermiso, Kpi, EmptyState, Icon, SelectBuscable],
+  imports: [HasPermiso, Kpi, BarChart, BulletChart, RingChart, EmptyState, Icon, SelectBuscable],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
 export class SimulacionDashboard {
   private readonly api = inject(SimulacionApi);
-  private readonly notificaciones = inject(Notificaciones);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
@@ -41,14 +50,7 @@ export class SimulacionDashboard {
   private solicitud = 0;
 
   readonly opcionesRegistro = computed(() =>
-    this.registros().map((registro) => {
-      const etiqueta =
-        registro.etiqueta && registro.etiqueta !== 'SIN ETIQUETA' ? registro.etiqueta : null;
-      return {
-        id: registro.id,
-        etiqueta: etiqueta ? `${registro.nombreRegistro} · ${etiqueta}` : registro.nombreRegistro,
-      };
-    }),
+    this.registros().map((registro) => ({ id: registro.id, etiqueta: etiquetaRegistro(registro) })),
   );
 
   readonly registroSeleccionado = computed(() => {
@@ -56,48 +58,113 @@ export class SimulacionDashboard {
     return this.registros().find((registro) => registro.id === id) ?? null;
   });
 
+  /** BALANCEADO = hay ajustes (balanceo o movimientos manuales) que comparar. */
   readonly estaBalanceado = computed(() => this.registroSeleccionado()?.estado === 'BALANCEADO');
 
   readonly tarjetas = computed(() => {
-    const kpis = this.dashboard()?.kpis;
+    const datos = this.dashboard();
+    if (!datos) {
+      return [];
+    }
+    const { kpis, clusters } = datos;
+    const conLimite = clusters.filter((cluster) => cluster.limiteHoras > 0);
+    const cumplen = conLimite.filter((cluster) => !cluster.excede).length;
     return [
       {
-        etiqueta: 'Ahorro de tiempo',
-        valor: kpis ? formatearHoras(kpis.tiempoAhorrado) : '—',
+        etiqueta: 'Cierre de la operación',
+        valor: formatearHoras(kpis.tiempoBalanceado),
         icono: 'reloj',
+        color: 'var(--accent)',
+        detalle: `Antes ${formatearHoras(kpis.tiempoOriginal)} · cluster más lento`,
+      },
+      {
+        etiqueta: 'Tiempo ahorrado',
+        valor: formatearHoras(kpis.tiempoAhorrado),
+        icono: 'tendencia',
         color: 'var(--success)',
-        detalle: 'Reducción del cuello de botella',
+        detalle:
+          kpis.tiempoOriginal > 0
+            ? `${porcentaje(kpis.tiempoAhorrado / kpis.tiempoOriginal)} menos que la proyección`
+            : 'Sin proyección de referencia',
+      },
+      {
+        etiqueta: 'Clusters en su límite',
+        valor: conLimite.length ? `${cumplen} de ${conLimite.length}` : '—',
+        icono: 'checkCircleFilled',
+        color: cumplen === conLimite.length ? 'var(--success)' : 'var(--danger)',
+        detalle: !conLimite.length
+          ? 'Sin límites definidos'
+          : cumplen === conLimite.length
+            ? 'Todos cumplen su límite'
+            : `${conLimite.length - cumplen} todavía ${conLimite.length - cumplen === 1 ? 'excede' : 'exceden'}`,
       },
       {
         etiqueta: 'Rutas movidas',
-        valor: kpis ? formatearNumero(kpis.rutasMovidas) : '—',
+        valor: formatearNumero(kpis.rutasMovidas),
         icono: 'flecha',
-        color: 'var(--accent)',
-        detalle: 'Movimientos manuales y del balanceo',
+        color: 'var(--cyan)',
+        detalle: 'Entre chutes (balanceo y manual)',
       },
       {
         etiqueta: 'Operarios añadidos',
-        valor: kpis ? formatearNumero(kpis.operariosAgregados) : '—',
+        valor: formatearNumero(kpis.operariosAgregados),
         icono: 'usuarios',
         color: 'var(--violet)',
-        detalle: 'Para aliviar los chutes cuello de botella',
+        detalle: 'En los chutes cuello de botella',
       },
       {
-        etiqueta: 'Bultos totales',
-        valor: kpis ? formatearNumero(kpis.bultos) : '—',
+        etiqueta: 'Bultos proyectados',
+        valor: formatearNumero(kpis.bultos),
         icono: 'paquete',
         color: 'var(--brand)',
-        detalle: kpis
-          ? `${formatearNumero(kpis.unidades)} u · ${formatearNumero(kpis.lineas)} líneas · ${formatearNumero(kpis.cod)} COD`
-          : '',
+        detalle: `${formatearNumero(kpis.unidades)} unidades · ${formatearNumero(kpis.cod)} COD`,
       },
     ];
   });
 
+  /** Tres conclusiones en lenguaje de negocio, calculadas de los mismos datos. */
+  readonly hallazgos = computed<Hallazgo[]>(() => {
+    const datos = this.dashboard();
+    if (!datos || datos.clusters.length === 0) {
+      return [];
+    }
+    const lista: Hallazgo[] = [];
+    const masLento = [...datos.clusters].sort((a, b) => b.tiempoBalanceado - a.tiempoBalanceado)[0];
+    lista.push({
+      kicker: 'Marca el cierre',
+      texto: `<strong>${escapar(masLento.cluster)}</strong> termina en <strong>${formatearHoras(masLento.tiempoBalanceado)}</strong>${
+        masLento.limiteHoras > 0 ? ` con un límite de ${formatearHoras(masLento.limiteHoras)}` : ''
+      }.`,
+      icono: 'reloj',
+      color: masLento.excede ? 'var(--danger)' : 'var(--accent)',
+    });
+
+    const cuello = [...datos.chutes].sort((a, b) => b.tiempoBalanceado - a.tiempoBalanceado)[0];
+    if (cuello) {
+      lista.push({
+        kicker: 'Chute más cargado',
+        texto: `<strong>${escapar(cuello.chute)}</strong> necesita <strong>${formatearHoras(cuello.tiempoBalanceado)}</strong> con ${cuello.operariosBalanceado} operario(s).`,
+        icono: 'alerta',
+        color: 'var(--warning)',
+      });
+    }
+
+    const mejoraron = datos.chutes.filter((chute) => chute.estado === 'MEJORO').length;
+    lista.push({
+      kicker: 'Resultado del ajuste',
+      texto:
+        datos.kpis.tiempoAhorrado > 0.01
+          ? `El cierre baja <strong>${formatearHoras(datos.kpis.tiempoAhorrado)}</strong> y <strong>${mejoraron}</strong> chute(s) reducen su tiempo.`
+          : 'Los ajustes no cambian el tiempo de cierre de la operación.',
+      icono: 'tendencia',
+      color: datos.kpis.tiempoAhorrado > 0.01 ? 'var(--success)' : 'var(--text-3)',
+    });
+    return lista;
+  });
+
   /**
-   * Vista ejecutiva del cierre por cluster: una barra por cluster con su
-   * tiempo balanceado, el ahorro y una marca en el límite configurado.
-   * Todas las barras comparten escala para que sean comparables entre sí.
+   * Cierre por cluster: barra del tiempo balanceado sobre la del original
+   * (atenuada) y una marca en el límite. Todas comparten escala.
    */
   readonly cierres = computed(() => {
     const clusters = this.dashboard()?.clusters ?? [];
@@ -113,11 +180,50 @@ export class SimulacionDashboard {
       tiempoBalanceado: cluster.tiempoBalanceado,
       limiteHoras: cluster.limiteHoras,
       excede: cluster.excede,
+      pctOriginal: Math.min(100, (cluster.tiempoOriginal / escala) * 100),
       pctBalanceado: Math.min(100, (cluster.tiempoBalanceado / escala) * 100),
       pctLimite: cluster.limiteHoras > 0 ? Math.min(100, (cluster.limiteHoras / escala) * 100) : 0,
       ahorro: Math.max(0, cluster.tiempoOriginal - cluster.tiempoBalanceado),
     }));
   });
+
+  readonly cargaClusters = computed<SegmentoAnillo[]>(() =>
+    (this.dashboard()?.clusters ?? []).map((cluster) => ({
+      etiqueta: cluster.cluster,
+      valor: Number(cluster.bultosBalanceado),
+    })),
+  );
+
+  /** Tiempo de cada chute frente al promedio de los chutes con carga. */
+  readonly tiemposChute = computed(() => {
+    const chutes = (this.dashboard()?.chutes ?? []).filter((chute) => chute.tiempoBalanceado > 0);
+    const promedio = chutes.length
+      ? chutes.reduce((total, chute) => total + chute.tiempoBalanceado, 0) / chutes.length
+      : 0;
+    const items: ItemBullet[] = chutes.map((chute) => ({
+      etiqueta: chute.chute,
+      valor: chute.tiempoBalanceado,
+      texto: formatearHoras(chute.tiempoBalanceado),
+      detalle: `${chute.operariosBalanceado} operario(s) · ${formatearNumero(chute.bultosBalanceado)} bultos`,
+    }));
+    return { items, promedio, texto: formatearHoras(promedio) };
+  });
+
+  readonly operariosAnadidos = computed<BarraDato[]>(() =>
+    (this.dashboard()?.chutes ?? [])
+      .filter((chute) => chute.operariosBalanceado > chute.operariosOriginal)
+      .sort(
+        (a, b) =>
+          b.operariosBalanceado - b.operariosOriginal - (a.operariosBalanceado - a.operariosOriginal),
+      )
+      .slice(0, 5)
+      .map((chute) => ({
+        etiqueta: chute.chute,
+        valor: chute.operariosBalanceado - chute.operariosOriginal,
+        color: 'var(--violet)',
+        detalle: `${chute.operariosOriginal} → ${chute.operariosBalanceado} operarios`,
+      })),
+  );
 
   constructor() {
     this.cargarOpciones();
@@ -146,16 +252,13 @@ export class SimulacionDashboard {
             lista[0].id;
           this.seleccionar(elegido);
         },
-        error: (err: unknown) => {
-          this.errorOpciones.set(mensajeDeError(err));
-          this.notificaciones.error('No se pudieron cargar los registros', mensajeDeError(err));
-        },
+        error: (err: unknown) => this.errorOpciones.set(mensajeDeError(err)),
       });
   }
 
   /**
-   * Recarga también la lista de registros: el estado «Balanceado» puede haber
-   * cambiado en otra pestaña y de él depende que se muestre el comparativo.
+   * Recarga también la lista de registros: el estado puede haber cambiado en
+   * otra pestaña y de él depende que se muestre el comparativo.
    */
   actualizar(): void {
     this.cargarOpciones();
@@ -174,10 +277,11 @@ export class SimulacionDashboard {
     this.cargar();
   }
 
+  /** Solo pide el comparativo si hay ajustes: en proyección no hay nada que comparar. */
   cargar(): void {
     const id = this.seleccionado();
     const solicitud = ++this.solicitud;
-    if (!id) {
+    if (!id || !this.estaBalanceado()) {
       this.cargando.set(false);
       return;
     }
@@ -199,11 +303,9 @@ export class SimulacionDashboard {
           }
         },
         error: (err: unknown) => {
-          if (solicitud !== this.solicitud) {
-            return;
+          if (solicitud === this.solicitud) {
+            this.error.set(mensajeDeError(err));
           }
-          this.error.set(mensajeDeError(err));
-          this.notificaciones.error('No se pudo cargar el dashboard', mensajeDeError(err));
         },
       });
   }
@@ -218,6 +320,15 @@ export class SimulacionDashboard {
     return { texto: 'Igual', clase: 'ui-badge--neutral' };
   }
 
+  /** Variación del tiempo del chute en % («−25 %»); vacío si no había tiempo base. */
+  variacion(antes: number, despues: number): string {
+    if (antes <= 0) {
+      return '—';
+    }
+    const relativa = (despues - antes) / antes;
+    return Math.abs(relativa) < 0.0005 ? '0 %' : `${relativa > 0 ? '+' : ''}${porcentaje(relativa)}`;
+  }
+
   irAConfiguracion(): void {
     const id = this.seleccionado();
     void this.router.navigate(['/simulacion/configuracion'], {
@@ -228,4 +339,9 @@ export class SimulacionDashboard {
   irARegistro(): void {
     void this.router.navigate(['/simulacion/registro']);
   }
+}
+
+/** Los nombres de cluster/chute vienen del Excel: se escapan antes de usarlos en [innerHTML]. */
+function escapar(texto: string): string {
+  return texto.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }

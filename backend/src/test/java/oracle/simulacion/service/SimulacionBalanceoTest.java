@@ -29,6 +29,7 @@ import oracle.simulacion.repository.ParametroChuteRepository;
 import oracle.simulacion.repository.ParametroClusterRepository;
 import oracle.simulacion.repository.RutaProyeccionRepository;
 import oracle.simulacion.repository.SimulacionConfigRepository;
+import oracle.simulacion.request.Limites;
 import oracle.simulacion.response.BalanceoResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -107,7 +108,7 @@ class SimulacionBalanceoTest {
     rutaPequena = ruta(2L, 1L, 1L, "3031", "200");
     rutaChuteRapido = ruta(3L, 1L, 2L, "3032", "100");
 
-    when(archivoRepo.findById(10L)).thenReturn(Optional.of(archivo));
+    when(archivoRepo.bloquear(10L)).thenReturn(Optional.of(archivo));
     when(configRepo.findById(10L)).thenReturn(Optional.of(config));
     when(parametroClusterRepo.findByIdArchivoId(10L)).thenReturn(List.of(parametroCluster));
     when(parametroChuteRepo.findByIdArchivoId(10L))
@@ -116,7 +117,6 @@ class SimulacionBalanceoTest {
         .thenReturn(List.of(rutaGrande, rutaPequena, rutaChuteRapido));
     when(clusterRepo.findAllById(any())).thenReturn(List.of(cluster));
     when(chuteRepo.findAllById(any())).thenReturn(List.of(chute1, chute2));
-    when(rutaRepo.saveAll(any())).thenReturn(List.of());
     when(historialRepo.saveAll(any())).thenReturn(List.of());
     when(archivoRepo.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
 
@@ -148,17 +148,50 @@ class SimulacionBalanceoTest {
     parametroChute.setId(new ParametroChuteId(10L, 1L));
     parametroChute.setOperarios(2);
 
-    when(archivoRepo.findById(10L)).thenReturn(Optional.of(archivo));
+    when(archivoRepo.bloquear(10L)).thenReturn(Optional.of(archivo));
     when(configRepo.findById(10L)).thenReturn(Optional.of(config));
     when(parametroClusterRepo.findByIdArchivoId(10L)).thenReturn(List.of(parametroCluster));
     when(parametroChuteRepo.findByIdArchivoId(10L)).thenReturn(List.of(parametroChute));
-    when(rutaRepo.findByArchivoIdOrderByIdAsc(10L))
-        .thenReturn(List.of(ruta(1L, 1L, 1L, "3030", "100")));
     when(clusterRepo.findAllById(any())).thenReturn(List.of());
     when(chuteRepo.findAllById(any())).thenReturn(List.of());
 
     assertThrows(ConflictoException.class, () -> servicio.balancear(10L).block());
     assertEquals(ArchivoExcel.ESTADO_PROYECCION, archivo.getEstado());
+  }
+
+  @Test
+  void noSuperaElMaximoDeOperariosPorChute() {
+    ArchivoExcel archivo = new ArchivoExcel();
+    archivo.setId(10L);
+    archivo.setEstado(ArchivoExcel.ESTADO_PROYECCION);
+
+    SimulacionConfig config = new SimulacionConfig();
+    config.setArchivoId(10L);
+    config.setVelocidadBase(new BigDecimal("1"));
+
+    ParametroCluster parametroCluster = new ParametroCluster();
+    parametroCluster.setId(new ParametroClusterId(10L, 1L));
+    parametroCluster.setLimiteHoras(new BigDecimal("0.01"));
+
+    ParametroChute parametroChute = new ParametroChute();
+    parametroChute.setId(new ParametroChuteId(10L, 1L));
+    parametroChute.setOperarios(2);
+
+    when(archivoRepo.bloquear(10L)).thenReturn(Optional.of(archivo));
+    when(configRepo.findById(10L)).thenReturn(Optional.of(config));
+    when(parametroClusterRepo.findByIdArchivoId(10L)).thenReturn(List.of(parametroCluster));
+    when(parametroChuteRepo.findByIdArchivoId(10L)).thenReturn(List.of(parametroChute));
+    when(rutaRepo.findByArchivoIdOrderByIdAsc(10L))
+        .thenReturn(List.of(ruta(1L, 1L, 1L, "3030", "100000")));
+    when(clusterRepo.findAllById(any())).thenReturn(List.of());
+    when(chuteRepo.findAllById(any())).thenReturn(List.of());
+    when(historialRepo.saveAll(any())).thenReturn(List.of());
+    when(archivoRepo.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+    BalanceoResponse resultado = servicio.balancear(10L).block().datos();
+
+    assertEquals(Limites.MAX_OPERARIOS - 2, resultado.operariosAgregados());
+    assertEquals(Limites.MAX_OPERARIOS, parametroChute.getOperarios());
   }
 
   private static RutaProyeccion ruta(

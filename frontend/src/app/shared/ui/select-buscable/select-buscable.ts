@@ -32,6 +32,8 @@ export interface OpcionSeleccion {
           [readonly]="!abierto()"
           [disabled]="deshabilitado()"
           [placeholder]="placeholder()"
+          [attr.id]="campoId()"
+          [attr.aria-label]="campoId() ? null : placeholder()"
           [value]="abierto() ? consulta() : (seleccion()?.etiqueta ?? '')"
           (focus)="abrir()"
           (input)="escribir($any($event.target).value)"
@@ -73,6 +75,8 @@ export class SelectBuscable {
   readonly placeholder = input('Escribir para buscar…');
   readonly invalido = input(false);
   readonly deshabilitado = input(false);
+  /** id del campo, para asociarlo a un <label for>; sin él se usa el placeholder como aria-label. */
+  readonly campoId = input<string | null>(null);
 
   readonly valorCambia = output<number | null>();
 

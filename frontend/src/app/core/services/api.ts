@@ -25,7 +25,6 @@ export class Api {
       .pipe(map(this.desempaquetar));
   }
 
-
   put<T>(ruta: string, cuerpo?: unknown): Observable<T> {
     return this.http.put<ApiResponse<T>>(this.url(ruta), cuerpo ?? {}).pipe(map(this.desempaquetar));
   }
