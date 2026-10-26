@@ -59,7 +59,9 @@ export interface SerieLinea {
             <div class="lc__tip" [style.left.%]="d.x" [class.lc__tip--izq]="d.x > 60">
               <strong>{{ d.etiqueta }}</strong>
               @for (v of d.valores; track v.nombre) {
-                <span><i [style.background]="v.color"></i>{{ v.nombre }}: <b>{{ v.texto }}</b></span>
+                <span
+                  ><i [style.background]="v.color"></i>{{ v.nombre }}: <b>{{ v.texto }}</b></span
+                >
               }
             </div>
           }
@@ -74,22 +76,96 @@ export interface SerieLinea {
     </div>
   `,
   styles: `
-    :host { display: block; min-width: 0; }
-    .lc { display: flex; flex-direction: column; gap: var(--space-2); }
-    .lc__leyenda { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--fs-xs); color: var(--text-2); }
-    .lc__leyenda li { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
-    .lc__punto { width: 10px; height: 10px; border-radius: 3px; }
-    .lc__cuerpo { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2); }
-    .lc__eje-y { position: relative; width: 40px; height: var(--alto); font-size: 0.68rem; color: var(--text-3); }
-    .lc__eje-y span { position: absolute; right: 0; transform: translateY(50%); font-variant-numeric: tabular-nums; }
-    .lc__plot { position: relative; height: var(--alto); }
-    .lc__guia { position: absolute; left: 0; right: 0; height: 1px; background: var(--border); }
-    svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-    .lc__linea { fill: none; stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
-    .lc__area { opacity: 0.14; }
-    .lc__hover { position: absolute; inset: 0; display: flex; }
-    .lc__col { flex: 1; cursor: crosshair; }
-    .lc__col--on { background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--accent) 12%, transparent)); box-shadow: inset 1px 0 0 color-mix(in srgb, var(--accent) 50%, transparent); }
+    :host {
+      display: block;
+      min-width: 0;
+    }
+    .lc {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .lc__leyenda {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      font-size: var(--fs-xs);
+      color: var(--text-2);
+    }
+    .lc__leyenda li {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+    }
+    .lc__punto {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+    .lc__cuerpo {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: var(--space-2);
+    }
+    .lc__eje-y {
+      position: relative;
+      width: 40px;
+      height: var(--alto);
+      font-size: 0.68rem;
+      color: var(--text-3);
+    }
+    .lc__eje-y span {
+      position: absolute;
+      right: 0;
+      transform: translateY(50%);
+      font-variant-numeric: tabular-nums;
+    }
+    .lc__plot {
+      position: relative;
+      height: var(--alto);
+    }
+    .lc__guia {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: var(--border);
+    }
+    svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    .lc__linea {
+      fill: none;
+      stroke-width: 2.5;
+      vector-effect: non-scaling-stroke;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+    .lc__area {
+      opacity: 0.14;
+    }
+    .lc__hover {
+      position: absolute;
+      inset: 0;
+      display: flex;
+    }
+    .lc__col {
+      flex: 1;
+      cursor: crosshair;
+    }
+    .lc__col--on {
+      background: linear-gradient(
+        180deg,
+        transparent,
+        color-mix(in srgb, var(--accent) 12%, transparent)
+      );
+      box-shadow: inset 1px 0 0 color-mix(in srgb, var(--accent) 50%, transparent);
+    }
     .lc__tip {
       position: absolute;
       top: 6px;
@@ -109,13 +185,43 @@ export interface SerieLinea {
       pointer-events: none;
       white-space: nowrap;
     }
-    .lc__tip--izq { transform: translateX(calc(-100% - 8px)); }
-    .lc__tip strong { color: var(--text); font-size: var(--fs-sm); }
-    .lc__tip i { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; }
-    .lc__tip b { color: var(--text); font-variant-numeric: tabular-nums; }
-    .lc__eje-x { position: relative; height: 18px; margin-left: calc(40px + var(--space-2)); font-size: 0.68rem; color: var(--text-3); }
-    .lc__eje-x span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
-    .u-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .lc__tip--izq {
+      transform: translateX(calc(-100% - 8px));
+    }
+    .lc__tip strong {
+      color: var(--text);
+      font-size: var(--fs-sm);
+    }
+    .lc__tip i {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 6px;
+      border-radius: 2px;
+    }
+    .lc__tip b {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .lc__eje-x {
+      position: relative;
+      height: 18px;
+      margin-left: calc(40px + var(--space-2));
+      font-size: 0.68rem;
+      color: var(--text-3);
+    }
+    .lc__eje-x span {
+      position: absolute;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+    .u-sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
   `,
 })
 export class LineChart {
@@ -129,6 +235,8 @@ export class LineChart {
   readonly periodos = input<boolean>(true);
   /** Máximo de etiquetas visibles en el eje X (se reparten). */
   readonly maxEtiquetas = input<number>(8);
+  /** Formato propio de los valores (p. ej. horas con minutos). Si falta, se usan enteros. */
+  readonly formatoValor = input<((valor: number) => string) | null>(null);
 
   readonly activo = signal<number | null>(null);
 
@@ -143,7 +251,11 @@ export class LineChart {
 
   readonly ticks = computed(() => {
     const max = this.maximo();
-    return [0, 0.25, 0.5, 0.75, 1].map((f) => ({ pct: f * 100, texto: compacto(Math.round(max * f)) }));
+    const formato = this.formatoValor();
+    return [0, 0.25, 0.5, 0.75, 1].map((f) => ({
+      pct: f * 100,
+      texto: formato ? formato(max * f) : compacto(Math.round(max * f)),
+    }));
   });
 
   private x(i: number): number {
@@ -154,9 +266,13 @@ export class LineChart {
   readonly trazos = computed(() => {
     const max = this.maximo();
     return this.series().map((s) => {
-      const puntos = s.valores.map((v, i) => `${this.x(i).toFixed(1)},${(100 - (v / max) * 100).toFixed(2)}`);
+      const puntos = s.valores.map(
+        (v, i) => `${this.x(i).toFixed(1)},${(100 - (v / max) * 100).toFixed(2)}`,
+      );
       const linea = puntos.length ? `M${puntos.join(' L')}` : '';
-      const area = puntos.length ? `${linea} L${this.x(puntos.length - 1)},100 L${this.x(0)},100 Z` : '';
+      const area = puntos.length
+        ? `${linea} L${this.x(puntos.length - 1)},100 L${this.x(0)},100 Z`
+        : '';
       return { nombre: s.nombre, color: s.color, linea, area };
     });
   });
@@ -184,13 +300,23 @@ export class LineChart {
     return {
       x: n <= 1 ? 50 : (i / (n - 1)) * 100,
       etiqueta: this.texto(etiquetas[i]),
-      valores: this.series().map((s) => ({ nombre: s.nombre, color: s.color, texto: entero(s.valores[i] ?? 0) })),
+      valores: this.series().map((s) => ({
+        nombre: s.nombre,
+        color: s.color,
+        texto: this.formatoValor()
+          ? this.formatoValor()!(s.valores[i] ?? 0)
+          : entero(s.valores[i] ?? 0),
+      })),
     };
   });
 
-  readonly resumen = computed(() =>
-    this.series()
-      .map((s) => `${s.nombre}: total ${entero(s.valores.reduce((a, b) => a + b, 0))}`)
-      .join('. '),
-  );
+  readonly resumen = computed(() => {
+    const formato = this.formatoValor();
+    return this.series()
+      .map((s) => {
+        const total = s.valores.reduce((a, b) => a + b, 0);
+        return `${s.nombre}: total ${formato ? formato(total) : entero(total)}`;
+      })
+      .join('. ');
+  });
 }

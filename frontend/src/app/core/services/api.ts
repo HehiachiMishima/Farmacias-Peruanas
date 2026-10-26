@@ -19,6 +19,13 @@ export class Api {
     return this.http.post<ApiResponse<T>>(this.url(ruta), cuerpo ?? {}).pipe(map(this.desempaquetar));
   }
 
+  postForm<T>(ruta: string, formulario: FormData): Observable<T> {
+    return this.http
+      .post<ApiResponse<T>>(this.url(ruta), formulario)
+      .pipe(map(this.desempaquetar));
+  }
+
+
   put<T>(ruta: string, cuerpo?: unknown): Observable<T> {
     return this.http.put<ApiResponse<T>>(this.url(ruta), cuerpo ?? {}).pipe(map(this.desempaquetar));
   }

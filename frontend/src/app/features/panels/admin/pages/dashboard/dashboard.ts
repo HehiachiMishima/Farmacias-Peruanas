@@ -17,12 +17,14 @@ const NOMBRE_PANEL: Record<string, string> = {
   PANEL_ADMIN: 'Administración',
   PANEL_BITACORA: 'Bitácora',
   PANEL_INBOUND: 'Inbound',
+  PANEL_SIMULACION: 'Simulación',
 };
 
 const COLOR_PANEL: Record<string, string> = {
   PANEL_ADMIN: 'var(--violet)',
   PANEL_BITACORA: 'var(--brand)',
   PANEL_INBOUND: 'var(--accent)',
+  PANEL_SIMULACION: 'var(--cyan)',
 };
 
 /**

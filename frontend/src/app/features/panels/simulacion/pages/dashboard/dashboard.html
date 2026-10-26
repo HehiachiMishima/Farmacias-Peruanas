@@ -1,0 +1,308 @@
+<header class="page-head">
+  <div>
+    <h1 class="page-head__title">Dashboard de simulación</h1>
+    <p class="page-head__sub">
+      Comparativo de tiempos, rutas y operarios antes y después del balanceo.
+    </p>
+  </div>
+  @if (seleccionado()) {
+    <button
+      *hasPermiso="permisos.VER_CONFIGURACION_SIMULACION"
+      type="button"
+      class="ui-btn ui-btn--secondary"
+      (click)="irAConfiguracion()"
+    >
+      <ui-icon name="control" [size]="18" />
+      Ver configuración
+    </button>
+  }
+</header>
+
+<section class="selector-panel">
+  <div class="selector-panel__campo">
+    <label class="ui-label">Registro</label>
+    <ui-select-buscable
+      [opciones]="opcionesRegistro()"
+      [valor]="seleccionado()"
+      [deshabilitado]="cargandoOpciones()"
+      placeholder="Elegir registro…"
+      (valorCambia)="seleccionar($event)"
+    />
+  </div>
+  <button
+    type="button"
+    class="ui-btn ui-btn--secondary"
+    (click)="actualizar()"
+    [disabled]="!seleccionado() || cargando() || cargandoOpciones()"
+  >
+    <ui-icon name="refresh" [size]="16" />
+    Actualizar
+  </button>
+</section>
+
+@if (cargandoOpciones() && registros().length === 0) {
+  <div class="table-card">
+    <div class="loading"><span class="ui-spinner"></span> Cargando registros…</div>
+  </div>
+} @else if (registros().length === 0 && errorOpciones()) {
+  <div class="table-card">
+    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="errorOpciones()!">
+      <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargarOpciones()">
+        <ui-icon name="refresh" [size]="16" /> Reintentar
+      </button>
+    </ui-empty>
+  </div>
+} @else if (registros().length === 0) {
+  <div class="table-card">
+    <ui-empty
+      icono="almacen"
+      titulo="Aún no hay registros"
+      mensaje="Sube un Excel y ejecuta el balanceo para ver el comparativo."
+    >
+      <button
+        *hasPermiso="permisos.VER_REGISTRO_SIMULACION"
+        type="button"
+        class="ui-btn ui-btn--primary ui-btn--sm"
+        (click)="irARegistro()"
+      >
+        Ir a Registro
+      </button>
+    </ui-empty>
+  </div>
+} @else if (!estaBalanceado()) {
+  <div class="table-card">
+    <ui-empty
+      icono="dashboard"
+      titulo="Sin resultados de balanceo"
+      mensaje="Este registro todavía está en proyección. Configura los límites y ejecuta el balanceo para comparar."
+    >
+      <button
+        *hasPermiso="permisos.VER_CONFIGURACION_SIMULACION"
+        type="button"
+        class="ui-btn ui-btn--primary ui-btn--sm"
+        (click)="irAConfiguracion()"
+      >
+        Ir a Configuración
+      </button>
+    </ui-empty>
+  </div>
+} @else if (cargando() && !dashboard()) {
+  <div class="table-card">
+    <div class="loading"><span class="ui-spinner"></span> Calculando comparativo…</div>
+  </div>
+} @else if (error()) {
+  <div class="table-card">
+    <ui-empty icono="alerta" titulo="No se pudo cargar el dashboard" [mensaje]="error()!">
+      <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()">
+        <ui-icon name="refresh" [size]="16" /> Reintentar
+      </button>
+    </ui-empty>
+  </div>
+} @else if (dashboard(); as datos) {
+  <section class="dash-kpis" aria-label="Indicadores del balanceo">
+    @for (tarjeta of tarjetas(); track tarjeta.etiqueta) {
+      <ui-kpi
+        [etiqueta]="tarjeta.etiqueta"
+        [valor]="tarjeta.valor"
+        [icono]="tarjeta.icono"
+        [color]="tarjeta.color"
+        [detalle]="tarjeta.detalle"
+      />
+    }
+  </section>
+
+  <div class="dash-grid">
+    <article class="dash-card">
+      <header class="dash-card__head">
+        <div class="dash-card__titulos">
+          <h2 class="dash-card__titulo">
+            <ui-icon name="reloj" [size]="18" /> Tiempos de cierre por cluster
+          </h2>
+          <p class="dash-card__sub">
+            Tiempo balanceado frente al límite. La marca vertical señala el límite configurado y
+            todas las barras comparten escala.
+          </p>
+        </div>
+      </header>
+      <div class="dash-card__body">
+        @if (cierres().length > 0) {
+          <div class="cierre">
+            @for (c of cierres(); track c.cluster) {
+              <article class="cierre__item" [class.cierre__item--excede]="c.excede">
+                <header class="cierre__head">
+                  <span class="cierre__cluster">{{ c.cluster }}</span>
+                  @if (c.limiteHoras > 0) {
+                    <span
+                      class="ui-badge"
+                      [class.ui-badge--danger]="c.excede"
+                      [class.ui-badge--success]="!c.excede"
+                    >
+                      {{ c.excede ? 'Excede' : 'Óptimo' }}
+                    </span>
+                  } @else {
+                    <span class="ui-badge ui-badge--neutral">Sin límite</span>
+                  }
+                </header>
+
+                <div class="cierre__cifra">
+                  <span class="cierre__tiempo">{{ formatearHoras(c.tiempoBalanceado) }}</span>
+                  <span class="cierre__antes">Antes {{ formatearHoras(c.tiempoOriginal) }}</span>
+                </div>
+
+                <div
+                  class="cierre__track"
+                  [attr.aria-label]="
+                    c.cluster +
+                    ': ' +
+                    formatearHoras(c.tiempoBalanceado) +
+                    (c.limiteHoras > 0 ? ' de un límite de ' + formatearHoras(c.limiteHoras) : '')
+                  "
+                >
+                  <span
+                    class="cierre__fill"
+                    [class.cierre__fill--excede]="c.excede"
+                    [class.cierre__fill--sin-limite]="c.limiteHoras <= 0"
+                    [style.width.%]="c.pctBalanceado"
+                  ></span>
+                  @if (c.limiteHoras > 0) {
+                    <span class="cierre__marca" [style.left.%]="c.pctLimite"></span>
+                  }
+                </div>
+
+                <dl class="cierre__pie">
+                  <div>
+                    <dt>Límite</dt>
+                    <dd>
+                      {{ c.limiteHoras > 0 ? formatearHoras(c.limiteHoras) : 'Sin límite' }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Ahorro</dt>
+                    <dd [class.cierre__ok]="c.ahorro > 0.01">
+                      {{ c.ahorro > 0.01 ? formatearHoras(c.ahorro) : 'Sin cambio' }}
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+            }
+          </div>
+        } @else {
+          <div class="dash-card__vacio">Sin clusters para comparar.</div>
+        }
+      </div>
+    </article>
+
+    <article class="dash-card">
+      <header class="dash-card__head">
+        <div class="dash-card__titulos">
+          <h2 class="dash-card__titulo">
+            <ui-icon name="control" [size]="18" /> Desglose comparativo por cluster
+          </h2>
+          <p class="dash-card__sub">Tiempo y estado frente al límite configurado.</p>
+        </div>
+      </header>
+      <div class="dash-card__body">
+        <div class="dash-tabla-wrap">
+          <table class="dash-tabla">
+            <thead>
+              <tr>
+                <th>Cluster</th>
+                <th class="num">Tiempo original</th>
+                <th class="num">Tiempo balanceado</th>
+                <th class="num">Límite</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (cluster of datos.clusters; track cluster.cluster) {
+                <tr>
+                  <td class="fuerte">{{ cluster.cluster }}</td>
+                  <td class="num">{{ formatearHoras(cluster.tiempoOriginal) }}</td>
+                  <td class="num fuerte">{{ formatearHoras(cluster.tiempoBalanceado) }}</td>
+                  <td class="num">
+                    {{ cluster.limiteHoras > 0 ? formatearHoras(cluster.limiteHoras) : '—' }}
+                  </td>
+                  <td>
+                    @if (cluster.limiteHoras > 0) {
+                      <span
+                        class="ui-badge"
+                        [class.ui-badge--danger]="cluster.excede"
+                        [class.ui-badge--success]="!cluster.excede"
+                      >
+                        {{ cluster.excede ? 'Excede' : 'Óptimo' }}
+                      </span>
+                    } @else {
+                      <span class="ui-badge ui-badge--neutral">Sin límite</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </article>
+
+    <article class="dash-card">
+      <header class="dash-card__head">
+        <div class="dash-card__titulos">
+          <h2 class="dash-card__titulo">
+            <ui-icon name="paquete" [size]="18" /> Desglose comparativo por chute
+          </h2>
+          <p class="dash-card__sub">
+            Impacto del balanceo en cada chute y en su plantilla de operarios.
+          </p>
+        </div>
+      </header>
+      <div class="dash-card__body">
+        <div class="dash-tabla-wrap">
+          <table class="dash-tabla">
+            <thead>
+              <tr>
+                <th>Chute</th>
+                <th class="num">Tiempo original</th>
+                <th class="num">Tiempo balanceado</th>
+                <th>Estado</th>
+                <th class="num">Bultos orig.</th>
+                <th class="num">Bultos bal.</th>
+                <th class="num">Unidades orig.</th>
+                <th class="num">Unidades bal.</th>
+                <th class="num">Líneas orig.</th>
+                <th class="num">Líneas bal.</th>
+                <th class="num">COD orig.</th>
+                <th class="num">COD bal.</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (chute of datos.chutes; track chute.chute) {
+                <tr>
+                  <td class="fuerte">
+                    {{ chute.chute }}
+                    <span class="ops-detalle">
+                      (Ops: {{ chute.operariosOriginal }} → {{ chute.operariosBalanceado }})
+                    </span>
+                  </td>
+                  <td class="num">{{ formatearHoras(chute.tiempoOriginal) }}</td>
+                  <td class="num fuerte">{{ formatearHoras(chute.tiempoBalanceado) }}</td>
+                  <td>
+                    <span [class]="'ui-badge ' + estadoChute(chute.estado).clase">
+                      {{ estadoChute(chute.estado).texto }}
+                    </span>
+                  </td>
+                  <td class="num">{{ formatearNumero(chute.bultosOriginal) }}</td>
+                  <td class="num fuerte">{{ formatearNumero(chute.bultosBalanceado) }}</td>
+                  <td class="num">{{ formatearNumero(chute.unidadesOriginal) }}</td>
+                  <td class="num">{{ formatearNumero(chute.unidadesBalanceado) }}</td>
+                  <td class="num">{{ formatearNumero(chute.lineasOriginal) }}</td>
+                  <td class="num">{{ formatearNumero(chute.lineasBalanceado) }}</td>
+                  <td class="num">{{ formatearNumero(chute.codOriginal) }}</td>
+                  <td class="num">{{ formatearNumero(chute.codBalanceado) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </article>
+  </div>
+}

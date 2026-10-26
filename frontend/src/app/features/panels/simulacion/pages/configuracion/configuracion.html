@@ -1,0 +1,478 @@
+<header class="page-head">
+  <div>
+    <h1 class="page-head__title">Configuración y balanceo</h1>
+    <p class="page-head__sub">
+      Define tiempos límite, asigna operarios y recalcula la proyección de rutas.
+    </p>
+  </div>
+  @if (seleccionado()) {
+    <button
+      *hasPermiso="permisos.VER_DASHBOARD_SIMULACION"
+      type="button"
+      class="ui-btn ui-btn--secondary"
+      (click)="irADashboard()"
+    >
+      <ui-icon name="dashboard" [size]="18" />
+      Ver dashboard
+    </button>
+  }
+</header>
+
+<section class="config-panel">
+  <div class="config-panel__fila">
+    <div class="config-panel__registro">
+      <label class="ui-label">Registro guardado</label>
+      <ui-select-buscable
+        [opciones]="opcionesRegistro()"
+        [valor]="seleccionado()"
+        [deshabilitado]="cargandoOpciones() || guardando() || balanceando() || restableciendo()"
+        placeholder="Elegir registro…"
+        (valorCambia)="seleccionarDesdeSelector($event)"
+      />
+    </div>
+    <div class="config-panel__velocidad">
+      <label class="ui-label">Velocidad base (bultos/h por operario)</label>
+      <input
+        type="number"
+        class="ui-input"
+        min="1"
+        step="1"
+        [value]="velocidad()"
+        [disabled]="!config() || !puedeModificar()"
+        (change)="setVelocidad($event)"
+      />
+    </div>
+    <div class="config-panel__acciones">
+      <button
+        type="button"
+        class="ui-btn ui-btn--secondary"
+        (click)="actualizar()"
+        [disabled]="
+          cargandoOpciones() || guardando() || balanceando() || restableciendo() || moviendo()
+        "
+      >
+        <ui-icon name="refresh" [size]="16" />
+        Actualizar
+      </button>
+      <button
+        *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
+        type="button"
+        class="ui-btn ui-btn--secondary"
+        (click)="guardar()"
+        [disabled]="!dirty() || guardando() || balanceando()"
+      >
+        @if (guardando()) {
+          <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+        }
+        Guardar parámetros
+      </button>
+      <button
+        *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
+        type="button"
+        class="ui-btn ui-btn--primary"
+        (click)="balancear()"
+        [disabled]="!config() || balanceando() || guardando()"
+        [title]="tieneLimites() ? '' : 'Define al menos un límite de horas por cluster'"
+      >
+        @if (balanceando()) {
+          <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+        }
+        Calcular y balancear
+      </button>
+    </div>
+  </div>
+
+  @if (config(); as cfg) {
+    <div class="config-info">
+      <span class="config-info__icono"><ui-icon name="paquete" [size]="18" /></span>
+      <div class="config-info__datos">
+        <span class="config-info__nombre">{{ cfg.archivo.nombreRegistro }}</span>
+        <span class="config-info__meta">
+          {{ formatearNumero(cfg.archivo.rutas) }} rutas ·
+          {{ formatearNumero(cfg.archivo.chutes) }} chutes ·
+          {{ formatearNumero(cfg.archivo.bultos, 2) }} bultos
+        </span>
+      </div>
+      <span
+        class="ui-badge"
+        [class.ui-badge--success]="cfg.archivo.estado === 'BALANCEADO'"
+        [class.ui-badge--neutral]="cfg.archivo.estado !== 'BALANCEADO'"
+      >
+        {{ cfg.archivo.estado === 'BALANCEADO' ? 'Balanceado' : 'Proyección' }}
+      </span>
+      @if (dirty()) {
+        <span class="ui-badge ui-badge--warning">Cambios sin guardar</span>
+      }
+    </div>
+    @if (!tieneLimites()) {
+      <p class="config-aviso">
+        <ui-icon name="alerta" [size]="15" />
+        Define al menos un límite de horas por cluster para poder ejecutar el balanceo.
+      </p>
+    }
+  }
+</section>
+
+@if (cargandoOpciones() && registros().length === 0) {
+  <div class="table-card">
+    <div class="loading"><span class="ui-spinner"></span> Cargando registros…</div>
+  </div>
+} @else if (registros().length === 0 && errorOpciones()) {
+  <div class="table-card">
+    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="errorOpciones()!">
+      <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargarOpciones()">
+        <ui-icon name="refresh" [size]="16" /> Reintentar
+      </button>
+    </ui-empty>
+  </div>
+} @else if (registros().length === 0) {
+  <div class="table-card">
+    <ui-empty
+      icono="almacen"
+      titulo="Aún no hay registros"
+      mensaje="Sube un Excel de proyección para configurar límites y ejecutar el balanceo."
+    >
+      <button
+        *hasPermiso="permisos.VER_REGISTRO_SIMULACION"
+        type="button"
+        class="ui-btn ui-btn--primary ui-btn--sm"
+        (click)="irARegistro()"
+      >
+        Ir a Registro
+      </button>
+    </ui-empty>
+  </div>
+} @else if (cargando()) {
+  <div class="table-card">
+    <div class="loading"><span class="ui-spinner"></span> Cargando configuración…</div>
+  </div>
+} @else if (error()) {
+  <div class="table-card">
+    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!">
+      <button
+        type="button"
+        class="ui-btn ui-btn--secondary ui-btn--sm"
+        (click)="seleccionar(seleccionado())"
+      >
+        <ui-icon name="refresh" [size]="16" /> Reintentar
+      </button>
+    </ui-empty>
+  </div>
+} @else if (config(); as cfg) {
+  @if (cfg.rutas.length === 0) {
+    <div class="table-card">
+      <ui-empty
+        icono="paquete"
+        titulo="Registro sin rutas"
+        mensaje="El archivo no contiene rutas para simular."
+      />
+    </div>
+  } @else {
+    <section class="cluster-grid" aria-label="Tiempos por cluster">
+      @for (cluster of resumenClusters(); track cluster.id) {
+        <article
+          class="cluster-card"
+          [class.cluster-card--excede]="cluster.excede"
+          [class.cluster-card--sin-limite]="cluster.sinLimite"
+          [style.--cluster-color]="cluster.color"
+        >
+          <header class="cluster-card__head">
+            <span class="cluster-card__nombre">{{ cluster.nombre }}</span>
+            @if (cluster.excede) {
+              <span class="ui-badge ui-badge--danger">Excede</span>
+            } @else if (cluster.sinLimite) {
+              <span class="ui-badge ui-badge--neutral">Sin límite</span>
+            } @else {
+              <span class="ui-badge ui-badge--success">Cumple</span>
+            }
+          </header>
+          <div class="cluster-card__tiempo">
+            <span class="cluster-card__label">Tiempo de cierre</span>
+            <strong>{{ formatearHoras(cluster.tiempo) }}</strong>
+          </div>
+          <div class="cluster-card__limite">
+            <label class="ui-label" [attr.for]="'limite-' + cluster.id">Límite (h)</label>
+            <input
+              [id]="'limite-' + cluster.id"
+              type="number"
+              class="ui-input"
+              min="0"
+              step="0.1"
+              [value]="cluster.limite"
+              [disabled]="!puedeModificar()"
+              (change)="setLimite(cluster.id, $event)"
+            />
+          </div>
+          <dl class="cluster-card__stats">
+            <div>
+              <dt>Rutas</dt>
+              <dd>{{ formatearNumero(cluster.rutas) }}</dd>
+            </div>
+            <div>
+              <dt>Bultos</dt>
+              <dd>{{ formatearNumero(cluster.bultos) }}</dd>
+            </div>
+            <div>
+              <dt>Unidades</dt>
+              <dd>{{ formatearNumero(cluster.unidades) }}</dd>
+            </div>
+            <div>
+              <dt>Líneas</dt>
+              <dd>{{ formatearNumero(cluster.lineas) }}</dd>
+            </div>
+            <div>
+              <dt>COD</dt>
+              <dd>{{ formatearNumero(cluster.cod) }}</dd>
+            </div>
+          </dl>
+        </article>
+      }
+    </section>
+
+    <div class="toolbar">
+      <div class="filtros-fila">
+        <ui-select-buscable
+          [opciones]="opcionesChute()"
+          [valor]="filtroChute()"
+          placeholder="Todos los chutes"
+          (valorCambia)="setFiltroChute($event)"
+        />
+        <ui-select-buscable
+          [opciones]="opcionesCluster()"
+          [valor]="filtroCluster()"
+          placeholder="Todos los clusters"
+          (valorCambia)="setFiltroCluster($event)"
+        />
+        <ui-select-buscable
+          [opciones]="opcionesRuta()"
+          [valor]="filtroRuta()"
+          placeholder="Todas las rutas"
+          (valorCambia)="setFiltroRuta($event)"
+        />
+      </div>
+      <button
+        type="button"
+        class="ui-btn ui-btn--secondary ui-btn--sm"
+        (click)="limpiarFiltros()"
+        [disabled]="filtrosActivos() === 0"
+      >
+        Limpiar
+      </button>
+      <div class="toolbar__acciones">
+        <button
+          *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
+          type="button"
+          class="ui-btn ui-btn--secondary ui-btn--sm"
+          (click)="confirmarRestablecer()"
+        >
+          <ui-icon name="refresh" [size]="16" />
+          Restablecer
+        </button>
+        <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="verCambios()">
+          <ui-icon name="ver" [size]="16" />
+          Mostrar cambios
+        </button>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="ui-table-wrap">
+        <table class="ui-table" appColumnasRedimensionables>
+          <thead>
+            <tr>
+              <th>Chute</th>
+              <th class="num">Operarios</th>
+              <th>Cluster</th>
+              <th>Ruta</th>
+              <th class="num">Bultos</th>
+              <th class="num">Unidades</th>
+              <th class="num">Líneas</th>
+              <th class="num">COD</th>
+              <th class="num">Tiempo</th>
+              <th class="col-actions">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (ruta of filasPagina(); track ruta.id) {
+              <tr>
+                <td class="fuerte">{{ ruta.chute }}</td>
+                <td class="num">
+                  <input
+                    type="number"
+                    class="ui-input ops-input"
+                    min="1"
+                    step="1"
+                    [value]="getOperarios(ruta.chuteId)"
+                    [disabled]="!puedeModificar()"
+                    [attr.aria-label]="'Operarios de ' + ruta.chute"
+                    title="Se aplica a todas las rutas de este chute"
+                    (change)="setOperarios(ruta.chuteId, $event)"
+                  />
+                </td>
+                <td>
+                  <span
+                    class="cluster-chip"
+                    [style.--cluster-color]="colorDeCluster(ruta.clusterId)"
+                  >
+                    {{ ruta.cluster }}
+                  </span>
+                </td>
+                <td class="u-mono">{{ ruta.codigoRuta }}</td>
+                <td class="num">{{ formatearNumero(ruta.totalBultos, 2) }}</td>
+                <td class="num">{{ formatearNumero(ruta.totalUnidades, 2) }}</td>
+                <td class="num">{{ formatearNumero(ruta.totalLineas, 2) }}</td>
+                <td class="num">{{ formatearNumero(ruta.conteoCod) }}</td>
+                <td class="num">{{ formatearHoras(tiempoRuta(ruta)) }}</td>
+                <td>
+                  <button
+                    *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
+                    type="button"
+                    class="ui-btn ui-btn--ghost ui-btn--sm"
+                    (click)="abrirMover(ruta)"
+                  >
+                    Mover
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="10" class="u-muted">Ninguna ruta coincide con los filtros.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <ui-paginador
+        [pagina]="paginaActual()"
+        [total]="filas().length"
+        [porPagina]="porPagina()"
+        (paginaCambia)="cambiarPagina($event)"
+        (porPaginaCambia)="cambiarPorPagina($event)"
+      />
+    </div>
+  }
+}
+
+<ui-modal
+  [abierto]="historialAbierto()"
+  ancho="lg"
+  titulo="Cambios del balanceo"
+  subtitulo="Movimientos de rutas y operarios añadidos sobre el registro."
+  (cerrar)="historialAbierto.set(false)"
+>
+  @if (historialCargando()) {
+    <div class="loading"><span class="ui-spinner"></span> Cargando historial…</div>
+  } @else if (historial().length === 0) {
+    <ui-empty
+      icono="info"
+      titulo="Sin cambios registrados"
+      mensaje="El balanceo todavía no ha movido rutas ni añadido operarios."
+    />
+  } @else {
+    <ul class="historial">
+      @for (cambio of historial(); track cambio.id) {
+        <li class="historial__item">
+          @if (cambio.tipoAccion === 'MOVER_RUTA') {
+            <span class="ui-badge ui-badge--warning">RUTA</span>
+            <div>
+              <p class="historial__titulo">
+                La ruta <strong>{{ cambio.ruta }}</strong> fue movida.
+              </p>
+              <p class="historial__detalle">
+                De <strong>{{ cambio.chuteOrigen }}</strong> a
+                <strong>{{ cambio.chuteDestino }}</strong
+                >.
+              </p>
+            </div>
+          } @else {
+            <span class="ui-badge ui-badge--success">OPERARIO</span>
+            <div>
+              <p class="historial__titulo">Se añadió 1 operario.</p>
+              <p class="historial__detalle">
+                Para reducir el cuello de botella en <strong>{{ cambio.chuteModificado }}</strong
+                >.
+              </p>
+            </div>
+          }
+        </li>
+      }
+    </ul>
+  }
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--secondary" (click)="historialAbierto.set(false)">
+      Cerrar
+    </button>
+  </div>
+</ui-modal>
+
+<ui-modal
+  [abierto]="moverAbierto()"
+  ancho="sm"
+  titulo="Mover ruta"
+  subtitulo="La ruta cambiará de chute sin modificar su cluster."
+  (cerrar)="cerrarMover()"
+>
+  @if (rutaAMover(); as ruta) {
+    <p class="mover-texto">
+      Ruta <strong class="u-mono">{{ ruta.codigoRuta }}</strong> · chute actual
+      <strong>{{ ruta.chute }}</strong>
+    </p>
+    <div class="ui-field">
+      <label class="ui-label">Chute destino</label>
+      <ui-select-buscable
+        [opciones]="opcionesDestino()"
+        [valor]="chuteDestino()"
+        placeholder="Elegir chute…"
+        (valorCambia)="chuteDestino.set($event)"
+      />
+    </div>
+  }
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--ghost" (click)="cerrarMover()">Cancelar</button>
+    <button
+      type="button"
+      class="ui-btn ui-btn--primary"
+      [disabled]="chuteDestino() === null || moviendo()"
+      (click)="confirmarMover()"
+    >
+      @if (moviendo()) {
+        <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+      }
+      Mover ruta
+    </button>
+  </div>
+</ui-modal>
+
+<ui-modal
+  [abierto]="restablecerAbierto()"
+  ancho="sm"
+  [compacto]="true"
+  titulo="Restablecer datos"
+  (cerrar)="restablecerAbierto.set(false)"
+>
+  <div class="confirm">
+    <span class="confirm__icon"><ui-icon name="refresh" [size]="22" /></span>
+    <div class="confirm__text">
+      <p class="confirm__title">¿Volver a la proyección original?</p>
+      <p class="confirm__desc">
+        Se revertirán todas las rutas movidas y los operarios añadidos por el balanceo.
+      </p>
+    </div>
+  </div>
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--ghost" (click)="restablecerAbierto.set(false)">
+      Cancelar
+    </button>
+    <button
+      type="button"
+      class="ui-btn ui-btn--danger"
+      (click)="restablecer()"
+      [disabled]="restableciendo()"
+    >
+      @if (restableciendo()) {
+        <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+      }
+      Restablecer
+    </button>
+  </div>
+</ui-modal>

@@ -64,14 +64,15 @@ public class AnaliticaAdminRepository {
     }
 
     /** Usuarios ACTIVOS con acceso efectivo a cada panel. */
-    public List<Conteo> coberturaPaneles() {
+     public List<Conteo> coberturaPaneles() {
         return jdbc.query("""
                 SELECT p.nombre AS etiqueta, COUNT(*) AS valor
                 FROM v_permisos_finales v
                 JOIN permisos p ON p.id = v.permiso_id
                 JOIN usuarios u ON u.id = v.usuario_id AND u.activo = TRUE
                 WHERE v.permitido = TRUE
-                  AND p.nombre IN ('PANEL_ADMIN', 'PANEL_BITACORA', 'PANEL_INBOUND')
+                  AND p.nombre IN ('PANEL_ADMIN', 'PANEL_BITACORA', 'PANEL_INBOUND',
+                                   'PANEL_SIMULACION')
                 GROUP BY p.nombre
                 ORDER BY p.nombre
                 """, CONTEO);

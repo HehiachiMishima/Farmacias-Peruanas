@@ -45,6 +45,14 @@ export const routes: Routes = [
       import('./features/panels/inbound/inbound.routes').then((m) => m.INBOUND_ROUTES),
   },
   {
+    path: 'simulacion',
+    canActivate: [permisoGuard(PERMISOS.PANEL_SIMULACION)],
+    loadChildren: () =>
+      import('./features/panels/simulacion/simulacion.routes').then(
+        (m) => m.SIMULACION_ROUTES,
+      ),
+  },
+  {
     path: 'analisis',
     canActivate: [panelGuard(PANEL_ANALISIS)],
     loadChildren: () =>

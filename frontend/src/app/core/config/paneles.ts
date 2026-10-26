@@ -142,6 +142,42 @@ export const PANEL_INBOUND: PanelDef = {
   ],
 };
 
+export const PANEL_SIMULACION: PanelDef = {
+  id: 'simulacion',
+  nombre: 'Simulación',
+  descripcion: 'Proyección de rutas, balanceo por chutes y análisis de tiempos.',
+  icono: 'engranaje',
+  ruta: '/simulacion',
+  permiso: PERMISOS.PANEL_SIMULACION,
+  acento: 'var(--cyan)',
+  modulos: [
+    {
+      id: 'registro',
+      nombre: 'Registro',
+      descripcion: 'Carga y administración de los archivos Excel de proyección.',
+      icono: 'almacen',
+      ruta: 'registro',
+      permiso: PERMISOS.VER_REGISTRO_SIMULACION,
+    },
+    {
+      id: 'configuracion',
+      nombre: 'Configuración',
+      descripcion: 'Límites por cluster, operarios por chute y balanceo.',
+      icono: 'control',
+      ruta: 'configuracion',
+      permiso: PERMISOS.VER_CONFIGURACION_SIMULACION,
+    },
+    {
+      id: 'dashboard',
+      nombre: 'Dashboard',
+      descripcion: 'Comparativo de tiempos antes y después del balanceo.',
+      icono: 'dashboard',
+      ruta: 'dashboard',
+      permiso: PERMISOS.VER_DASHBOARD_SIMULACION,
+    },
+  ],
+};
+
 /**
  * Paneles en construcción: misma estructura que los paneles reales (permiso,
  * módulos, acento), pero marcados como `publico` mientras no tengan lógica,
@@ -256,6 +292,7 @@ export const PANELES: PanelDef[] = [
   PANEL_ADMIN,
   PANEL_BITACORA,
   PANEL_INBOUND,
+  PANEL_SIMULACION,
   PANEL_ANALISIS,
   PANEL_TRAZABILIDAD,
   PANEL_LOGISTICA,

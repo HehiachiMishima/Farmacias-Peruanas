@@ -1,5 +1,7 @@
 import { Service, inject, signal } from '@angular/core';
+import { PERMISOS } from '../config/permisos';
 import { Usuario } from '../models';
+import { SesionStore } from './sesion';
 import { UsuariosApi } from './usuarios.api';
 
 /**
@@ -9,6 +11,7 @@ import { UsuariosApi } from './usuarios.api';
 @Service()
 export class DirectorioUsuarios {
   private readonly usuariosApi = inject(UsuariosApi);
+  private readonly sesion = inject(SesionStore);
 
   private readonly nombres = signal<Map<number, string>>(new Map());
   readonly mapa = this.nombres.asReadonly();
@@ -25,6 +28,12 @@ export class DirectorioUsuarios {
   /** Carga el directorio una sola vez. */
   cargar(): void {
     if (this.cargado || this.cargando) {
+      return;
+    }
+    // El catálogo de usuarios exige VER_USUARIOS: sin él la petición daría
+    // 403 y un toast de error en pantallas que solo necesitan el fallback.
+    if (!this.sesion.tienePermiso(PERMISOS.VER_USUARIOS)) {
+      this.cargado = true;
       return;
     }
     this.cargando = true;
