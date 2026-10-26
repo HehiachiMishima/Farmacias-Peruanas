@@ -11,11 +11,6 @@ import { PermisosApi } from '../../../../../core/services/permisos.api';
 import { RolesApi } from '../../../../../core/services/roles.api';
 import { UsuariosApi } from '../../../../../core/services/usuarios.api';
 import { Permiso, Rol, Usuario } from '../../../../../core/models';
-
-interface ResumenUsuario {
-  roles: string[];
-  permisos: string[];
-}
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
 import { ColumnasRedimensionables } from '../../../../../shared/directives/columnas-redimensionables.directive';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
@@ -23,15 +18,43 @@ import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
 import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
+import {
+  FiltroEstado,
+  OPCIONES_ESTADO,
+  chipEstado,
+  chipPeriodo,
+  cumpleEstado,
+  enPeriodo,
+} from '../../../../../shared/ui/panel-filtros/filtro-registro';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
+import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
+import { contieneTexto } from '../../../../../core/utils/texto.util';
+
+interface ResumenUsuario {
+  roles: string[];
+  permisos: string[];
+}
 
 /** Valor del filtro de rol para «usuarios sin ningún rol». */
 const SIN_ROL = '__sin_rol__';
 
 @Component({
   selector: 'app-admin-usuarios',
-  imports: [ReactiveFormsModule, DatePipe, ActorLabelPipe, Icon, Modal, EmptyState, HasPermiso, ColumnasRedimensionables, Paginador, PanelFiltros, FiltrosActivos],
+  imports: [
+    ReactiveFormsModule,
+    DatePipe,
+    ActorLabelPipe,
+    Icon,
+    Modal,
+    EmptyState,
+    HasPermiso,
+    ColumnasRedimensionables,
+    Paginador,
+    PanelFiltros,
+    FiltrosActivos,
+    RangoRapido,
+  ],
   templateUrl: './usuarios.html',
   styleUrl: './usuarios.scss',
 })
@@ -53,56 +76,60 @@ export class Usuarios {
   readonly busqueda = signal('');
 
   private readonly coincidenBusqueda = computed(() => {
-    const termino = this.busqueda().trim().toLowerCase();
-    const lista = this.usuarios();
-    if (!termino) {
-      return lista;
-    }
-    return lista.filter((usuario) =>
-      [usuario.usuario, usuario.nombre, usuario.apellido, usuario.email]
-        .filter(Boolean)
-        .some((campo) => campo.toLowerCase().includes(termino)),
+    const termino = this.busqueda();
+    return this.usuarios().filter((usuario) =>
+      contieneTexto([usuario.usuario, usuario.nombre, usuario.apellido, usuario.email], termino),
     );
   });
 
   // ---------------- Filtros del panel ----------------
-  readonly filtroEstado = signal<'todos' | 'activos' | 'inactivos'>('todos');
+  readonly filtroEstado = signal<FiltroEstado>('todos');
   readonly filtrosAbierto = signal(false);
   readonly sinRol = SIN_ROL;
 
-  readonly estados = [
-    { id: 'todos', etiqueta: 'Todos' },
-    { id: 'activos', etiqueta: 'Activos' },
-    { id: 'inactivos', etiqueta: 'Inactivos' },
-  ] as const;
+  readonly estados = OPCIONES_ESTADO;
   readonly filtroRol = signal<string | null>(null);
+  readonly filtroDesde = signal('');
+  readonly filtroHasta = signal('');
 
   /** Roles presentes en el listado (desde el resumen agregado). */
   readonly opcionesRol = computed(() =>
-    [...new Set([...this.resumen().values()].flatMap((r) => r.roles))].sort((a, b) => a.localeCompare(b)),
+    [...new Set([...this.resumen().values()].flatMap((r) => r.roles))].sort((a, b) =>
+      a.localeCompare(b),
+    ),
   );
 
   /** Búsqueda + filtros del panel (todo en cliente: el listado ya está en memoria). */
   readonly filtrados = computed(() => {
     const estado = this.filtroEstado();
     const rol = this.filtroRol();
+    const desde = this.filtroDesde();
+    const hasta = this.filtroHasta();
+    // Sin resumen de roles (cargando o con error) el filtro de rol no se
+    // aplica: daría «todos sin rol» o «ninguno con el rol» por falta de datos.
+    const aplicarRol = rol !== null && this.resumenDisponible();
     return this.coincidenBusqueda().filter(
       (item) =>
-        (estado === 'todos' || (estado === 'activos') === !!item.activo)
-        && (rol === null || (rol === SIN_ROL ? this.rolesDe(item.id).length === 0 : this.rolesDe(item.id).includes(rol))),
+        cumpleEstado(estado, item.activo) &&
+        (!aplicarRol ||
+          (rol === SIN_ROL
+            ? this.rolesDe(item.id).length === 0
+            : this.rolesDe(item.id).includes(rol))) &&
+        enPeriodo(item.creadoEn, desde, hasta),
     );
   });
 
   readonly chips = computed<ChipFiltro[]>(() => {
-    const chips: ChipFiltro[] = [];
-    if (this.filtroEstado() !== 'todos') {
-      chips.push({ clave: 'estado', etiqueta: 'Estado', valor: this.filtroEstado() === 'activos' ? 'Activos' : 'Inactivos', icono: 'power' });
-    }
     const rol = this.filtroRol();
-    if (rol !== null) {
-      chips.push({ clave: 'rol', etiqueta: 'Rol', valor: rol === SIN_ROL ? 'Sin rol' : rol, icono: 'roles' });
-    }
-    return chips;
+    const chipRol: ChipFiltro | null =
+      rol === null
+        ? null
+        : { clave: 'rol', etiqueta: 'Rol', valor: rol === SIN_ROL ? 'Sin rol' : rol, icono: 'roles' };
+    return [
+      chipEstado(this.filtroEstado()),
+      chipRol,
+      chipPeriodo(this.filtroDesde(), this.filtroHasta()),
+    ].filter((chip): chip is ChipFiltro => chip !== null);
   });
 
   readonly filtrosActivos = computed(() => this.chips().length);
@@ -111,7 +138,7 @@ export class Usuarios {
     this.filtrosAbierto.update((abierto) => !abierto);
   }
 
-  setEstado(estado: 'todos' | 'activos' | 'inactivos'): void {
+  setEstado(estado: FiltroEstado): void {
     this.filtroEstado.set(estado);
     this.pagina.set(1);
   }
@@ -122,15 +149,37 @@ export class Usuarios {
     this.pagina.set(1);
   }
 
+  setRango(rango: RangoFechas): void {
+    this.filtroDesde.set(rango.desde);
+    this.filtroHasta.set(rango.hasta);
+    this.pagina.set(1);
+  }
+
+  setFiltroDesde(evento: Event): void {
+    this.filtroDesde.set((evento.target as HTMLInputElement).value);
+    this.pagina.set(1);
+  }
+
+  setFiltroHasta(evento: Event): void {
+    this.filtroHasta.set((evento.target as HTMLInputElement).value);
+    this.pagina.set(1);
+  }
+
   quitarFiltro(clave: string): void {
     if (clave === 'estado') this.filtroEstado.set('todos');
     if (clave === 'rol') this.filtroRol.set(null);
+    if (clave === 'periodo') {
+      this.filtroDesde.set('');
+      this.filtroHasta.set('');
+    }
     this.pagina.set(1);
   }
 
   limpiarFiltros(): void {
     this.filtroEstado.set('todos');
     this.filtroRol.set(null);
+    this.filtroDesde.set('');
+    this.filtroHasta.set('');
     this.pagina.set(1);
   }
 
@@ -141,9 +190,7 @@ export class Usuarios {
     Math.max(1, Math.ceil(this.filtrados().length / this.porPagina())),
   );
 
-  readonly paginaActual = computed(() =>
-    Math.min(Math.max(1, this.pagina()), this.totalPaginas()),
-  );
+  readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
 
   readonly paginados = computed(() => {
     const inicio = (this.paginaActual() - 1) * this.porPagina();
@@ -162,7 +209,12 @@ export class Usuarios {
 
   /** Resumen por usuario (roles asignados y permisos efectivos) para las columnas Rol/Permisos. */
   readonly cargandoResumen = signal(false);
+  readonly errorResumen = signal(false);
   readonly resumen = signal<Map<number, ResumenUsuario>>(new Map());
+  /** El filtro por rol solo es fiable con el resumen cargado sin error. */
+  readonly resumenDisponible = computed(() => !this.cargandoResumen() && !this.errorResumen());
+  /** Hubo cambios de roles/permisos en un modal: el resumen se recarga al cerrarlo. */
+  private resumenDesactualizado = false;
 
   readonly formAbierto = signal(false);
   readonly editando = signal<Usuario | null>(null);
@@ -215,6 +267,7 @@ export class Usuarios {
       return;
     }
     this.cargandoResumen.set(true);
+    this.errorResumen.set(false);
     this.usuariosApi
       .resumen()
       .pipe(finalize(() => this.cargandoResumen.set(false)))
@@ -228,8 +281,18 @@ export class Usuarios {
             mapa.set(fila.usuarioId, { roles: fila.roles, permisos: fila.permisos });
           }
           this.resumen.set(mapa);
+          // Un rol renombrado o eliminado ya no aparece en las opciones: se
+          // suelta el filtro en lugar de dejar la tabla vacía sin explicación.
+          const rol = this.filtroRol();
+          if (rol !== null && rol !== SIN_ROL && !this.opcionesRol().includes(rol)) {
+            this.filtroRol.set(null);
+          }
         },
-        error: () => this.resumen.set(new Map()),
+        error: () => {
+          this.resumen.set(new Map());
+          this.errorResumen.set(true);
+          this.filtroRol.set(null);
+        },
       });
   }
 
@@ -249,15 +312,28 @@ export class Usuarios {
     return `${usuario.nombre?.[0] ?? ''}${usuario.apellido?.[0] ?? ''}`.toUpperCase() || '?';
   }
 
-  campoInvalido(campo: 'usuario' | 'contrasena' | 'nombre' | 'apellido' | 'email' | 'telefono'): boolean {
+  campoInvalido(
+    campo: 'usuario' | 'contrasena' | 'nombre' | 'apellido' | 'email' | 'telefono',
+  ): boolean {
     const control = this.formulario.controls[campo];
     return control.touched && control.invalid;
   }
 
   abrirCrear(): void {
     this.editando.set(null);
-    this.formulario.reset({ usuario: '', contrasena: '', nombre: '', apellido: '', email: '', telefono: '', activo: true });
-    this.formulario.controls.contrasena.setValidators([Validators.required, Validators.minLength(6)]);
+    this.formulario.reset({
+      usuario: '',
+      contrasena: '',
+      nombre: '',
+      apellido: '',
+      email: '',
+      telefono: '',
+      activo: true,
+    });
+    this.formulario.controls.contrasena.setValidators([
+      Validators.required,
+      Validators.minLength(6),
+    ]);
     this.formulario.controls.contrasena.updateValueAndValidity();
     this.formAbierto.set(true);
   }
@@ -322,7 +398,10 @@ export class Usuarios {
 
     peticion.subscribe({
       next: (usuario) => {
-        this.notificaciones.exito('Guardado', `Usuario ${usuario.usuario} ${editando ? 'actualizado' : 'creado'}.`);
+        this.notificaciones.exito(
+          'Guardado',
+          `Usuario ${usuario.usuario} ${editando ? 'actualizado' : 'creado'}.`,
+        );
         this.cerrarForm();
         this.cargar();
       },
@@ -366,7 +445,8 @@ export class Usuarios {
           this.eliminarAbierto.set(false);
           this.aEliminar.set(null);
         },
-        error: (err: unknown) => this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
+        error: (err: unknown) =>
+          this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
       });
   }
 
@@ -384,8 +464,19 @@ export class Usuarios {
           this.catalogoRoles.set(catalogo);
           this.rolesAsignados.set(new Set(asignados.map((rol) => rol.id)));
         },
-        error: (err: unknown) => this.notificaciones.error('No se pudieron cargar los roles', mensajeDeError(err)),
+        error: (err: unknown) =>
+          this.notificaciones.error('No se pudieron cargar los roles', mensajeDeError(err)),
       });
+  }
+
+  /** Cierra el modal de roles o de permisos y refresca las columnas/filtro de rol si hubo cambios. */
+  cerrarAsignaciones(): void {
+    this.rolesAbierto.set(false);
+    this.permisosAbierto.set(false);
+    if (this.resumenDesactualizado) {
+      this.resumenDesactualizado = false;
+      this.cargarResumen(this.usuarios());
+    }
   }
 
   estaAsignado(rolId: number): boolean {
@@ -414,9 +505,11 @@ export class Usuarios {
           }
           return copia;
         });
+        this.resumenDesactualizado = true;
         this.notificaciones.info(asignado ? 'Rol quitado' : 'Rol asignado', rol.nombre);
       },
-      error: (err: unknown) => this.notificaciones.error('No se pudo actualizar el rol', mensajeDeError(err)),
+      error: (err: unknown) =>
+        this.notificaciones.error('No se pudo actualizar el rol', mensajeDeError(err)),
     });
   }
 
@@ -433,13 +526,9 @@ export class Usuarios {
   private readonly otorgaRol = signal<Set<number>>(new Set());
 
   readonly permisosFiltrados = computed(() => {
-    const termino = this.filtroPermisos().trim().toLowerCase();
-    const lista = this.catalogoPermisos();
-    if (!termino) {
-      return lista;
-    }
-    return lista.filter((permiso) =>
-      [permiso.nombre, permiso.descripcion ?? ''].some((campo) => campo.toLowerCase().includes(termino)),
+    const termino = this.filtroPermisos();
+    return this.catalogoPermisos().filter((permiso) =>
+      contieneTexto([permiso.nombre, permiso.descripcion], termino),
     );
   });
 
@@ -531,6 +620,7 @@ export class Usuarios {
             copia.delete(permiso.id);
             return copia;
           });
+          this.resumenDesactualizado = true;
           this.notificaciones.info('Permiso heredado del rol', permiso.nombre);
         },
         error: (err: unknown) => {
@@ -543,7 +633,11 @@ export class Usuarios {
 
   private aplicarOverride(permiso: Permiso, otorgado: boolean): void {
     const usuario = this.usuarioPermisos();
-    if (!usuario || this.cambiandoPermiso() !== null || this.overrides().get(permiso.id) === otorgado) {
+    if (
+      !usuario ||
+      this.cambiandoPermiso() !== null ||
+      this.overrides().get(permiso.id) === otorgado
+    ) {
       return;
     }
     this.cambiandoPermiso.set(permiso.id);
@@ -553,6 +647,7 @@ export class Usuarios {
       .subscribe({
         next: () => {
           this.overrides.update((mapa) => new Map(mapa).set(permiso.id, otorgado));
+          this.resumenDesactualizado = true;
           this.notificaciones.info(
             otorgado ? 'Permiso concedido' : 'Permiso denegado',
             permiso.nombre,

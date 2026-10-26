@@ -62,21 +62,26 @@ export class Dashboard {
         valor: k ? `${entero(k.usuariosActivos)} de ${entero(k.usuarios)}` : '—',
         icono: 'usuarios',
         color: 'var(--accent)',
-        detalle: k ? `${porcentaje(k.usuarios ? k.usuariosActivos / k.usuarios : 0)} pueden iniciar sesión` : '',
+        detalle: k
+          ? `${porcentaje(k.usuarios ? k.usuariosActivos / k.usuarios : 0)} pueden iniciar sesión`
+          : '',
       },
       {
         etiqueta: 'Usuarios sin rol',
         valor: k ? entero(k.usuariosSinRol) : '—',
         icono: 'alertTriangle',
         color: k && k.usuariosSinRol > 0 ? 'var(--warning)' : 'var(--success)',
-        detalle: k && k.usuariosSinRol > 0 ? 'Revisar: acceso solo por excepción' : 'Todos tienen un rol',
+        detalle:
+          k && k.usuariosSinRol > 0 ? 'Revisar: acceso solo por excepción' : 'Todos tienen un rol',
       },
       {
         etiqueta: 'Excepciones al RBAC',
         valor: k ? entero(excepciones) : '—',
         icono: 'key',
         color: excepciones > 0 ? 'var(--brand)' : 'var(--success)',
-        detalle: k ? `${entero(k.overridesGrant)} concedidas · ${entero(k.overridesDeny)} denegadas` : '',
+        detalle: k
+          ? `${entero(k.overridesGrant)} concedidas · ${entero(k.overridesDeny)} denegadas`
+          : '',
       },
     ];
   });
@@ -97,7 +102,9 @@ export class Dashboard {
   /** Usuarios activos con acceso a cada panel, en % del total de activos. */
   readonly barrasCobertura = computed<BarraDato[]>(() => {
     const activos = this.kpis()?.usuariosActivos ?? 0;
-    const porPanel = new Map((this.datos()?.coberturaPaneles ?? []).map((c) => [c.etiqueta, c.valor]));
+    const porPanel = new Map(
+      (this.datos()?.coberturaPaneles ?? []).map((c) => [c.etiqueta, c.valor]),
+    );
     return Object.keys(NOMBRE_PANEL).map((clave) => {
       const valor = porPanel.get(clave) ?? 0;
       return {

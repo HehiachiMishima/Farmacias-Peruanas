@@ -33,6 +33,19 @@
   <button
     type="button"
     class="ui-btn ui-btn--secondary"
+    [attr.aria-expanded]="filtrosAbierto()"
+    aria-controls="simulacion-dashboard-filtros"
+    (click)="alternarFiltros()"
+  >
+    <ui-icon name="filtro" [size]="18" />
+    Filtros
+    @if (filtrosActivos() > 0) {
+      <span class="filtros-badge">{{ filtrosActivos() }}</span>
+    }
+  </button>
+  <button
+    type="button"
+    class="ui-btn ui-btn--secondary"
     (click)="actualizar()"
     [disabled]="!seleccionado() || cargando() || cargandoOpciones()"
   >
@@ -40,6 +53,49 @@
     Actualizar
   </button>
 </section>
+
+<ui-filtros-activos
+  [chips]="chips()"
+  (quitar)="quitarFiltro($event)"
+  (limpiar)="limpiarFiltros()"
+/>
+
+<ui-panel-filtros
+  id="simulacion-dashboard-filtros"
+  [abierto]="filtrosAbierto()"
+  [activos]="filtrosActivos()"
+  titulo="Filtrar dashboard"
+  (cerrar)="filtrosAbierto.set(false)"
+  (limpiar)="limpiarFiltros()"
+>
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="area" [size]="15" /> Clusters</h3>
+    <div class="ui-field">
+      <label class="ui-label" for="dashboard-filtro-clusters">Clusters</label>
+      <ui-select-multiple
+        campoId="dashboard-filtro-clusters"
+        [opciones]="opcionesCluster()"
+        [valores]="filtroClusters()"
+        placeholder="Todos los clusters"
+        (valoresCambia)="setFiltroClusters($event)"
+      />
+    </div>
+  </section>
+
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="layers" [size]="15" /> Chutes</h3>
+    <div class="ui-field">
+      <label class="ui-label" for="dashboard-filtro-chutes">Chutes</label>
+      <ui-select-multiple
+        campoId="dashboard-filtro-chutes"
+        [opciones]="opcionesChute()"
+        [valores]="filtroChutes()"
+        placeholder="Todos los chutes"
+        (valoresCambia)="setFiltroChutes($event)"
+      />
+    </div>
+  </section>
+</ui-panel-filtros>
 
 @if (cargandoOpciones() && registros().length === 0) {
   <div class="table-card">
@@ -111,6 +167,12 @@
       />
     }
   </section>
+  @if (filtrosActivos() > 0) {
+    <p class="filtro-nota dash-nota-global">
+      <ui-icon name="info" [size]="14" />
+      Los indicadores son del registro completo; los filtros se aplican a los gráficos y cuadros.
+    </p>
+  }
 
   <div class="dash-grid" [class.dash-grid--cargando]="cargando()">
     <article class="dash-card" [class.dash-card--cargando]="cargando()">
@@ -159,7 +221,11 @@
             <tr>
               <th rowspan="2">Chute</th>
               @for (m of metricas; track m.id) {
-                <th colspan="2" class="cuadro__grupo" [class.cuadro__grupo--activo]="metrica() === m.id">
+                <th
+                  colspan="2"
+                  class="cuadro__grupo"
+                  [class.cuadro__grupo--activo]="metrica() === m.id"
+                >
                   {{ m.nombre }}
                 </th>
               }
@@ -172,7 +238,7 @@
             </tr>
           </thead>
           <tbody>
-            @for (chute of datos.chutes; track chute.chute) {
+            @for (chute of chutesVisibles(); track chute.chute) {
               <tr>
                 <td class="fuerte">{{ chute.chute }}</td>
                 @for (m of metricas; track m.id) {
@@ -181,7 +247,10 @@
                   </td>
                   <td class="num" [class.cuadro__col--activa]="metrica() === m.id">
                     <span class="fuerte">{{ formatearNumero(m.despues(chute)) }}</span>
-                    <span class="cuadro__delta" [class]="claseVariacion(m.antes(chute), m.despues(chute), false)">
+                    <span
+                      class="cuadro__delta"
+                      [class]="claseVariacion(m.antes(chute), m.despues(chute), false)"
+                    >
                       {{ variacion(m.antes(chute), m.despues(chute)) }}
                     </span>
                   </td>
@@ -242,15 +311,20 @@
             </tr>
           </thead>
           <tbody>
-            @for (cluster of datos.clusters; track cluster.cluster) {
+            @for (cluster of clustersVisibles(); track cluster.cluster) {
               <tr>
                 <td class="fuerte">{{ cluster.cluster }}</td>
                 <td class="num u-muted">{{ formatearHoras(cluster.tiempoOriginal) }}</td>
                 <td class="num fuerte">{{ formatearHoras(cluster.tiempoBalanceado) }}</td>
-                <td class="num" [class]="claseVariacion(cluster.tiempoOriginal, cluster.tiempoBalanceado, true)">
+                <td
+                  class="num"
+                  [class]="claseVariacion(cluster.tiempoOriginal, cluster.tiempoBalanceado, true)"
+                >
                   {{ variacion(cluster.tiempoOriginal, cluster.tiempoBalanceado) }}
                 </td>
-                <td class="num">{{ cluster.limiteHoras > 0 ? formatearHoras(cluster.limiteHoras) : '—' }}</td>
+                <td class="num">
+                  {{ cluster.limiteHoras > 0 ? formatearHoras(cluster.limiteHoras) : '—' }}
+                </td>
                 <td>
                   @if (cluster.limiteHoras > 0) {
                     <span

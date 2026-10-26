@@ -2,6 +2,7 @@ package oracle.simulacion.service;
 
 import jakarta.persistence.criteria.Predicate;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -68,23 +69,28 @@ public class SimulacionRegistroService {
   }
 
   public Mono<ApiResponse<PaginaResponse<ArchivoSimulacionResponse>>> listar(
-      int pagina, int tamano, String texto) {
+      int pagina, int tamano, String texto, List<String> estados) {
     int p = Math.max(pagina, 1) - 1;
     int t = Math.min(Math.max(tamano, 1), MAX_TAMANO_PAGINA);
     PageRequest pageable =
         PageRequest.of(
             p, t, Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id")));
     String termino = Filtros.normalizar(texto);
+    List<String> filtroEstados = estados == null ? List.of() : estados.stream().filter((e) -> e != null && !e.isBlank()).toList();
     Specification<ArchivoExcel> spec =
         (root, query, cb) -> {
-          if (termino == null) {
-            return cb.conjunction();
+          List<Predicate> condiciones = new ArrayList<>();
+          if (!filtroEstados.isEmpty()) {
+            condiciones.add(root.get("estado").in(filtroEstados));
           }
-          String patron = "%" + termino.toLowerCase(Locale.ROOT) + "%";
-          Predicate nombre = cb.like(cb.lower(root.get("nombreRegistro")), patron);
-          Predicate archivo = cb.like(cb.lower(root.get("nombreArchivo")), patron);
-          Predicate etiqueta = cb.like(cb.lower(root.get("etiqueta")), patron);
-          return cb.or(nombre, archivo, etiqueta);
+          if (termino != null) {
+            String patron = "%" + termino.toLowerCase(Locale.ROOT) + "%";
+            Predicate nombre = cb.like(cb.lower(root.get("nombreRegistro")), patron);
+            Predicate archivo = cb.like(cb.lower(root.get("nombreArchivo")), patron);
+            Predicate etiqueta = cb.like(cb.lower(root.get("etiqueta")), patron);
+            condiciones.add(cb.or(nombre, archivo, etiqueta));
+          }
+          return cb.and(condiciones.toArray(Predicate[]::new));
         };
     return Mono.fromCallable(
             () ->

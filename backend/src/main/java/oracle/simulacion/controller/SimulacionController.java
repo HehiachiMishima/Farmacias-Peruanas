@@ -50,8 +50,9 @@ public class SimulacionController {
   public Mono<ApiResponse<PaginaResponse<ArchivoSimulacionResponse>>> listar(
       @RequestParam(defaultValue = "1") int pagina,
       @RequestParam(defaultValue = "10") int tamano,
-      @RequestParam(required = false) String texto) {
-    return registroService.listar(pagina, tamano, texto);
+      @RequestParam(required = false) String texto,
+      @RequestParam(required = false) List<String> estados) {
+    return registroService.listar(pagina, tamano, texto, estados);
   }
 
   @GetMapping("/registros/opciones")
@@ -104,9 +105,9 @@ public class SimulacionController {
       @RequestParam(defaultValue = "1") int pagina,
       @RequestParam(defaultValue = "25") int tamano,
       @RequestParam(required = false) String texto,
-      @RequestParam(required = false) Long clusterId,
-      @RequestParam(required = false) Long chuteId) {
-    return configuracionService.rutas(id, pagina, tamano, texto, clusterId, chuteId);
+      @RequestParam(required = false) List<Long> clusterIds,
+      @RequestParam(required = false) List<Long> chuteIds) {
+    return configuracionService.rutas(id, pagina, tamano, texto, clusterIds, chuteIds);
   }
 
   @PutMapping("/registros/{id}/rutas/{rutaId}/mover")

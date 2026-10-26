@@ -1,5 +1,18 @@
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, input, output, signal, viewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  HostListener,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { Icon } from '../icon/icon';
+import { normalizarTexto } from '../../../core/utils/texto.util';
 
 export interface OpcionSeleccion {
   id: number;
@@ -9,7 +22,9 @@ export interface OpcionSeleccion {
 /**
  * Select con búsqueda por escritura (combobox). Diseñado para catálogos
  * grandes: el usuario escribe para filtrar las opciones y elige con clic o
- * Enter. Teclado: ↑/↓ navegan, Enter elige, Esc cierra, Tab pierde foco.
+ * Enter. Al elegir vuelve a quedar listo para escribir o hacer clic y elegir
+ * otro valor sin salir del campo. Teclado: ↑/↓ navegan, Enter elige, Esc
+ * cierra, Tab pierde foco.
  */
 @Component({
   selector: 'ui-select-buscable',
@@ -22,23 +37,23 @@ export interface OpcionSeleccion {
       [class.ui-input--invalid]="invalido()"
       [class.ui-selbusc--deshabilitado]="deshabilitado()"
     >
-      <div class="ui-selbusc__control">
+      <div class="ui-selbusc__control" (click)="alHacerClic()">
         <input
           #campo
           class="ui-selbusc__input"
           type="text"
           autocomplete="off"
           spellcheck="false"
-          [readonly]="!abierto()"
           [disabled]="deshabilitado()"
           [placeholder]="placeholder()"
           [attr.id]="campoId()"
           [attr.aria-label]="campoId() ? null : placeholder()"
           [value]="abierto() ? consulta() : (seleccion()?.etiqueta ?? '')"
           (focus)="abrir()"
+          (beforeinput)="antesDeEscribir($event)"
           (input)="escribir($any($event.target).value)"
           (keydown)="tecla($event)"
-          (click)="$event.stopPropagation()"
+          (click)="$event.stopPropagation(); alHacerClic()"
         />
         <ui-icon class="ui-selbusc__chevron" name="chevronRight" [size]="16" />
       </div>
@@ -87,9 +102,9 @@ export class SelectBuscable {
   readonly seleccion = computed(() => this.opciones().find((o) => o.id === this.valor()) ?? null);
 
   readonly filtradas = computed(() => {
-    const q = this.normalizar(this.consulta());
+    const q = normalizarTexto(this.consulta());
     if (!q) return this.opciones();
-    return this.opciones().filter((o) => this.normalizar(o.etiqueta).includes(q));
+    return this.opciones().filter((o) => normalizarTexto(o.etiqueta).includes(q));
   });
 
   private ultimoValor: number | null = this.valor();
@@ -124,13 +139,41 @@ export class SelectBuscable {
     this.consulta.set('');
   }
 
+  /**
+   * Escribir con el select cerrado reabre la lista y empieza a filtrar desde
+   * cero: así se puede elegir un filtro, escribir de nuevo y elegir otro sin
+   * salir del campo.
+   */
+  antesDeEscribir(evento: InputEvent): void {
+    if (this.abierto() || this.deshabilitado()) {
+      return;
+    }
+    evento.preventDefault();
+    this.abrir();
+    this.consulta.set(evento.data ?? '');
+    this.resaltado.set(0);
+  }
+
+  /** Un clic sobre el campo cerrado vuelve a abrir la lista. */
+  alHacerClic(): void {
+    if (!this.abierto()) {
+      this.abrir();
+    }
+  }
+
   escribir(valor: string): void {
+    // Algunos navegadores no emiten `beforeinput`: abrir aquí igualmente.
+    if (!this.abierto()) {
+      this.abrir();
+    }
     this.consulta.set(valor);
     this.resaltado.set(0);
   }
 
   elegir(op: OpcionSeleccion): void {
     this.valorCambia.emit(op.id);
+    // Mantiene el foco para poder escribir de nuevo sin volver a hacer clic.
+    this.campo()?.nativeElement?.focus();
     this.cerrar();
   }
 
@@ -140,19 +183,27 @@ export class SelectBuscable {
       case 'Escape':
         this.cerrar();
         break;
-      case 'ArrowDown':
+      case 'ArrowDown': {
         evento.preventDefault();
+        const estabaAbierto = this.abierto();
         this.abrir();
-        this.resaltado.update((i) => Math.min(i + 1, Math.max(opciones.length - 1, 0)));
+        if (estabaAbierto) {
+          this.resaltado.update((i) => Math.min(i + 1, Math.max(opciones.length - 1, 0)));
+        }
         break;
+      }
       case 'ArrowUp':
         evento.preventDefault();
         this.resaltado.update((i) => Math.max(i - 1, 0));
         break;
       case 'Enter': {
         evento.preventDefault();
+        if (!this.abierto()) {
+          this.abrir();
+          break;
+        }
         const op = opciones[this.resaltado()];
-        if (this.abierto() && op) this.elegir(op);
+        if (op) this.elegir(op);
         break;
       }
       case 'Tab':
@@ -168,7 +219,4 @@ export class SelectBuscable {
     }
   }
 
-  private normalizar(texto: string): string {
-    return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  }
 }

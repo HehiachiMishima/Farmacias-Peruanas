@@ -13,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -130,7 +131,12 @@ public class SimulacionConfiguracionService {
   }
 
   public Mono<ApiResponse<PaginaResponse<RutaSimulacionResponse>>> rutas(
-      Long archivoId, int pagina, int tamano, String texto, Long clusterId, Long chuteId) {
+      Long archivoId,
+      int pagina,
+      int tamano,
+      String texto,
+      List<Long> clusterIds,
+      List<Long> chuteIds) {
     int p = Math.max(pagina, 1) - 1;
     int t = Math.min(Math.max(tamano, 1), MAX_TAMANO_PAGINA);
     PageRequest pageable =
@@ -142,11 +148,11 @@ public class SimulacionConfiguracionService {
         (root, query, cb) -> {
           List<Predicate> condiciones = new ArrayList<>();
           condiciones.add(cb.equal(root.get("archivoId"), archivoId));
-          if (clusterId != null) {
-            condiciones.add(cb.equal(root.get("clusterId"), clusterId));
+          if (clusterIds != null && !clusterIds.isEmpty()) {
+            condiciones.add(root.get("clusterId").in(clusterIds));
           }
-          if (chuteId != null) {
-            condiciones.add(cb.equal(root.get("chuteId"), chuteId));
+          if (chuteIds != null && !chuteIds.isEmpty()) {
+            condiciones.add(root.get("chuteId").in(chuteIds));
           }
           if (termino != null) {
             condiciones.add(cb.like(root.get("codigoRuta"), escaparLike(termino) + "%", '\\'));
@@ -593,7 +599,11 @@ public class SimulacionConfiguracionService {
       cargaActual.put(
           new Par(fila.getClusterId(), fila.getChuteId()),
           new Estadistica(
-              fila.getRutas(), fila.getBultos(), fila.getUnidades(), fila.getLineas(), fila.getCod()));
+              fila.getRutas(),
+              fila.getBultos(),
+              fila.getUnidades(),
+              fila.getLineas(),
+              cod(fila.getCod())));
     }
     Map<Par, Estadistica> cargaOriginal = new HashMap<>(cargaActual);
     for (RutaProyeccion ruta : rutaRepo.findAllById(chuteOriginal.keySet())) {
@@ -645,6 +655,18 @@ public class SimulacionConfiguracionService {
                 })
             .toList();
 
+    Map<Long, Set<String>> clustersPorChute = new HashMap<>();
+    for (Map<Par, Estadistica> carga : List.of(cargaActual, cargaOriginal)) {
+      carga.forEach(
+          (par, valor) -> {
+            if (valor.rutas() > 0) {
+              clustersPorChute
+                  .computeIfAbsent(par.chuteId(), (id) -> new TreeSet<>(ORDEN_NATURAL))
+                  .add(ctx.nombreCluster(par.clusterId()));
+            }
+          });
+    }
+
     Set<Long> chuteIds = new LinkedHashSet<>(actual.porChute().keySet());
     chuteIds.addAll(original.porChute().keySet());
     List<ChuteComparativoResponse> chutes =
@@ -678,7 +700,8 @@ public class SimulacionConfiguracionService {
                       antes.lineas(),
                       despues.lineas(),
                       antes.codEntero(),
-                      despues.codEntero());
+                      despues.codEntero(),
+                      List.copyOf(clustersPorChute.getOrDefault(chuteId, Set.of())));
                 })
             .toList();
 
@@ -872,7 +895,7 @@ public class SimulacionConfiguracionService {
                         fila.getBultos(),
                         fila.getUnidades(),
                         fila.getLineas(),
-                        fila.getCod()))
+                        cod(fila.getCod())))
             .toList();
     return new ConfiguracionSimulacionResponse(
         aArchivo(ctx.archivo(), carga), ctx.config().getVelocidadBase(), clusters, chutes, cargaResponse);
@@ -883,12 +906,14 @@ public class SimulacionConfiguracionService {
     BigDecimal bultos = BigDecimal.ZERO;
     BigDecimal unidades = BigDecimal.ZERO;
     BigDecimal lineas = BigDecimal.ZERO;
+    BigDecimal cod = BigDecimal.ZERO;
     Set<Long> chutes = new HashSet<>();
     for (CargaRutas fila : carga) {
       rutas += fila.getRutas();
       bultos = bultos.add(fila.getBultos());
       unidades = unidades.add(fila.getUnidades());
       lineas = lineas.add(fila.getLineas());
+      cod = cod.add(fila.getCod());
       chutes.add(fila.getChuteId());
     }
     return new ArchivoSimulacionResponse(
@@ -903,6 +928,7 @@ public class SimulacionConfiguracionService {
         bultos,
         unidades,
         lineas,
+        cod,
         archivo.getCreadoEn(),
         archivo.getActualizadoEn(),
         archivo.getCreadoPor(),
@@ -946,6 +972,11 @@ public class SimulacionConfiguracionService {
       }
     }
     return agregados;
+  }
+
+  /** La consulta agrega COD como decimal; los contadores del balanceo son enteros. */
+  private static long cod(BigDecimal valor) {
+    return valor == null ? 0 : valor.longValue();
   }
 
   /** Horas = bultos / (velocidad × operarios). */

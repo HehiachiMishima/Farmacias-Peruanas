@@ -1,6 +1,7 @@
 package oracle.simulacion.response;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public record ChuteComparativoResponse(
     String chute,
@@ -16,4 +17,6 @@ public record ChuteComparativoResponse(
     BigDecimal lineasOriginal,
     BigDecimal lineasBalanceado,
     int codOriginal,
-    int codBalanceado) {}
+    int codBalanceado,
+    /** Clusters que el chute atiende antes o después del balanceo (para filtrar por cluster). */
+    List<String> clusters) {}

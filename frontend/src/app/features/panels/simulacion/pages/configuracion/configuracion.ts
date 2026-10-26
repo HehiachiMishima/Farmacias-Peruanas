@@ -1,7 +1,14 @@
 import { Component, HostListener, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Observable, Subject, debounceTime, distinctUntilChanged, finalize, of, switchMap } from 'rxjs';
+import {
+  Observable,
+  Subject,
+  debounceTime,
+  finalize,
+  of,
+  switchMap,
+} from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import {
@@ -22,7 +29,10 @@ import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
+import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
+import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
+import { SelectMultiple } from '../../../../../shared/ui/select-multiple/select-multiple';
 import {
   OPERARIOS_INICIALES,
   VELOCIDAD_INICIAL,
@@ -44,6 +54,9 @@ import {
     Modal,
     Paginador,
     SelectBuscable,
+    SelectMultiple,
+    PanelFiltros,
+    FiltrosActivos,
   ],
   templateUrl: './configuracion.html',
   styleUrl: './configuracion.scss',
@@ -78,9 +91,10 @@ export class SimulacionConfiguracion {
   readonly operarios = signal<Record<number, number>>({});
   readonly dirty = signal(false);
 
-  readonly filtroChute = signal<number | null>(null);
-  readonly filtroCluster = signal<number | null>(null);
+  readonly filtroChute = signal<number[]>([]);
+  readonly filtroCluster = signal<number[]>([]);
   readonly filtroTexto = signal('');
+  readonly filtrosAbierto = signal(false);
   private readonly busqueda$ = new Subject<string>();
 
   readonly pagina = signal(1);
@@ -134,10 +148,41 @@ export class SimulacionConfiguracion {
 
   readonly filtrosActivos = computed(
     () =>
-      (this.filtroChute() !== null ? 1 : 0) +
-      (this.filtroCluster() !== null ? 1 : 0) +
-      (this.filtroTexto().trim() ? 1 : 0),
+      this.filtroChute().length + this.filtroCluster().length + (this.filtroTexto().trim() ? 1 : 0),
   );
+
+  readonly chips = computed<ChipFiltro[]>(() => {
+    const chips: ChipFiltro[] = [];
+    for (const chute of this.opcionesChute()) {
+      if (this.filtroChute().includes(Number(chute.id))) {
+        chips.push({
+          clave: `chute:${chute.id}`,
+          etiqueta: 'Chute',
+          valor: chute.etiqueta,
+          icono: 'layers',
+        });
+      }
+    }
+    for (const cluster of this.opcionesCluster()) {
+      if (this.filtroCluster().includes(Number(cluster.id))) {
+        chips.push({
+          clave: `cluster:${cluster.id}`,
+          etiqueta: 'Cluster',
+          valor: cluster.etiqueta,
+          icono: 'area',
+        });
+      }
+    }
+    const texto = this.filtroTexto().trim();
+    if (texto) {
+      chips.push({ clave: 'texto:', etiqueta: 'Ruta', valor: texto, icono: 'search' });
+    }
+    return chips;
+  });
+
+  alternarFiltros(): void {
+    this.filtrosAbierto.update((abierto) => !abierto);
+  }
 
   readonly tieneLimites = computed(() =>
     Object.values(this.limites()).some((limite) => Number(limite) > 0),
@@ -170,7 +215,14 @@ export class SimulacionConfiguracion {
 
     const acumulado = new Map<
       number,
-      { bultos: number; unidades: number; lineas: number; cod: number; rutas: number; chutes: Set<number> }
+      {
+        bultos: number;
+        unidades: number;
+        lineas: number;
+        cod: number;
+        rutas: number;
+        chutes: Set<number>;
+      }
     >();
     for (const fila of cfg.carga) {
       const actual = acumulado.get(fila.clusterId) ?? {
@@ -196,7 +248,11 @@ export class SimulacionConfiguracion {
       for (const chuteId of datos?.chutes ?? []) {
         tiempo = Math.max(
           tiempo,
-          horas(bultosPorChute.get(chuteId) ?? 0, velocidad, operarios[chuteId] ?? OPERARIOS_INICIALES),
+          horas(
+            bultosPorChute.get(chuteId) ?? 0,
+            velocidad,
+            operarios[chuteId] ?? OPERARIOS_INICIALES,
+          ),
         );
       }
       const limite = limites[cluster.id] ?? 0;
@@ -218,12 +274,15 @@ export class SimulacionConfiguracion {
   });
 
   constructor() {
-    this.busqueda$
-      .pipe(debounceTime(300), distinctUntilChanged(), takeUntilDestroyed())
-      .subscribe((texto) => {
-        this.filtroTexto.set(texto);
-        this.recargarRutasDesde(1);
-      });
+    // Se compara con el filtro vigente (no con el último texto emitido): tras
+    // «Limpiar», volver a escribir el mismo código sí vuelve a filtrar.
+    this.busqueda$.pipe(debounceTime(300), takeUntilDestroyed()).subscribe((texto) => {
+      if (texto.trim() === this.filtroTexto().trim()) {
+        return;
+      }
+      this.filtroTexto.set(texto);
+      this.recargarRutasDesde(1);
+    });
     this.cargarOpciones();
   }
 
@@ -238,8 +297,7 @@ export class SimulacionConfiguracion {
   /** Lo consulta el guard de la ruta antes de navegar a otra pantalla. */
   puedeSalir(): boolean {
     return (
-      !this.dirty() ||
-      window.confirm('Hay parámetros sin guardar. ¿Salir y descartar los cambios?')
+      !this.dirty() || window.confirm('Hay parámetros sin guardar. ¿Salir y descartar los cambios?')
     );
   }
 
@@ -304,13 +362,15 @@ export class SimulacionConfiguracion {
   }
 
   seleccionar(id: number | null): void {
+    // Los filtros pertenecen al registro: solo se limpian al cambiar de registro,
+    // no al recargar el mismo con «Actualizar».
+    if (id !== this.seleccionado()) {
+      this.reiniciarFiltros();
+      this.pagina.set(1);
+    }
     this.seleccionado.set(id);
     this.config.set(null);
     this.error.set(null);
-    this.filtroChute.set(null);
-    this.filtroCluster.set(null);
-    this.filtroTexto.set('');
-    this.pagina.set(1);
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { registro: id },
@@ -363,9 +423,13 @@ export class SimulacionConfiguracion {
     this.config.set(config);
     this.velocidad.set(Number(config.velocidadBase));
     this.limites.set(
-      Object.fromEntries(config.clusters.map((cluster) => [cluster.id, Number(cluster.limiteHoras)])),
+      Object.fromEntries(
+        config.clusters.map((cluster) => [cluster.id, Number(cluster.limiteHoras)]),
+      ),
     );
-    this.operarios.set(Object.fromEntries(config.chutes.map((chute) => [chute.id, chute.operarios])));
+    this.operarios.set(
+      Object.fromEntries(config.chutes.map((chute) => [chute.id, chute.operarios])),
+    );
     this.dirty.set(false);
   }
 
@@ -378,8 +442,8 @@ export class SimulacionConfiguracion {
       pagina: this.pagina(),
       tamano: this.porPagina(),
       texto: this.filtroTexto().trim(),
-      clusterId: this.filtroCluster(),
-      chuteId: this.filtroChute(),
+      clusterIds: this.filtroCluster(),
+      chuteIds: this.filtroChute(),
     });
   }
 
@@ -394,7 +458,11 @@ export class SimulacionConfiguracion {
 
   /** Tiempo que aporta esta ruta al chute (no el total acumulado del chute). */
   tiempoRuta(ruta: RutaSimulacion): number {
-    return horas(Number(ruta.totalBultos), this.velocidad() || VELOCIDAD_INICIAL, this.getOperarios(ruta.chuteId));
+    return horas(
+      Number(ruta.totalBultos),
+      this.velocidad() || VELOCIDAD_INICIAL,
+      this.getOperarios(ruta.chuteId),
+    );
   }
 
   setVelocidad(evento: Event): void {
@@ -441,19 +509,37 @@ export class SimulacionConfiguracion {
     const operarios = this.operarios();
     const iguales =
       Number(config.velocidadBase) === this.velocidad() &&
-      config.clusters.every((cluster) => Number(cluster.limiteHoras) === (limites[cluster.id] ?? 0)) &&
-      config.chutes.every((chute) => chute.operarios === (operarios[chute.id] ?? OPERARIOS_INICIALES));
+      config.clusters.every(
+        (cluster) => Number(cluster.limiteHoras) === (limites[cluster.id] ?? 0),
+      ) &&
+      config.chutes.every(
+        (chute) => chute.operarios === (operarios[chute.id] ?? OPERARIOS_INICIALES),
+      );
     this.dirty.set(!iguales);
   }
 
-  setFiltroChute(id: number | null): void {
-    this.filtroChute.set(id);
+  setFiltroChute(ids: (number | string)[]): void {
+    this.filtroChute.set(ids.map(Number));
     this.recargarRutasDesde(1);
   }
 
-  setFiltroCluster(id: number | null): void {
-    this.filtroCluster.set(id);
+  setFiltroCluster(ids: (number | string)[]): void {
+    this.filtroCluster.set(ids.map(Number));
     this.recargarRutasDesde(1);
+  }
+
+  quitarFiltro(clave: string): void {
+    const [tipo, valor] = clave.split(':');
+    const id = Number(valor);
+    if (tipo === 'chute') {
+      this.setFiltroChute(this.filtroChute().filter((item) => item !== id));
+    } else if (tipo === 'cluster') {
+      this.setFiltroCluster(this.filtroCluster().filter((item) => item !== id));
+    } else if (tipo === 'texto') {
+      this.busqueda$.next('');
+      this.filtroTexto.set('');
+      this.recargarRutasDesde(1);
+    }
   }
 
   buscarRuta(texto: string): void {
@@ -461,10 +547,16 @@ export class SimulacionConfiguracion {
   }
 
   limpiarFiltros(): void {
-    this.filtroChute.set(null);
-    this.filtroCluster.set(null);
-    this.filtroTexto.set('');
+    this.reiniciarFiltros();
     this.recargarRutasDesde(1);
+  }
+
+  /** Vacía los filtros y descarta una búsqueda pendiente del debounce. */
+  private reiniciarFiltros(): void {
+    this.busqueda$.next('');
+    this.filtroChute.set([]);
+    this.filtroCluster.set([]);
+    this.filtroTexto.set('');
   }
 
   cambiarPagina(pagina: number): void {
@@ -515,7 +607,10 @@ export class SimulacionConfiguracion {
             return;
           }
           this.aplicarConfiguracion(config);
-          this.notificaciones.exito('Parámetros guardados', 'Los límites y operarios quedaron actualizados.');
+          this.notificaciones.exito(
+            'Parámetros guardados',
+            'Los límites y operarios quedaron actualizados.',
+          );
         },
       });
   }
@@ -582,7 +677,10 @@ export class SimulacionConfiguracion {
       .subscribe({
         next: () => {
           this.restablecerAbierto.set(false);
-          this.notificaciones.info('Datos restablecidos', 'Las rutas volvieron a su posición original.');
+          this.notificaciones.info(
+            'Datos restablecidos',
+            'Las rutas volvieron a su posición original.',
+          );
           if (this.seleccionado() === id) {
             this.cargarConfiguracion(id);
           }

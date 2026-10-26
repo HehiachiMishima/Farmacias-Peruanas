@@ -24,6 +24,7 @@ final class SimulacionRespuestas {
         cero(resumen == null ? null : resumen.getBultos()),
         cero(resumen == null ? null : resumen.getUnidades()),
         cero(resumen == null ? null : resumen.getLineas()),
+        cero(resumen == null ? null : resumen.getCod()),
         archivo.getCreadoEn(),
         archivo.getActualizadoEn(),
         archivo.getCreadoPor(),

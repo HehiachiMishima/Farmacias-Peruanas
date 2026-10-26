@@ -18,6 +18,8 @@ import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
+import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
+import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { PALETA_REGISTROS, colorRegistro, formatearNumero } from '../../simulacion-formato';
 
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -37,6 +39,8 @@ const CON_TEXTO = /\S/;
     HasPermiso,
     ColumnasRedimensionables,
     Paginador,
+    PanelFiltros,
+    FiltrosActivos,
   ],
   templateUrl: './registro.html',
   styleUrl: './registro.scss',
@@ -57,11 +61,19 @@ export class SimulacionRegistro {
   readonly busqueda = signal('');
   private readonly busqueda$ = new Subject<string>();
 
+  /** Estado del registro: proyección, balanceado o ambos. */
+  readonly estados = [
+    { id: 'PROYECCION', etiqueta: 'Proyección' },
+    { id: 'BALANCEADO', etiqueta: 'Balanceado' },
+  ] as const;
+  readonly filtroEstados = signal<string[]>([]);
+  readonly filtrosAbierto = signal(false);
+
   readonly pagina = signal(1);
   readonly porPagina = signal(10);
 
   private readonly listado = new ListadoRemoto<ArchivoSimulacion>(
-    () => this.api.listar(this.pagina(), this.porPagina(), this.busqueda()),
+    () => this.api.listar(this.pagina(), this.porPagina(), this.busqueda(), this.filtroEstados()),
     (ultima) => this.pagina.set(ultima),
   );
   readonly items = this.listado.items;
@@ -73,7 +85,46 @@ export class SimulacionRegistro {
 
   readonly totalPaginas = computed(() => Math.max(1, Math.ceil(this.total() / this.porPagina())));
   readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
-  readonly hayFiltros = computed(() => this.busqueda().trim() !== '');
+  readonly hayFiltros = computed(
+    () => this.busqueda().trim() !== '' || this.filtroEstados().length > 0,
+  );
+
+  readonly chips = computed<ChipFiltro[]>(() =>
+    this.filtroEstados().map((estado) => ({
+      clave: `estado:${estado}`,
+      etiqueta: 'Estado',
+      valor: estado === 'BALANCEADO' ? 'Balanceado' : 'Proyección',
+      icono: 'power',
+    })),
+  );
+
+  readonly filtrosActivos = computed(() => this.chips().length);
+
+  alternarFiltros(): void {
+    this.filtrosAbierto.update((abierto) => !abierto);
+  }
+
+  estaEstado(estado: string): boolean {
+    return this.filtroEstados().includes(estado);
+  }
+
+  alternarEstado(estado: string): void {
+    this.filtroEstados.update((estados) =>
+      estados.includes(estado) ? estados.filter((item) => item !== estado) : [...estados, estado],
+    );
+    this.cargarDesde(1);
+  }
+
+  quitarFiltro(clave: string): void {
+    const [, estado] = clave.split(':');
+    this.filtroEstados.update((estados) => estados.filter((item) => item !== estado));
+    this.cargarDesde(1);
+  }
+
+  limpiarFiltros(): void {
+    this.filtroEstados.set([]);
+    this.cargarDesde(1);
+  }
 
   readonly archivoSeleccionado = signal<File | null>(null);
   readonly subirAbierto = signal(false);
@@ -137,6 +188,7 @@ export class SimulacionRegistro {
 
   limpiarBusqueda(): void {
     this.busqueda.set('');
+    this.filtroEstados.set([]);
     this.cargarDesde(1);
   }
 

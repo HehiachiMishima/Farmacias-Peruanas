@@ -87,7 +87,9 @@
     <div class="config-info">
       <span class="config-info__icono"><ui-icon name="paquete" [size]="18" /></span>
       <div class="config-info__datos">
-        <span class="config-info__nombre" [title]="cfg.archivo.nombreRegistro">{{ cfg.archivo.nombreRegistro }}</span>
+        <span class="config-info__nombre" [title]="cfg.archivo.nombreRegistro">{{
+          cfg.archivo.nombreRegistro
+        }}</span>
         <span class="config-info__meta">
           {{ formatearNumero(cfg.archivo.rutas) }} rutas ·
           {{ formatearNumero(cfg.archivo.chutes) }} chutes ·
@@ -243,27 +245,18 @@
           (input)="buscarRuta($any($event.target).value)"
         />
       </div>
-      <div class="filtros-fila">
-        <ui-select-buscable
-          [opciones]="opcionesChute()"
-          [valor]="filtroChute()"
-          placeholder="Todos los chutes"
-          (valorCambia)="setFiltroChute($event)"
-        />
-        <ui-select-buscable
-          [opciones]="opcionesCluster()"
-          [valor]="filtroCluster()"
-          placeholder="Todos los clusters"
-          (valorCambia)="setFiltroCluster($event)"
-        />
-      </div>
       <button
         type="button"
-        class="ui-btn ui-btn--secondary ui-btn--sm"
-        (click)="limpiarFiltros()"
-        [disabled]="filtrosActivos() === 0"
+        class="ui-btn ui-btn--secondary"
+        [attr.aria-expanded]="filtrosAbierto()"
+        aria-controls="simulacion-rutas-filtros"
+        (click)="alternarFiltros()"
       >
-        Limpiar
+        <ui-icon name="filtro" [size]="18" />
+        Filtros
+        @if (filtrosActivos() > 0) {
+          <span class="filtros-badge">{{ filtrosActivos() }}</span>
+        }
       </button>
       <div class="toolbar__acciones">
         <button
@@ -288,12 +281,63 @@
       </div>
     </div>
 
+    <ui-filtros-activos
+      [chips]="chips()"
+      (quitar)="quitarFiltro($event)"
+      (limpiar)="limpiarFiltros()"
+    />
+
+    <ui-panel-filtros
+      id="simulacion-rutas-filtros"
+      [abierto]="filtrosAbierto()"
+      [activos]="filtrosActivos()"
+      titulo="Filtrar rutas"
+      (cerrar)="filtrosAbierto.set(false)"
+      (limpiar)="limpiarFiltros()"
+    >
+      <section class="filtro-seccion">
+        <h3 class="filtro-seccion__titulo"><ui-icon name="layers" [size]="15" /> Chutes</h3>
+        <div class="ui-field">
+          <label class="ui-label" for="config-filtro-chutes">Chutes</label>
+          <ui-select-multiple
+            campoId="config-filtro-chutes"
+            [opciones]="opcionesChute()"
+            [valores]="filtroChute()"
+            placeholder="Todos los chutes"
+            (valoresCambia)="setFiltroChute($event)"
+          />
+        </div>
+      </section>
+
+      <section class="filtro-seccion">
+        <h3 class="filtro-seccion__titulo"><ui-icon name="area" [size]="15" /> Clusters</h3>
+        <div class="ui-field">
+          <label class="ui-label" for="config-filtro-clusters">Clusters</label>
+          <ui-select-multiple
+            campoId="config-filtro-clusters"
+            [opciones]="opcionesCluster()"
+            [valores]="filtroCluster()"
+            placeholder="Todos los clusters"
+            (valoresCambia)="setFiltroCluster($event)"
+          />
+        </div>
+      </section>
+    </ui-panel-filtros>
+
     <div class="table-card" [class.table-card--refrescando]="rutas.refrescando()">
       @if (rutas.cargaInicial()) {
         <div class="loading"><span class="ui-spinner"></span> Cargando rutas…</div>
       } @else if (rutas.error() && rutas.items().length === 0) {
-        <ui-empty icono="alerta" titulo="No se pudieron cargar las rutas" [mensaje]="rutas.error()!">
-          <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="rutas.recargar()">
+        <ui-empty
+          icono="alerta"
+          titulo="No se pudieron cargar las rutas"
+          [mensaje]="rutas.error()!"
+        >
+          <button
+            type="button"
+            class="ui-btn ui-btn--secondary ui-btn--sm"
+            (click)="rutas.recargar()"
+          >
             <ui-icon name="refresh" [size]="16" /> Reintentar
           </button>
         </ui-empty>
@@ -411,12 +455,15 @@
                 <td><span class="ui-badge ui-badge--warning">Ruta movida</span></td>
                 <td class="u-mono">{{ cambio.ruta ?? '—' }}</td>
                 <td>
-                  De <strong>{{ cambio.chuteOrigen }}</strong> a <strong>{{ cambio.chuteDestino }}</strong>
+                  De <strong>{{ cambio.chuteOrigen }}</strong> a
+                  <strong>{{ cambio.chuteDestino }}</strong>
                 </td>
               } @else {
                 <td><span class="ui-badge ui-badge--success">Operario +1</span></td>
                 <td class="u-muted">—</td>
-                <td>En <strong>{{ cambio.chuteModificado }}</strong> (cuello de botella)</td>
+                <td>
+                  En <strong>{{ cambio.chuteModificado }}</strong> (cuello de botella)
+                </td>
               }
             </tr>
           }

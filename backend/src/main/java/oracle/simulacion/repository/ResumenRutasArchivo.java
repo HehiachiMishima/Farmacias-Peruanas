@@ -16,4 +16,6 @@ public interface ResumenRutasArchivo {
   BigDecimal getUnidades();
 
   BigDecimal getLineas();
+
+  BigDecimal getCod();
 }

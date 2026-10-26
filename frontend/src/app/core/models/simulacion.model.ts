@@ -10,6 +10,8 @@ export interface ArchivoSimulacion {
   bultos: number;
   unidades: number;
   lineas: number;
+  /** Total de COD contados en las rutas del archivo. */
+  cod: number;
   creadoEn: string;
   actualizadoEn: string | null;
   creadoPor: number | null;
@@ -65,8 +67,8 @@ export interface RutasSimulacionFiltros {
   pagina: number;
   tamano: number;
   texto: string;
-  clusterId: number | null;
-  chuteId: number | null;
+  clusterIds: number[];
+  chuteIds: number[];
 }
 
 export interface RegistroSimulacionActualizarRequest {
@@ -151,6 +153,8 @@ export interface ChuteComparativoSimulacion {
   lineasBalanceado: number;
   codOriginal: number;
   codBalanceado: number;
+  /** Clusters que el chute atiende antes o después del balanceo. */
+  clusters: string[];
 }
 
 export interface DashboardSimulacion {

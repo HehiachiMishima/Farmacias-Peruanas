@@ -18,11 +18,17 @@ import { Api } from './api';
 export class SimulacionApi {
   private readonly api = inject(Api);
 
-  listar(pagina = 1, tamano = 10, texto = ''): Observable<Pagina<ArchivoSimulacion>> {
+  listar(
+    pagina = 1,
+    tamano = 10,
+    texto = '',
+    estados: string[] = [],
+  ): Observable<Pagina<ArchivoSimulacion>> {
     return this.api.get<Pagina<ArchivoSimulacion>>('/simulacion/registros', {
       pagina,
       tamano,
       texto,
+      ...(estados.length > 0 ? { estados: estados.join(',') } : {}),
     });
   }
 
@@ -55,8 +61,8 @@ export class SimulacionApi {
       pagina: filtros.pagina,
       tamano: filtros.tamano,
       texto: filtros.texto,
-      clusterId: filtros.clusterId,
-      chuteId: filtros.chuteId,
+      ...(filtros.clusterIds.length > 0 ? { clusterIds: filtros.clusterIds.join(',') } : {}),
+      ...(filtros.chuteIds.length > 0 ? { chuteIds: filtros.chuteIds.join(',') } : {}),
     });
   }
 

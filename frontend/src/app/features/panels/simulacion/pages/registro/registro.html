@@ -21,6 +21,19 @@
   </div>
   <button
     type="button"
+    class="ui-btn ui-btn--secondary"
+    [attr.aria-expanded]="filtrosAbierto()"
+    aria-controls="simulacion-registro-filtros"
+    (click)="alternarFiltros()"
+  >
+    <ui-icon name="filtro" [size]="18" />
+    Filtros
+    @if (filtrosActivos() > 0) {
+      <span class="filtros-badge">{{ filtrosActivos() }}</span>
+    }
+  </button>
+  <button
+    type="button"
     class="ui-btn ui-btn--secondary ui-btn--sm"
     (click)="actualizar()"
     [disabled]="cargando()"
@@ -46,6 +59,39 @@
   />
 </div>
 
+<ui-filtros-activos
+  [chips]="chips()"
+  (quitar)="quitarFiltro($event)"
+  (limpiar)="limpiarFiltros()"
+/>
+
+<ui-panel-filtros
+  id="simulacion-registro-filtros"
+  [abierto]="filtrosAbierto()"
+  [activos]="filtrosActivos()"
+  titulo="Filtrar registros"
+  (cerrar)="filtrosAbierto.set(false)"
+  (limpiar)="limpiarFiltros()"
+>
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="power" [size]="15" /> Estado</h3>
+    <p class="filtro-nota">Puedes elegir uno o ambos.</p>
+    <div class="ui-rango" role="group" aria-label="Estado">
+      @for (estado of estados; track estado.id) {
+        <button
+          type="button"
+          class="ui-rango__btn"
+          [class.ui-rango__btn--on]="estaEstado(estado.id)"
+          [attr.aria-pressed]="estaEstado(estado.id)"
+          (click)="alternarEstado(estado.id)"
+        >
+          {{ estado.etiqueta }}
+        </button>
+      }
+    </div>
+  </section>
+</ui-panel-filtros>
+
 <div class="table-card" [class.table-card--refrescando]="refrescando()">
   @if (cargaInicial()) {
     <div class="loading"><span class="ui-spinner"></span> Cargando registros…</div>
@@ -61,7 +107,7 @@
       [titulo]="hayFiltros() ? 'Sin resultados' : 'Aún no hay registros'"
       [mensaje]="
         hayFiltros()
-          ? 'Ningún registro coincide con la búsqueda.'
+          ? 'Ningún registro coincide con la búsqueda o los filtros.'
           : 'Sube tu primer archivo Excel para empezar a simular.'
       "
     >
@@ -71,7 +117,7 @@
           class="ui-btn ui-btn--secondary ui-btn--sm"
           (click)="limpiarBusqueda()"
         >
-          Limpiar búsqueda
+          Limpiar filtros
         </button>
       }
     </ui-empty>
@@ -85,9 +131,14 @@
             <th class="num">Rutas</th>
             <th class="num">Chutes</th>
             <th class="num">Bultos</th>
+            <th class="num">Unidades</th>
+            <th class="num">Líneas</th>
+            <th class="num">COD</th>
             <th>Estado</th>
             <th>Creado</th>
             <th>Creado por</th>
+            <th>Actualizado</th>
+            <th>Actualizado por</th>
             <th class="col-actions">Acciones</th>
           </tr>
         </thead>
@@ -105,12 +156,17 @@
                 </span>
               </td>
               <td>
-                <span class="ui-table__primary" [title]="a.nombreRegistro">{{ a.nombreRegistro }}</span>
+                <span class="ui-table__primary" [title]="a.nombreRegistro">{{
+                  a.nombreRegistro
+                }}</span>
                 <span class="cell-sub" [title]="a.nombreArchivo">{{ a.nombreArchivo }}</span>
               </td>
               <td class="num">{{ formatearNumero(a.rutas) }}</td>
               <td class="num">{{ formatearNumero(a.chutes) }}</td>
               <td class="num">{{ formatearNumero(a.bultos, 2) }}</td>
+              <td class="num">{{ formatearNumero(a.unidades) }}</td>
+              <td class="num">{{ formatearNumero(a.lineas) }}</td>
+              <td class="num">{{ formatearNumero(a.cod) }}</td>
               <td>
                 <span
                   class="ui-badge"
@@ -122,6 +178,10 @@
               </td>
               <td class="u-muted">{{ a.creadoEn | date: 'dd/MM/yyyy HH:mm' }}</td>
               <td class="u-muted">{{ a.creadoPor | actorLabel }}</td>
+              <td class="u-muted">
+                {{ a.actualizadoEn ? (a.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—' }}
+              </td>
+              <td class="u-muted">{{ a.actualizadoPor | actorLabel }}</td>
               <td>
                 <div class="row-actions">
                   <button
@@ -189,7 +249,9 @@
 
   <div class="grid-form">
     <div class="ui-field">
-      <label class="ui-label" for="subir-nombre">Nombre del registro <span class="ui-required">*</span></label>
+      <label class="ui-label" for="subir-nombre"
+        >Nombre del registro <span class="ui-required">*</span></label
+      >
       <input
         id="subir-nombre"
         class="ui-input"
@@ -260,7 +322,9 @@
 >
   <div class="grid-form">
     <div class="ui-field">
-      <label class="ui-label" for="editar-nombre">Nombre del registro <span class="ui-required">*</span></label>
+      <label class="ui-label" for="editar-nombre"
+        >Nombre del registro <span class="ui-required">*</span></label
+      >
       <input
         id="editar-nombre"
         class="ui-input"
@@ -274,7 +338,12 @@
     </div>
     <div class="ui-field">
       <label class="ui-label" for="editar-etiqueta">Etiqueta</label>
-      <input id="editar-etiqueta" class="ui-input" [formControl]="formEdicion.controls.etiqueta" maxlength="50" />
+      <input
+        id="editar-etiqueta"
+        class="ui-input"
+        [formControl]="formEdicion.controls.etiqueta"
+        maxlength="50"
+      />
     </div>
   </div>
 

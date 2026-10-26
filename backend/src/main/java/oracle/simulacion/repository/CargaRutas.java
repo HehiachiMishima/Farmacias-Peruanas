@@ -17,5 +17,5 @@ public interface CargaRutas {
 
   BigDecimal getLineas();
 
-  Long getCod();
+  BigDecimal getCod();
 }

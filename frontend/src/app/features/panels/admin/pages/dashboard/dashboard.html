@@ -1,7 +1,9 @@
 <header class="page-head">
   <div>
     <h1 class="page-head__title">{{ saludo() }}{{ usuario() ? ', ' + usuario()!.nombre : '' }}</h1>
-    <p class="page-head__sub">Estado del acceso: cuentas habilitadas, riesgos y alcance por panel.</p>
+    <p class="page-head__sub">
+      Estado del acceso: cuentas habilitadas, riesgos y alcance por panel.
+    </p>
   </div>
   <button type="button" class="ui-btn ui-btn--secondary" (click)="cargar()" [disabled]="cargando()">
     <ui-icon name="refresh" [size]="16" />
@@ -35,13 +37,20 @@
     <article class="dash-card dash-card--5" [class.dash-card--cargando]="cargando()">
       <header class="dash-card__head">
         <div class="dash-card__titulos">
-          <h2 class="dash-card__titulo"><ui-icon name="usuarios" [size]="18" /> ¿Cuántas cuentas están habilitadas?</h2>
+          <h2 class="dash-card__titulo">
+            <ui-icon name="usuarios" [size]="18" /> ¿Cuántas cuentas están habilitadas?
+          </h2>
           <p class="dash-card__sub">Porcentaje de usuarios que pueden iniciar sesión.</p>
         </div>
       </header>
       <div class="dash-card__body admin-centro">
         @if (estadoCuentas().hay) {
-          <ui-gauge [valor]="estadoCuentas().pct" etiqueta="Cuentas activas" color="var(--success)" [tamano]="220" />
+          <ui-gauge
+            [valor]="estadoCuentas().pct"
+            etiqueta="Cuentas activas"
+            color="var(--success)"
+            [tamano]="220"
+          />
           <dl class="admin-estado">
             <div>
               <dt><i class="admin-estado__punto admin-estado__punto--ok"></i>Activas</dt>
@@ -61,8 +70,12 @@
     <article class="dash-card dash-card--7" [class.dash-card--cargando]="cargando()">
       <header class="dash-card__head">
         <div class="dash-card__titulos">
-          <h2 class="dash-card__titulo"><ui-icon name="panel" [size]="18" /> ¿Quién accede a cada panel?</h2>
-          <p class="dash-card__sub">Usuarios activos con acceso efectivo, en % del total de activos.</p>
+          <h2 class="dash-card__titulo">
+            <ui-icon name="panel" [size]="18" /> ¿Quién accede a cada panel?
+          </h2>
+          <p class="dash-card__sub">
+            Usuarios activos con acceso efectivo, en % del total de activos.
+          </p>
         </div>
       </header>
       <div class="dash-card__body admin-medio">

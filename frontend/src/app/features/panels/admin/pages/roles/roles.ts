@@ -16,12 +16,35 @@ import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
 import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
+import {
+  FiltroEstado,
+  OPCIONES_ESTADO,
+  chipEstado,
+  chipPeriodo,
+  cumpleEstado,
+  enPeriodo,
+} from '../../../../../shared/ui/panel-filtros/filtro-registro';
+import { contieneTexto } from '../../../../../core/utils/texto.util';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
+import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
 
 @Component({
   selector: 'app-admin-roles',
-  imports: [ReactiveFormsModule, DatePipe, ActorLabelPipe, Icon, Modal, EmptyState, HasPermiso, ColumnasRedimensionables, Paginador, PanelFiltros, FiltrosActivos],
+  imports: [
+    ReactiveFormsModule,
+    DatePipe,
+    ActorLabelPipe,
+    Icon,
+    Modal,
+    EmptyState,
+    HasPermiso,
+    ColumnasRedimensionables,
+    Paginador,
+    PanelFiltros,
+    FiltrosActivos,
+    RangoRapido,
+  ],
   templateUrl: './roles.html',
   styleUrl: './roles.scss',
 })
@@ -40,41 +63,34 @@ export class Roles {
   readonly busqueda = signal('');
 
   private readonly coincidenBusqueda = computed(() => {
-    const termino = this.busqueda().trim().toLowerCase();
-    const lista = this.roles();
-    if (!termino) {
-      return lista;
-    }
-    return lista.filter((rol) =>
-      [rol.nombre, rol.descripcion ?? ''].some((campo) => campo.toLowerCase().includes(termino)),
-    );
+    const termino = this.busqueda();
+    return this.roles().filter((rol) => contieneTexto([rol.nombre, rol.descripcion], termino));
   });
 
   // ---------------- Filtros del panel ----------------
-  readonly filtroEstado = signal<'todos' | 'activos' | 'inactivos'>('todos');
+  readonly filtroEstado = signal<FiltroEstado>('todos');
+  readonly filtroDesde = signal('');
+  readonly filtroHasta = signal('');
   readonly filtrosAbierto = signal(false);
-  readonly estados = [
-    { id: 'todos', etiqueta: 'Todos' },
-    { id: 'activos', etiqueta: 'Activos' },
-    { id: 'inactivos', etiqueta: 'Inactivos' },
-  ] as const;
+  readonly estados = OPCIONES_ESTADO;
 
   /** Búsqueda + filtros del panel (todo en cliente: el listado ya está en memoria). */
   readonly filtrados = computed(() => {
     const estado = this.filtroEstado();
+    const desde = this.filtroDesde();
+    const hasta = this.filtroHasta();
     return this.coincidenBusqueda().filter(
       (item) =>
-        (estado === 'todos' || (estado === 'activos') === !!item.activo),
+        cumpleEstado(estado, item.activo) && enPeriodo(item.creadoEn, desde, hasta),
     );
   });
 
-  readonly chips = computed<ChipFiltro[]>(() => {
-    const chips: ChipFiltro[] = [];
-    if (this.filtroEstado() !== 'todos') {
-      chips.push({ clave: 'estado', etiqueta: 'Estado', valor: this.filtroEstado() === 'activos' ? 'Activos' : 'Inactivos', icono: 'power' });
-    }
-    return chips;
-  });
+
+  readonly chips = computed<ChipFiltro[]>(() =>
+    [chipEstado(this.filtroEstado()), chipPeriodo(this.filtroDesde(), this.filtroHasta())].filter(
+      (chip): chip is ChipFiltro => chip !== null,
+    ),
+  );
 
   readonly filtrosActivos = computed(() => this.chips().length);
 
@@ -82,18 +98,40 @@ export class Roles {
     this.filtrosAbierto.update((abierto) => !abierto);
   }
 
-  setEstado(estado: 'todos' | 'activos' | 'inactivos'): void {
+  setEstado(estado: FiltroEstado): void {
     this.filtroEstado.set(estado);
+    this.pagina.set(1);
+  }
+
+  setRango(rango: RangoFechas): void {
+    this.filtroDesde.set(rango.desde);
+    this.filtroHasta.set(rango.hasta);
+    this.pagina.set(1);
+  }
+
+  setFiltroDesde(evento: Event): void {
+    this.filtroDesde.set((evento.target as HTMLInputElement).value);
+    this.pagina.set(1);
+  }
+
+  setFiltroHasta(evento: Event): void {
+    this.filtroHasta.set((evento.target as HTMLInputElement).value);
     this.pagina.set(1);
   }
 
   quitarFiltro(clave: string): void {
     if (clave === 'estado') this.filtroEstado.set('todos');
+    if (clave === 'periodo') {
+      this.filtroDesde.set('');
+      this.filtroHasta.set('');
+    }
     this.pagina.set(1);
   }
 
   limpiarFiltros(): void {
     this.filtroEstado.set('todos');
+    this.filtroDesde.set('');
+    this.filtroHasta.set('');
     this.pagina.set(1);
   }
 
@@ -104,9 +142,7 @@ export class Roles {
     Math.max(1, Math.ceil(this.filtrados().length / this.porPagina())),
   );
 
-  readonly paginaActual = computed(() =>
-    Math.min(Math.max(1, this.pagina()), this.totalPaginas()),
-  );
+  readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
 
   readonly paginados = computed(() => {
     const inicio = (this.paginaActual() - 1) * this.porPagina();
@@ -174,7 +210,11 @@ export class Roles {
 
   abrirEditar(rol: Rol): void {
     this.editando.set(rol);
-    this.formulario.reset({ nombre: rol.nombre, descripcion: rol.descripcion ?? '', activo: rol.activo });
+    this.formulario.reset({
+      nombre: rol.nombre,
+      descripcion: rol.descripcion ?? '',
+      activo: rol.activo,
+    });
     this.formAbierto.set(true);
   }
 
@@ -207,7 +247,10 @@ export class Roles {
 
     peticion$.pipe(finalize(() => this.guardando.set(false))).subscribe({
       next: (rol) => {
-        this.notificaciones.exito('Guardado', `Rol ${rol.nombre} ${editando ? 'actualizado' : 'creado'}.`);
+        this.notificaciones.exito(
+          'Guardado',
+          `Rol ${rol.nombre} ${editando ? 'actualizado' : 'creado'}.`,
+        );
         this.cerrarForm();
         this.cargar();
       },
@@ -218,13 +261,16 @@ export class Roles {
   toggleActivo(rol: Rol): void {
     this.rolesApi.cambiarActivo(rol.id, !rol.activo).subscribe({
       next: (actualizado) => {
-        this.roles.update((lista) => lista.map((item) => (item.id === actualizado.id ? actualizado : item)));
+        this.roles.update((lista) =>
+          lista.map((item) => (item.id === actualizado.id ? actualizado : item)),
+        );
         this.notificaciones.info(
           actualizado.activo ? 'Rol activado' : 'Rol desactivado',
           actualizado.nombre,
         );
       },
-      error: (err: unknown) => this.notificaciones.error('No se pudo actualizar', mensajeDeError(err)),
+      error: (err: unknown) =>
+        this.notificaciones.error('No se pudo actualizar', mensajeDeError(err)),
     });
   }
 
@@ -249,7 +295,8 @@ export class Roles {
           this.eliminarAbierto.set(false);
           this.aEliminar.set(null);
         },
-        error: (err: unknown) => this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
+        error: (err: unknown) =>
+          this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
       });
   }
 
@@ -303,7 +350,8 @@ export class Roles {
           permiso.nombre,
         );
       },
-      error: (err: unknown) => this.notificaciones.error('No se pudo actualizar', mensajeDeError(err)),
+      error: (err: unknown) =>
+        this.notificaciones.error('No se pudo actualizar', mensajeDeError(err)),
     });
   }
 }

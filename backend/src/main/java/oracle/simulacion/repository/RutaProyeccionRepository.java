@@ -23,7 +23,8 @@ public interface RutaProyeccionRepository
              COUNT(DISTINCT r.chuteId) AS chutes,
              COALESCE(SUM(r.totalBultos), 0) AS bultos,
              COALESCE(SUM(r.totalUnidades), 0) AS unidades,
-             COALESCE(SUM(r.totalLineas), 0) AS lineas
+             COALESCE(SUM(r.totalLineas), 0) AS lineas,
+             COALESCE(SUM(r.conteoCod), 0) AS cod
         FROM RutaProyeccion r
        WHERE r.archivoId IN :ids
        GROUP BY r.archivoId

@@ -3,7 +3,12 @@
     <h1 class="page-head__title">Usuarios</h1>
     <p class="page-head__sub">Altas, edición, estado y asignación de roles.</p>
   </div>
-  <button *hasPermiso="permisos.CREAR_USUARIOS" type="button" class="ui-btn ui-btn--primary" (click)="abrirCrear()">
+  <button
+    *hasPermiso="permisos.CREAR_USUARIOS"
+    type="button"
+    class="ui-btn ui-btn--primary"
+    (click)="abrirCrear()"
+  >
     <ui-icon name="plus" [size]="18" />
     Nuevo usuario
   </button>
@@ -20,7 +25,12 @@
       (input)="buscar($any($event.target).value)"
     />
   </div>
-  <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()" [disabled]="cargando()">
+  <button
+    type="button"
+    class="ui-btn ui-btn--secondary ui-btn--sm"
+    (click)="cargar()"
+    [disabled]="cargando()"
+  >
     <ui-icon name="refresh" [size]="16" />
     Actualizar
   </button>
@@ -39,7 +49,11 @@
   </button>
 </div>
 
-<ui-filtros-activos [chips]="chips()" (quitar)="quitarFiltro($event)" (limpiar)="limpiarFiltros()" />
+<ui-filtros-activos
+  [chips]="chips()"
+  (quitar)="quitarFiltro($event)"
+  (limpiar)="limpiarFiltros()"
+/>
 
 <ui-panel-filtros
   id="usuarios-filtros"
@@ -68,14 +82,53 @@
   <section class="filtro-seccion">
     <h3 class="filtro-seccion__titulo"><ui-icon name="roles" [size]="15" /> Rol</h3>
     <div class="ui-field">
-      <label class="ui-label">Rol asignado</label>
-      <select class="ui-select" [value]="filtroRol() ?? ''" (change)="setRol($event)">
+      <label class="ui-label" for="usuarios-filtro-rol">Rol asignado</label>
+      <select
+        id="usuarios-filtro-rol"
+        class="ui-select"
+        [value]="filtroRol() ?? ''"
+        [disabled]="!resumenDisponible()"
+        (change)="setRol($event)"
+      >
         <option value="">Todos los roles</option>
         <option [value]="sinRol">Sin rol (riesgo)</option>
         @for (rol of opcionesRol(); track rol) {
           <option [value]="rol">{{ rol }}</option>
         }
       </select>
+      @if (errorResumen()) {
+        <span class="filtro-nota">No se pudieron cargar los roles: el filtro por rol no está disponible.</span>
+      } @else if (cargandoResumen()) {
+        <span class="filtro-nota">Cargando roles…</span>
+      }
+    </div>
+  </section>
+  <section class="filtro-seccion">
+    <h3 class="filtro-seccion__titulo"><ui-icon name="calendario" [size]="15" /> Periodo</h3>
+    <ui-rango-rapido [desde]="filtroDesde()" [hasta]="filtroHasta()" (rango)="setRango($event)" />
+    <div class="filtro-seccion__fila">
+      <div class="ui-field">
+        <label class="ui-label" for="usuarios-filtro-desde">Creado desde</label>
+        <input
+          id="usuarios-filtro-desde"
+          type="date"
+          class="ui-input"
+          [max]="filtroHasta()"
+          [value]="filtroDesde()"
+          (change)="setFiltroDesde($event)"
+        />
+      </div>
+      <div class="ui-field">
+        <label class="ui-label" for="usuarios-filtro-hasta">Hasta</label>
+        <input
+          id="usuarios-filtro-hasta"
+          type="date"
+          class="ui-input"
+          [min]="filtroDesde()"
+          [value]="filtroHasta()"
+          (change)="setFiltroHasta($event)"
+        />
+      </div>
     </div>
   </section>
 </ui-panel-filtros>
@@ -96,7 +149,11 @@
     <ui-empty
       icono="usuarios"
       [titulo]="busqueda() || filtrosActivos() ? 'Sin resultados' : 'Aún no hay usuarios'"
-      [mensaje]="busqueda() || filtrosActivos() ? 'Ningún usuario coincide con la búsqueda.' : 'Crea el primer usuario para empezar.'"
+      [mensaje]="
+        busqueda() || filtrosActivos()
+          ? 'Ningún usuario coincide con la búsqueda o los filtros.'
+          : 'Crea el primer usuario para empezar.'
+      "
     ></ui-empty>
   } @else {
     <div class="ui-table-wrap">
@@ -123,7 +180,9 @@
                 <div class="ui-person">
                   <span class="ui-avatar">{{ iniciales(usuario) }}</span>
                   <span class="ui-stack">
-                    <span class="ui-table__primary">{{ usuario.nombre }} {{ usuario.apellido }}</span>
+                    <span class="ui-table__primary"
+                      >{{ usuario.nombre }} {{ usuario.apellido }}</span
+                    >
                     <span class="u-muted">{{ usuario.usuario }}</span>
                   </span>
                 </div>
@@ -131,9 +190,13 @@
               <td>{{ usuario.email }}</td>
               <td>
                 @if (usuario.activo) {
-                  <span class="ui-badge ui-badge--success"><span class="ui-dot"></span> Activo</span>
+                  <span class="ui-badge ui-badge--success"
+                    ><span class="ui-dot"></span> Activo</span
+                  >
                 } @else {
-                  <span class="ui-badge ui-badge--neutral"><span class="ui-dot"></span> Inactivo</span>
+                  <span class="ui-badge ui-badge--neutral"
+                    ><span class="ui-dot"></span> Inactivo</span
+                  >
                 }
               </td>
               <td>
@@ -164,7 +227,11 @@
               <td class="u-muted">{{ usuario.creadoPor | actorLabel }}</td>
               <td class="u-muted">{{ usuario.actualizadoPor | actorLabel }}</td>
               <td class="u-muted">{{ usuario.creadoEn | date: 'dd/MM/yyyy HH:mm' }}</td>
-              <td class="u-muted">{{ usuario.actualizadoEn ? (usuario.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—' }}</td>
+              <td class="u-muted">
+                {{
+                  usuario.actualizadoEn ? (usuario.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—'
+                }}
+              </td>
               <td>
                 <div class="row-actions">
                   <button
@@ -240,13 +307,23 @@
   <form class="grid-form" [formGroup]="formulario" (ngSubmit)="guardar()" novalidate>
     <div class="ui-field">
       <label class="ui-label">Usuario <span class="ui-required">*</span></label>
-      <input class="ui-input" [class.ui-input--invalid]="campoInvalido('usuario')" formControlName="usuario" placeholder="jperez" />
-      @if (campoInvalido('usuario')) { <span class="ui-error">El usuario es obligatorio.</span> }
+      <input
+        class="ui-input"
+        [class.ui-input--invalid]="campoInvalido('usuario')"
+        formControlName="usuario"
+        placeholder="jperez"
+      />
+      @if (campoInvalido('usuario')) {
+        <span class="ui-error">El usuario es obligatorio.</span>
+      }
     </div>
 
     <div class="ui-field">
       <label class="ui-label">
-        Contraseña @if (!editando()) { <span class="ui-required">*</span> }
+        Contraseña
+        @if (!editando()) {
+          <span class="ui-required">*</span>
+        }
       </label>
       <input
         type="password"
@@ -255,25 +332,47 @@
         formControlName="contrasena"
         [placeholder]="editando() ? 'Dejar en blanco para no cambiar' : 'Mínimo 6 caracteres'"
       />
-      @if (campoInvalido('contrasena')) { <span class="ui-error">Mínimo 6 caracteres.</span> }
+      @if (campoInvalido('contrasena')) {
+        <span class="ui-error">Mínimo 6 caracteres.</span>
+      }
     </div>
 
     <div class="ui-field">
       <label class="ui-label">Nombre <span class="ui-required">*</span></label>
-      <input class="ui-input" [class.ui-input--invalid]="campoInvalido('nombre')" formControlName="nombre" />
-      @if (campoInvalido('nombre')) { <span class="ui-error">El nombre es obligatorio.</span> }
+      <input
+        class="ui-input"
+        [class.ui-input--invalid]="campoInvalido('nombre')"
+        formControlName="nombre"
+      />
+      @if (campoInvalido('nombre')) {
+        <span class="ui-error">El nombre es obligatorio.</span>
+      }
     </div>
 
     <div class="ui-field">
       <label class="ui-label">Apellido <span class="ui-required">*</span></label>
-      <input class="ui-input" [class.ui-input--invalid]="campoInvalido('apellido')" formControlName="apellido" />
-      @if (campoInvalido('apellido')) { <span class="ui-error">El apellido es obligatorio.</span> }
+      <input
+        class="ui-input"
+        [class.ui-input--invalid]="campoInvalido('apellido')"
+        formControlName="apellido"
+      />
+      @if (campoInvalido('apellido')) {
+        <span class="ui-error">El apellido es obligatorio.</span>
+      }
     </div>
 
     <div class="ui-field">
       <label class="ui-label">Email <span class="ui-required">*</span></label>
-      <input type="email" class="ui-input" [class.ui-input--invalid]="campoInvalido('email')" formControlName="email" placeholder="correo@dominio.com" />
-      @if (campoInvalido('email')) { <span class="ui-error">Ingresa un email válido.</span> }
+      <input
+        type="email"
+        class="ui-input"
+        [class.ui-input--invalid]="campoInvalido('email')"
+        formControlName="email"
+        placeholder="correo@dominio.com"
+      />
+      @if (campoInvalido('email')) {
+        <span class="ui-error">Ingresa un email válido.</span>
+      }
     </div>
 
     <div class="ui-field">
@@ -290,8 +389,15 @@
 
   <div modal-footer class="modal-foot">
     <button type="button" class="ui-btn ui-btn--ghost" (click)="cerrarForm()">Cancelar</button>
-    <button type="button" class="ui-btn ui-btn--primary" (click)="guardar()" [disabled]="guardando()">
-      @if (guardando()) { <span class="ui-spinner" style="width:16px;height:16px"></span> }
+    <button
+      type="button"
+      class="ui-btn ui-btn--primary"
+      (click)="guardar()"
+      [disabled]="guardando()"
+    >
+      @if (guardando()) {
+        <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+      }
       {{ editando() ? 'Guardar cambios' : 'Crear usuario' }}
     </button>
   </div>
@@ -314,9 +420,18 @@
     </div>
   }
   <div modal-footer class="modal-foot">
-    <button type="button" class="ui-btn ui-btn--ghost" (click)="eliminarAbierto.set(false)">Cancelar</button>
-    <button type="button" class="ui-btn ui-btn--danger" (click)="eliminar()" [disabled]="eliminando()">
-      @if (eliminando()) { <span class="ui-spinner" style="width:16px;height:16px"></span> }
+    <button type="button" class="ui-btn ui-btn--ghost" (click)="eliminarAbierto.set(false)">
+      Cancelar
+    </button>
+    <button
+      type="button"
+      class="ui-btn ui-btn--danger"
+      (click)="eliminar()"
+      [disabled]="eliminando()"
+    >
+      @if (eliminando()) {
+        <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+      }
       Eliminar
     </button>
   </div>
@@ -326,10 +441,11 @@
   [abierto]="rolesAbierto()"
   titulo="Roles del usuario"
   [subtitulo]="usuarioRoles() ? '@' + usuarioRoles()!.usuario : ''"
-  (cerrar)="rolesAbierto.set(false)"
+  (cerrar)="cerrarAsignaciones()"
 >
   <p class="modal-hint">
-    Activa los roles que quieras asignar a este usuario. Sus permisos se heredan de los roles activados.
+    Activa los roles que quieras asignar a este usuario. Sus permisos se heredan de los roles
+    activados.
   </p>
   @if (cargandoRoles()) {
     <div class="loading"><span class="ui-spinner"></span> Cargando roles…</div>
@@ -364,7 +480,9 @@
     </ul>
   }
   <div modal-footer class="modal-foot">
-    <button type="button" class="ui-btn ui-btn--primary" (click)="rolesAbierto.set(false)">Listo</button>
+    <button type="button" class="ui-btn ui-btn--primary" (click)="cerrarAsignaciones()">
+      Listo
+    </button>
   </div>
 </ui-modal>
 
@@ -372,12 +490,15 @@
   [abierto]="permisosAbierto()"
   ancho="lg"
   titulo="Permisos individuales"
-  [subtitulo]="usuarioPermisos() ? '@' + usuarioPermisos()!.usuario + ' · herencia del rol + overrides' : ''"
-  (cerrar)="permisosAbierto.set(false)"
+  [subtitulo]="
+    usuarioPermisos() ? '@' + usuarioPermisos()!.usuario + ' · herencia del rol + overrides' : ''
+  "
+  (cerrar)="cerrarAsignaciones()"
 >
   <p class="modal-hint">
-    <strong>Heredar</strong>: usa lo que conceden sus roles · <strong>Conceder</strong>: permite este permiso aunque el rol no lo dé ·
-    <strong>Denegar</strong>: bloquea este permiso aunque el rol lo dé.
+    <strong>Heredar</strong>: usa lo que conceden sus roles · <strong>Conceder</strong>: permite
+    este permiso aunque el rol no lo dé · <strong>Denegar</strong>: bloquea este permiso aunque el
+    rol lo dé.
   </p>
   @if (cargandoPermisos()) {
     <div class="loading"><span class="ui-spinner"></span> Cargando permisos…</div>
@@ -399,13 +520,19 @@
       </div>
 
       <div class="perm-summary">
-        <span class="ui-badge ui-badge--brand"><span class="ui-dot"></span> {{ totalEfectivos() }} efectivos</span>
+        <span class="ui-badge ui-badge--brand"
+          ><span class="ui-dot"></span> {{ totalEfectivos() }} efectivos</span
+        >
         <span class="ui-badge ui-badge--success">+{{ totalConcedidos() }} concedidos</span>
         <span class="ui-badge ui-badge--danger">−{{ totalDenegados() }} denegados</span>
       </div>
 
       @if (permisosFiltrados().length === 0) {
-        <ui-empty icono="search" titulo="Sin resultados" mensaje="Ningún permiso coincide con la búsqueda." />
+        <ui-empty
+          icono="search"
+          titulo="Sin resultados"
+          mensaje="Ningún permiso coincide con la búsqueda."
+        />
       } @else {
         <ul class="perm-list">
           @for (permiso of permisosFiltrados(); track permiso.id) {
@@ -415,12 +542,22 @@
                 <span class="perm-item__desc">
                   {{ permiso.descripcion || 'Sin descripción' }}
                   @switch (origenDe(permiso.id)) {
-                    @case ('heredado') { · heredado del rol }
-                    @case ('concedido') { · concedido a este usuario }
-                    @case ('denegado') { · denegado a este usuario }
-                    @default { · sin acceso }
+                    @case ('heredado') {
+                      · heredado del rol
+                    }
+                    @case ('concedido') {
+                      · concedido a este usuario
+                    }
+                    @case ('denegado') {
+                      · denegado a este usuario
+                    }
+                    @default {
+                      · sin acceso
+                    }
                   }
-                  @if (!permiso.activo) { · permiso inactivo }
+                  @if (!permiso.activo) {
+                    · permiso inactivo
+                  }
                 </span>
               </span>
 
@@ -460,6 +597,8 @@
     </div>
   }
   <div modal-footer class="modal-foot">
-    <button type="button" class="ui-btn ui-btn--primary" (click)="permisosAbierto.set(false)">Listo</button>
+    <button type="button" class="ui-btn ui-btn--primary" (click)="cerrarAsignaciones()">
+      Listo
+    </button>
   </div>
 </ui-modal>

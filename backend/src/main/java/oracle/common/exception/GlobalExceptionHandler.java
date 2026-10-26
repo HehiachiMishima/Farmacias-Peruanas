@@ -1,3 +1,4 @@
+
 package oracle.common.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
