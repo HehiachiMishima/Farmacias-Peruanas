@@ -9,12 +9,18 @@ import {
 import { PERMISOS } from './core/config/permisos';
 import { authGuard } from './core/guards/auth.guard';
 import { guestGuard } from './core/guards/guest.guard';
+import { introGuard } from './core/guards/intro.guard';
 import { panelGuard, permisoGuard } from './core/guards/permiso.guard';
 
 export const routes: Routes = [
   {
-    path: 'login',
+    path: 'intro',
     canActivate: [guestGuard],
+    loadComponent: () => import('./features/auth/intro/intro').then((m) => m.Intro),
+  },
+  {
+    path: 'login',
+    canActivate: [guestGuard, introGuard],
     loadComponent: () => import('./features/auth/login/login').then((m) => m.Login),
   },
   {

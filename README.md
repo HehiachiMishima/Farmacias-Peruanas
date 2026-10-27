@@ -96,6 +96,19 @@ Cada panel del backend tiene sus propias capas:
 Los originales (`atlasLogo.jpg`, `atlasCarga.jpg`, `FarmaciasPeruanasName.jpg`)
 quedan en `public/` como fuente; la app usa las versiones `webp` optimizadas.
 
+- **Intro** (`/intro`, `features/auth/intro/`): apertura de cine de 7,6 s
+  antes del primer login de cada pestaña. Una línea roja se abre en abanico,
+  estalla en un túnel de haces, forma una cortina vertical y se cierra en el
+  logotipo **ATLAS** (canvas 2D, `intro-escena.ts`, sin video). Banda sonora
+  sintetizada con Web Audio (`intro-sonido.ts`, sin archivos); si el
+  navegador bloquea el audio automático, sigue en silencio. Sin botones: se
+  omite con un clic en cualquier parte (o `Esc`) y siempre termina en el
+  login conservando el `returnUrl`. La controla `introGuard`
+  (marca `oracle.intro` en `sessionStorage`); con `prefers-reduced-motion`
+  arranca directamente en el logotipo (≈4 s, solo fundidos). Todo el diseño
+  (línea de tiempo, textos, paleta, densidad de la escena y mezcla de sonido)
+  vive en `intro-diseno.ts`; el SCSS lo recibe como tokens `--intro-*`, así
+  que se ajusta el aspecto o la duración sin tocar la lógica.
 - **Login**: réplica del diseño de referencia. Hero con marca FP + IL, título
   ATLAS, acróstico en ciclo, mapa real del Perú con la red de distribución
   desde Lima y cuatro pines (Almacenes, Distribución, Farmacias, Datos y
