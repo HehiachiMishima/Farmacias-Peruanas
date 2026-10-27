@@ -337,3 +337,4 @@ export class IntroEscena {
     ctx.fillRect(ancho / 2 - largo, y - 14, largo * 2, 28);
   }
 }
+

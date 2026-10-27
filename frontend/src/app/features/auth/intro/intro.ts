@@ -41,7 +41,15 @@ export class Intro {
   private readonly titulo = viewChild.required<ElementRef<HTMLElement>>('titulo');
 
   readonly marca = MARCA;
-  readonly letras = [...MARCA.palabra];
+  readonly letras = [...MARCA.palabra].map((letra, i) => ({
+  letra,
+  tono:
+    i === MARCA.indiceAmarilla
+      ? 'amarilla'
+      : i === MARCA.indiceMixta
+        ? 'mixta'
+        : 'roja',
+}));
   readonly reproduciendo = signal(false);
   readonly saliendo = signal(false);
 

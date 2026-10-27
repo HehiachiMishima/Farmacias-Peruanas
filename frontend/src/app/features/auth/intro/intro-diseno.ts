@@ -40,8 +40,11 @@ export const MARCA = {
   palabra: 'ATLAS',
   nombre: 'Atlas',
   lema: ['Farmacias Peruanas', 'Ingeniería Logística'],
-  /** Debe coincidir con --font-display (tokens globales), que pinta el logotipo. */
   fuente: '900 100px "Inter Tight"',
+  /** Índice (0-based) de la letra 100 % amarilla → la L. */
+  indiceAmarilla: 2,
+  /** Índice (0-based) de la letra mitad roja, mitad amarilla → la T. */
+  indiceMixta: 1,
 } as const;
 
 /** Colores de la escena de luz. */

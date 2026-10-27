@@ -117,7 +117,48 @@
       0 0.12em 0.32em rgba(0, 0, 0, 0.7);
   }
 }
+/* L: cinta amarilla completa (misma estructura de 3 capas que la roja). */
+.intro__letra--amarilla {
+  /* Extrusión dorada: encaja con la cara amarilla. */
+  --intro-extrusion: #7a5c00;
+  --intro-extrusion-1: #9a7500;
+  --intro-extrusion-2: #7a5c00;
+  --intro-extrusion-3: #5c4500;
+  --intro-extrusion-4: #3e2e00;
 
+  .intro__cara {
+    background-image:
+      linear-gradient(105deg, transparent 38%, var(--intro-reflejo) 50%, transparent 62%),
+      linear-gradient(100deg, transparent 46%, var(--intro-pliegue) 52%, transparent 60%),
+      linear-gradient(180deg, #fff28a 0%, #ffd93d 40%, #e0a800 72%, #8a6d00 100%);
+  }
+}
+/* T: barra superior roja / palo vertical amarillo (corte horizontal). */
+.intro__letra--mixta {
+  --intro-extrusion: #6b5600;
+  --intro-extrusion-1: #8a7000;
+  --intro-extrusion-2: #6b5600;
+  --intro-extrusion-3: #504200;
+  --intro-extrusion-4: #362c00;
+
+     .intro__cara {
+    background-image:
+      /* reflejo diagonal: se mantiene */
+      linear-gradient(105deg, transparent 38%, var(--intro-reflejo) 50%, transparent 62%),
+      /* pliegue: se mantiene */
+      linear-gradient(100deg, transparent 46%, var(--intro-pliegue) 52%, transparent 60%),
+      /* T: Corte recto y duro */
+      linear-gradient(
+        180deg,
+        #ff5566 0%,
+        #e11d2e 22%,
+        #b30f1f 24.5%, /* El rojo termina exacto aquí */
+        #ffe14d 24.5%, /* El amarillo empieza exacto aquí (mismo % = corte recto) */
+        #f5b800 60%,
+        #a87f00 100%
+      );
+  }
+}
 .intro__cara,
 .intro__luz {
   display: block;
