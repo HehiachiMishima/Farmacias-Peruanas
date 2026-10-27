@@ -26,7 +26,7 @@ COPY frontend/ ./
 RUN npm run build -- --configuration production
 
 # ---------- Etapa 2: build del backend ----------
-FROM maven:3.9-eclipse-temurin-21 AS backend
+FROM maven:3.9-eclipse-temurin-25 AS backend
 WORKDIR /app
 COPY backend/pom.xml ./
 RUN mvn -B -q -DskipTests dependency:go-offline
@@ -34,7 +34,7 @@ COPY backend/src ./src
 RUN mvn -B -q -DskipTests clean package
 
 # ---------- Etapa 3: runtime ----------
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 
 RUN apk add --no-cache nginx supervisor gettext \
     && mkdir -p /run/nginx
@@ -72,7 +72,7 @@ server {
 
     root /usr/share/nginx/html;
     index index.html;
-    client_max_body_size 10m;
+    client_max_body_size 20m;
 
     gzip on;
     gzip_comp_level 5;
