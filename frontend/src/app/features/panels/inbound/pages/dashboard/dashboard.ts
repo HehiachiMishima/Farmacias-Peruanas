@@ -1,9 +1,18 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { AnaliticaInbound, IncidenciaInboundFiltros } from '../../../../../core/models';
-import { InboundCatalogos } from '../../../../../core/services/inbound-catalogos';
-import { InboundIncidenciasApi } from '../../../../../core/services/inbound-incidencias.api';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { valorTexto } from '../../../../../core/utils/evento.util';
+import { escaparHtml } from '../../../../../core/utils/texto.util';
+import { AnaliticaInbound } from '../../data/analitica.model';
+import { IncidenciaInboundFiltros } from '../../data/inbound.model';
+import { InboundCatalogos } from '../../state/inbound-catalogos';
+import { InboundIncidenciasApi } from '../../data/inbound-incidencias.api';
 import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
-import { SERIES, compacto, entero, porcentaje, variacion } from '../../../../../shared/ui/charts/formato';
+import {
+  SERIES,
+  compacto,
+  entero,
+  porcentaje,
+  variacion,
+} from '../../../../../shared/ui/charts/formato';
 import { CeldaCalor, Heatmap } from '../../../../../shared/ui/charts/heatmap';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
 import { LineChart, SerieLinea } from '../../../../../shared/ui/charts/line-chart';
@@ -12,11 +21,15 @@ import { GrupoApilado, StackedBars } from '../../../../../shared/ui/charts/stack
 import { ItemTreemap, Treemap } from '../../../../../shared/ui/charts/treemap';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
-import { ChipFiltro, FiltrosActivos, fechaChip } from '../../../../../shared/ui/panel-filtros/filtros-activos';
+import {
+  EstadoFiltros,
+  filtroCatalogo,
+  filtroFecha,
+} from '../../../../../shared/ui/panel-filtros/estado-filtros';
+import { FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
-
 
 /**
  * Dashboard Inbound: control de proveedores.
@@ -28,6 +41,7 @@ import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-
  */
 @Component({
   selector: 'app-inbound-dashboard',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     EmptyState,
     Heatmap,
@@ -58,37 +72,27 @@ export class InboundDashboard {
 
   readonly proveedores = this.catalogos.proveedores;
   readonly tipos = this.catalogos.tipos;
-  readonly opcionesProveedor = computed(() => this.proveedores().map((p) => ({ id: p.id, etiqueta: p.proveedor })));
-  readonly opcionesTipo = computed(() => this.tipos().map((t) => ({ id: t.id, etiqueta: t.incidenciaInbound })));
+  readonly opcionesProveedor = computed(() =>
+    this.proveedores().map((p) => ({ id: p.id, etiqueta: p.proveedor })),
+  );
+  readonly opcionesTipo = computed(() =>
+    this.tipos().map((t) => ({ id: t.id, etiqueta: t.incidenciaInbound })),
+  );
 
-  readonly filtroProveedor = signal<number | null>(null);
-  readonly filtroTipo = signal<number | null>(null);
-  readonly filtroDesde = signal('');
-  readonly filtroHasta = signal('');
-  readonly filtrosAbierto = signal(false);
-
-  readonly filtrosActivos = computed(() => this.chips().length);
-
-  readonly chips = computed<ChipFiltro[]>(() => {
-    const chips: ChipFiltro[] = [];
-    const proveedor = this.filtroProveedor();
-    if (proveedor !== null) {
-      const nombre = this.proveedores().find((p) => p.id === proveedor)?.proveedor ?? `#${proveedor}`;
-      chips.push({ clave: 'proveedor', etiqueta: 'Proveedor', valor: nombre, icono: 'truck' });
-    }
-    const tipo = this.filtroTipo();
-    if (tipo !== null) {
-      const nombre = this.tipos().find((t) => t.id === tipo)?.incidenciaInbound ?? `#${tipo}`;
-      chips.push({ clave: 'tipo', etiqueta: 'Tipo', valor: nombre, icono: 'incidencias' });
-    }
-    if (this.filtroDesde()) {
-      chips.push({ clave: 'desde', etiqueta: 'Desde', valor: fechaChip(this.filtroDesde()), icono: 'calendario' });
-    }
-    if (this.filtroHasta()) {
-      chips.push({ clave: 'hasta', etiqueta: 'Hasta', valor: fechaChip(this.filtroHasta()), icono: 'calendario' });
-    }
-    return chips;
+  readonly panelFiltros = new EstadoFiltros({
+    proveedor: filtroCatalogo('Proveedor', 'truck', this.proveedores, (p) => p.proveedor),
+    tipo: filtroCatalogo('Tipo', 'incidencias', this.tipos, (t) => t.incidenciaInbound),
+    desde: filtroFecha('Desde'),
+    hasta: filtroFecha('Hasta'),
   });
+  readonly filtroProveedor = this.panelFiltros.valores.proveedor;
+  readonly filtroTipo = this.panelFiltros.valores.tipo;
+  readonly filtroDesde = this.panelFiltros.valores.desde;
+  readonly filtroHasta = this.panelFiltros.valores.hasta;
+  readonly filtrosAbierto = this.panelFiltros.abierto;
+  /** Filtros del panel aplicados, como chips removibles. */
+  readonly chips = this.panelFiltros.chips;
+  readonly filtrosActivos = this.panelFiltros.activos;
 
   // ---------------- KPIs ----------------
   readonly kpis = computed(() => this.datos()?.kpis ?? null);
@@ -168,7 +172,7 @@ export class InboundDashboard {
         icono: 'alertTriangle',
         color: 'var(--brand)',
         kicker: 'Proveedor crítico',
-        html: `<strong>${escapar(lider.proveedor)}</strong> concentra el <strong>${porcentaje(lider.total / total)}</strong> de las incidencias; su problema más frecuente es <strong>${escapar(lider.tipoDominante)}</strong> (${porcentaje(lider.total ? lider.totalTipoDominante / lider.total : 0)} de sus casos).`,
+        html: `<strong>${escaparHtml(lider.proveedor)}</strong> concentra el <strong>${porcentaje(lider.total / total)}</strong> de las incidencias; su problema más frecuente es <strong>${escaparHtml(lider.tipoDominante)}</strong> (${porcentaje(lider.total ? lider.totalTipoDominante / lider.total : 0)} de sus casos).`,
       });
     }
     const tipo = d.tipos[0];
@@ -177,7 +181,7 @@ export class InboundDashboard {
         icono: 'incidencias',
         color: 'var(--warning)',
         kicker: 'Incidencia más repetida',
-        html: `<strong>${escapar(tipo.tipo)}</strong> suma <strong>${entero(tipo.total)}</strong> casos (${porcentaje(tipo.total / total)}) y aparece en <strong>${entero(tipo.proveedores)}</strong> proveedores.`,
+        html: `<strong>${escaparHtml(tipo.tipo)}</strong> suma <strong>${entero(tipo.total)}</strong> casos (${porcentaje(tipo.total / total)}) y aparece en <strong>${entero(tipo.proveedores)}</strong> proveedores.`,
       });
     }
     const sku = d.skus[0];
@@ -186,7 +190,7 @@ export class InboundDashboard {
         icono: 'paquete',
         color: 'var(--accent)',
         kicker: 'SKU reincidente',
-        html: `El SKU <strong>${escapar(sku.sku)}</strong> tuvo <strong>${entero(sku.total)}</strong> incidencias (${entero(sku.unidades)} u) con <strong>${entero(sku.proveedores)}</strong> proveedor(es).`,
+        html: `El SKU <strong>${escaparHtml(sku.sku)}</strong> tuvo <strong>${entero(sku.total)}</strong> incidencias (${entero(sku.unidades)} u) con <strong>${entero(sku.proveedores)}</strong> proveedor(es).`,
       });
     }
     return hallazgos;
@@ -229,7 +233,9 @@ export class InboundDashboard {
     const serie = this.datos()?.tendencia ?? [];
     return {
       etiquetas: serie.map((p) => p.periodo),
-      series: [{ nombre: 'Incidencias', color: 'var(--brand)', valores: serie.map((p) => p.valor) }] as SerieLinea[],
+      series: [
+        { nombre: 'Incidencias', color: 'var(--brand)', valores: serie.map((p) => p.valor) },
+      ] as SerieLinea[],
     };
   });
 
@@ -237,7 +243,9 @@ export class InboundDashboard {
     const serie = this.datos()?.tendencia ?? [];
     return {
       etiquetas: serie.map((p) => p.periodo),
-      series: [{ nombre: 'Unidades', color: 'var(--warning)', valores: serie.map((p) => p.secundario) }] as SerieLinea[],
+      series: [
+        { nombre: 'Unidades', color: 'var(--warning)', valores: serie.map((p) => p.secundario) },
+      ] as SerieLinea[],
     };
   });
 
@@ -247,7 +255,11 @@ export class InboundDashboard {
     const meses = [...new Set(top.flatMap((p) => p.meses.map((m) => m.mes)))].sort();
     const series: SerieLinea[] = top.map((p, i) => {
       const porMes = new Map(p.meses.map((m) => [m.mes, m.incidencias]));
-      return { nombre: p.proveedor, color: SERIES[i % SERIES.length], valores: meses.map((m) => porMes.get(m) ?? 0) };
+      return {
+        nombre: p.proveedor,
+        color: SERIES[i % SERIES.length],
+        valores: meses.map((m) => porMes.get(m) ?? 0),
+      };
     });
     return { etiquetas: meses, series };
   });
@@ -268,10 +280,16 @@ export class InboundDashboard {
   });
 
   readonly skus = computed(() =>
-    (this.datos()?.skus ?? []).map((s) => ({ ...s, totalTexto: entero(s.total), unidadesTexto: entero(s.unidades) })),
+    (this.datos()?.skus ?? []).map((s) => ({
+      ...s,
+      totalTexto: entero(s.total),
+      unidadesTexto: entero(s.unidades),
+    })),
   );
 
-  readonly granularidad = computed(() => (this.datos()?.granularidad === 'dia' ? 'por día' : 'por mes'));
+  readonly granularidad = computed(() =>
+    this.datos()?.granularidad === 'dia' ? 'por día' : 'por mes',
+  );
 
   constructor() {
     this.catalogos.cargar();
@@ -292,7 +310,7 @@ export class InboundDashboard {
   }
 
   alternarFiltros(): void {
-    this.filtrosAbierto.update((abierto) => !abierto);
+    this.panelFiltros.alternar();
   }
 
   setFiltroProveedor(id: number | null): void {
@@ -311,12 +329,12 @@ export class InboundDashboard {
   }
 
   setFiltroDesde(evento: Event): void {
-    this.filtroDesde.set((evento.target as HTMLInputElement).value);
+    this.filtroDesde.set(valorTexto(evento));
     this.cargar();
   }
 
   setFiltroHasta(evento: Event): void {
-    this.filtroHasta.set((evento.target as HTMLInputElement).value);
+    this.filtroHasta.set(valorTexto(evento));
     this.cargar();
   }
 
@@ -327,23 +345,12 @@ export class InboundDashboard {
   }
 
   quitarFiltro(clave: string): void {
-    if (clave === 'proveedor') this.filtroProveedor.set(null);
-    if (clave === 'tipo') this.filtroTipo.set(null);
-    if (clave === 'desde') this.filtroDesde.set('');
-    if (clave === 'hasta') this.filtroHasta.set('');
+    this.panelFiltros.quitar(clave);
     this.cargar();
   }
 
   limpiarFiltros(): void {
-    this.filtroProveedor.set(null);
-    this.filtroTipo.set(null);
-    this.filtroDesde.set('');
-    this.filtroHasta.set('');
+    this.panelFiltros.limpiar();
     this.cargar();
   }
-}
-
-/** Los nombres vienen de la BD: se escapan antes de insertarlos como HTML en los hallazgos. */
-function escapar(texto: string): string {
-  return texto.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }

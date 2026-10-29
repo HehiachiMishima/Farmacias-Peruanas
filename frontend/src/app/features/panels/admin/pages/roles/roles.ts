@@ -1,14 +1,15 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { DirectorioUsuarios } from '../../../../../core/services/directorio-usuarios';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
-import { PermisosApi } from '../../../../../core/services/permisos.api';
-import { RolesApi } from '../../../../../core/services/roles.api';
-import { Permiso, Rol } from '../../../../../core/models';
+import { PermisosApi } from '../../data/permisos.api';
+import { RolesApi } from '../../data/roles.api';
+import { Permiso } from '../../data/permiso.model';
+import { Rol } from '../../data/rol.model';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
 import { ColumnasRedimensionables } from '../../../../../shared/directives/columnas-redimensionables.directive';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
@@ -31,6 +32,7 @@ import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
 
 @Component({
   selector: 'app-admin-roles',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ReactiveFormsModule,
     DatePipe,
@@ -80,11 +82,9 @@ export class Roles {
     const desde = this.filtroDesde();
     const hasta = this.filtroHasta();
     return this.coincidenBusqueda().filter(
-      (item) =>
-        cumpleEstado(estado, item.activo) && enPeriodo(item.creadoEn, desde, hasta),
+      (item) => cumpleEstado(estado, item.activo) && enPeriodo(item.creadoEn, desde, hasta),
     );
   });
-
 
   readonly chips = computed<ChipFiltro[]>(() =>
     [chipEstado(this.filtroEstado()), chipPeriodo(this.filtroDesde(), this.filtroHasta())].filter(

@@ -1,25 +1,35 @@
 import { DatePipe, formatDate } from '@angular/common';
-import { Component, LOCALE_ID, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  LOCALE_ID,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Subject, debounceTime, finalize } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { exportarCsv } from '../../../../../core/utils/csv.util';
+import { valorNumero, valorTexto } from '../../../../../core/utils/evento.util';
+import { hoy } from '../../../../../core/utils/fecha.util';
 import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
+import { OpcionesDependientes } from '../../../../../core/utils/opciones-dependientes';
 import {
   Incidencia,
   IncidenciaCrearRequest,
   IncidenciaFiltros,
   Responsable,
   TipoIncidencia,
-} from '../../../../../core/models';
-import { AreasApi } from '../../../../../core/services/areas.api';
-import { BitacoraCatalogos } from '../../../../../core/services/bitacora-catalogos';
+} from '../../data/bitacora.model';
+import { AreasApi } from '../../data/areas.api';
+import { BitacoraCatalogos } from '../../state/bitacora-catalogos';
 import { DirectorioUsuarios } from '../../../../../core/services/directorio-usuarios';
-import { IncidenciasApi } from '../../../../../core/services/incidencias.api';
+import { IncidenciasApi } from '../../data/incidencias.api';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
-import { SistemasApi } from '../../../../../core/services/sistemas.api';
+import { SistemasApi } from '../../data/sistemas.api';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
 import { ColumnasRedimensionables } from '../../../../../shared/directives/columnas-redimensionables.directive';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
@@ -27,7 +37,12 @@ import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
-import { ChipFiltro, FiltrosActivos, fechaChip } from '../../../../../shared/ui/panel-filtros/filtros-activos';
+import {
+  EstadoFiltros,
+  filtroCatalogo,
+  filtroFecha,
+} from '../../../../../shared/ui/panel-filtros/estado-filtros';
+import { FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 
@@ -62,6 +77,7 @@ const CABECERAS_EXPORT = [
 
 @Component({
   selector: 'app-bitacora-incidencias',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ReactiveFormsModule,
     DatePipe,
@@ -110,48 +126,42 @@ export class Incidencias {
   readonly areas = this.catalogos.areas;
 
   readonly filtroBusqueda = signal('');
-  readonly filtroCentro = signal<number | null>(null);
-  readonly filtroSistema = signal<number | null>(null);
-  readonly filtroArea = signal<number | null>(null);
-  readonly filtroResponsable = signal<number | null>(null);
-  readonly filtroDesde = signal('');
-  readonly filtroHasta = signal('');
-  readonly responsablesFiltro = signal<Responsable[]>([]);
-  readonly cargandoResponsablesFiltro = signal(false);
-  readonly filtrosAbierto = signal(false);
+  private readonly responsablesDelFiltro = new OpcionesDependientes(
+    (areaId) => this.areasApi.responsablesDe(areaId),
+    'No se pudieron cargar los responsables',
+  );
+  readonly responsablesFiltro = this.responsablesDelFiltro.opciones;
+  readonly cargandoResponsablesFiltro = this.responsablesDelFiltro.cargando;
+
+  readonly panelFiltros = new EstadoFiltros({
+    centro: filtroCatalogo('Centro', 'centro', this.centros, (c) => c.centro),
+    sistema: filtroCatalogo('Sistema', 'sistema', this.sistemas, (s) => s.sistema),
+    area: filtroCatalogo('Área', 'area', this.areas, (a) => a.area),
+    responsable: filtroCatalogo(
+      'Responsable',
+      'responsable',
+      this.responsablesFiltro,
+      (r) => r.responsable,
+    ),
+    desde: filtroFecha('Desde'),
+    hasta: filtroFecha('Hasta'),
+  });
+  readonly filtroCentro = this.panelFiltros.valores.centro;
+  readonly filtroSistema = this.panelFiltros.valores.sistema;
+  readonly filtroArea = this.panelFiltros.valores.area;
+  readonly filtroResponsable = this.panelFiltros.valores.responsable;
+  readonly filtroDesde = this.panelFiltros.valores.desde;
+  readonly filtroHasta = this.panelFiltros.valores.hasta;
+  readonly filtrosAbierto = this.panelFiltros.abierto;
+  /** Filtros del panel aplicados, como chips removibles. */
+  readonly chips = this.panelFiltros.chips;
+  readonly filtrosActivos = this.panelFiltros.activos;
 
   private readonly busqueda$ = new Subject<string>();
 
-  /** Filtros del panel aplicados, como chips removibles. */
-  readonly chips = computed<ChipFiltro[]>(() => {
-    const chips: ChipFiltro[] = [];
-    const nombre = <T extends { id: number }>(lista: T[], id: number, campo: keyof T): string =>
-      String(lista.find((x) => x.id === id)?.[campo] ?? `#${id}`);
-    const centro = this.filtroCentro();
-    if (centro !== null) chips.push({ clave: 'centro', etiqueta: 'Centro', valor: nombre(this.centros(), centro, 'centro'), icono: 'centro' });
-    const sistema = this.filtroSistema();
-    if (sistema !== null) chips.push({ clave: 'sistema', etiqueta: 'Sistema', valor: nombre(this.sistemas(), sistema, 'sistema'), icono: 'sistema' });
-    const area = this.filtroArea();
-    if (area !== null) chips.push({ clave: 'area', etiqueta: 'Área', valor: nombre(this.areas(), area, 'area'), icono: 'area' });
-    const responsable = this.filtroResponsable();
-    if (responsable !== null) chips.push({ clave: 'responsable', etiqueta: 'Responsable', valor: nombre(this.responsablesFiltro(), responsable, 'responsable'), icono: 'responsable' });
-    if (this.filtroDesde()) chips.push({ clave: 'desde', etiqueta: 'Desde', valor: fechaChip(this.filtroDesde()), icono: 'calendario' });
-    if (this.filtroHasta()) chips.push({ clave: 'hasta', etiqueta: 'Hasta', valor: fechaChip(this.filtroHasta()), icono: 'calendario' });
-    return chips;
-  });
-
-  readonly filtrosActivos = computed(() => {
-    let total = 0;
-    if (this.filtroCentro() !== null) total++;
-    if (this.filtroSistema() !== null) total++;
-    if (this.filtroArea() !== null) total++;
-    if (this.filtroResponsable() !== null) total++;
-    if (this.filtroDesde()) total++;
-    if (this.filtroHasta()) total++;
-    return total;
-  });
-
-  readonly hayFiltros = computed(() => this.filtrosActivos() > 0 || this.filtroBusqueda().trim() !== '');
+  readonly hayFiltros = computed(
+    () => this.filtrosActivos() > 0 || this.filtroBusqueda().trim() !== '',
+  );
 
   readonly totalPaginas = computed(() => Math.max(1, Math.ceil(this.total() / this.porPagina())));
   readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
@@ -159,10 +169,18 @@ export class Incidencias {
   readonly formAbierto = signal(false);
   readonly editando = signal<Incidencia | null>(null);
   readonly guardando = signal(false);
-  readonly formTipos = signal<TipoIncidencia[]>([]);
-  readonly formResponsables = signal<Responsable[]>([]);
-  readonly cargandoFormTipos = signal(false);
-  readonly cargandoFormResponsables = signal(false);
+  private readonly tiposDelForm = new OpcionesDependientes<TipoIncidencia>(
+    (sistemaId) => this.sistemasApi.tiposDe(sistemaId),
+    'No se pudieron cargar los tipos',
+  );
+  private readonly responsablesDelForm = new OpcionesDependientes<Responsable>(
+    (areaId) => this.areasApi.responsablesDe(areaId),
+    'No se pudieron cargar los responsables',
+  );
+  readonly formTipos = this.tiposDelForm.opciones;
+  readonly formResponsables = this.responsablesDelForm.opciones;
+  readonly cargandoFormTipos = this.tiposDelForm.cargando;
+  readonly cargandoFormResponsables = this.responsablesDelForm.cargando;
 
   private tipoPendiente: number | null = null;
   private responsablePendiente: number | null = null;
@@ -193,25 +211,37 @@ export class Incidencias {
     this.cargarCatalogos();
     this.cargar();
 
-    this.busqueda$
-      .pipe(debounceTime(300), takeUntilDestroyed())
-      .subscribe((valor) => {
-        // Se compara contra el filtro vigente (no contra la última emisión):
-        // así «Limpiar filtros» + volver a escribir lo mismo sí recarga.
-        if (valor.trim() === this.filtroBusqueda().trim()) {
-          return;
-        }
-        this.filtroBusqueda.set(valor);
-        this.cargarDesde(1);
-      });
-
-    this.formulario.controls.idDataSistema.valueChanges.subscribe((sistemaId) => {
-      this.cargarFormTipos(sistemaId, this.tipoPendiente);
-      this.tipoPendiente = null;
+    this.busqueda$.pipe(debounceTime(300), takeUntilDestroyed()).subscribe((valor) => {
+      // Se compara contra el filtro vigente (no contra la última emisión):
+      // así «Limpiar filtros» + volver a escribir lo mismo sí recarga.
+      if (valor.trim() === this.filtroBusqueda().trim()) {
+        return;
+      }
+      this.filtroBusqueda.set(valor);
+      this.cargarDesde(1);
     });
-    this.formulario.controls.idDataArea.valueChanges.subscribe((areaId) => {
-      this.cargarFormResponsables(areaId, this.responsablePendiente);
+
+    const { idDataSistema, idDataIncidencia, idDataArea, idDataResponsable } =
+      this.formulario.controls;
+    idDataSistema.valueChanges.pipe(takeUntilDestroyed()).subscribe((sistemaId) => {
+      const seleccion = this.tipoPendiente;
+      this.tipoPendiente = null;
+      idDataIncidencia.setValue(null, { emitEvent: false });
+      this.tiposDelForm.elegir(sistemaId, () => {
+        if (seleccion !== null) {
+          idDataIncidencia.setValue(seleccion, { emitEvent: false });
+        }
+      });
+    });
+    idDataArea.valueChanges.pipe(takeUntilDestroyed()).subscribe((areaId) => {
+      const seleccion = this.responsablePendiente;
       this.responsablePendiente = null;
+      idDataResponsable.setValue(null, { emitEvent: false });
+      this.responsablesDelForm.elegir(areaId, () => {
+        if (seleccion !== null) {
+          idDataResponsable.setValue(seleccion, { emitEvent: false });
+        }
+      });
     });
   }
 
@@ -272,13 +302,14 @@ export class Incidencias {
               : '—',
             this.directorio.etiqueta(incidencia.actualizadoPor),
           ]);
-          exportarCsv(`incidencias_${this.hoy()}.csv`, CABECERAS_EXPORT, filas);
+          exportarCsv(`incidencias_${hoy()}.csv`, CABECERAS_EXPORT, filas);
           this.notificaciones.exito(
             'Exportado',
             `Se exportaron ${filas.length} ${filas.length === 1 ? 'incidencia' : 'incidencias'} a Excel (CSV).`,
           );
         },
-        error: (err: unknown) => this.notificaciones.error('No se pudo exportar', mensajeDeError(err)),
+        error: (err: unknown) =>
+          this.notificaciones.error('No se pudo exportar', mensajeDeError(err)),
       });
   }
 
@@ -287,56 +318,48 @@ export class Incidencias {
   }
 
   alternarFiltros(): void {
-    this.filtrosAbierto.update((abierto) => !abierto);
+    this.panelFiltros.alternar();
   }
 
   setFiltroCentro(evento: Event): void {
-    this.filtroCentro.set(this.valorNumero(evento));
+    this.filtroCentro.set(valorNumero(evento));
     this.cargarDesde(1);
   }
 
   setFiltroSistema(evento: Event): void {
-    this.filtroSistema.set(this.valorNumero(evento));
+    this.filtroSistema.set(valorNumero(evento));
     this.cargarDesde(1);
   }
 
   setFiltroArea(evento: Event): void {
-    const areaId = this.valorNumero(evento);
+    const areaId = valorNumero(evento);
     this.filtroArea.set(areaId);
     this.filtroResponsable.set(null);
-    this.responsablesFiltro.set([]);
-    if (areaId !== null) {
-      this.cargarResponsablesFiltro(areaId);
-    }
+    this.responsablesDelFiltro.elegir(areaId);
     this.cargarDesde(1);
   }
 
   setFiltroResponsable(evento: Event): void {
-    this.filtroResponsable.set(this.valorNumero(evento));
+    this.filtroResponsable.set(valorNumero(evento));
     this.cargarDesde(1);
   }
 
   setFiltroDesde(evento: Event): void {
-    this.filtroDesde.set((evento.target as HTMLInputElement).value);
+    this.filtroDesde.set(valorTexto(evento));
     this.cargarDesde(1);
   }
 
   setFiltroHasta(evento: Event): void {
-    this.filtroHasta.set((evento.target as HTMLInputElement).value);
+    this.filtroHasta.set(valorTexto(evento));
     this.cargarDesde(1);
   }
 
   quitarFiltro(clave: string): void {
-    if (clave === 'centro') this.filtroCentro.set(null);
-    if (clave === 'sistema') this.filtroSistema.set(null);
+    this.panelFiltros.quitar(clave);
     if (clave === 'area') {
-      this.filtroArea.set(null);
       this.filtroResponsable.set(null);
-      this.responsablesFiltro.set([]);
+      this.responsablesDelFiltro.elegir(null);
     }
-    if (clave === 'responsable') this.filtroResponsable.set(null);
-    if (clave === 'desde') this.filtroDesde.set('');
-    if (clave === 'hasta') this.filtroHasta.set('');
     this.cargarDesde(1);
   }
 
@@ -348,13 +371,8 @@ export class Incidencias {
 
   limpiarFiltros(): void {
     this.filtroBusqueda.set('');
-    this.filtroCentro.set(null);
-    this.filtroSistema.set(null);
-    this.filtroArea.set(null);
-    this.filtroResponsable.set(null);
-    this.filtroDesde.set('');
-    this.filtroHasta.set('');
-    this.responsablesFiltro.set([]);
+    this.panelFiltros.limpiar();
+    this.responsablesDelFiltro.elegir(null);
     this.cargarDesde(1);
   }
 
@@ -388,7 +406,7 @@ export class Incidencias {
       descripcion: '',
       horaInicio: '',
       horaFin: '',
-      fechaCreacion: this.hoy(),
+      fechaCreacion: hoy(),
     });
     this.formAbierto.set(true);
   }
@@ -494,79 +512,12 @@ export class Incidencias {
           this.aEliminar.set(null);
           this.cargar();
         },
-        error: (err: unknown) => this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
-      });
-  }
-
-  private cargarFormTipos(sistemaId: number | null, seleccion: number | null): void {
-    this.formTipos.set([]);
-    this.formulario.controls.idDataIncidencia.setValue(null, { emitEvent: false });
-    if (sistemaId === null) {
-      return;
-    }
-    this.cargandoFormTipos.set(true);
-    this.sistemasApi
-      .tiposDe(sistemaId)
-      .pipe(finalize(() => this.cargandoFormTipos.set(false)))
-      .subscribe({
-        next: (lista) => {
-          this.formTipos.set(lista);
-          if (seleccion !== null) {
-            this.formulario.controls.idDataIncidencia.setValue(seleccion, { emitEvent: false });
-          }
-        },
         error: (err: unknown) =>
-          this.notificaciones.error('No se pudieron cargar los tipos', mensajeDeError(err)),
+          this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
       });
-  }
-
-  private cargarFormResponsables(areaId: number | null, seleccion: number | null): void {
-    this.formResponsables.set([]);
-    this.formulario.controls.idDataResponsable.setValue(null, { emitEvent: false });
-    if (areaId === null) {
-      return;
-    }
-    this.cargandoFormResponsables.set(true);
-    this.areasApi
-      .responsablesDe(areaId)
-      .pipe(finalize(() => this.cargandoFormResponsables.set(false)))
-      .subscribe({
-        next: (lista) => {
-          this.formResponsables.set(lista);
-          if (seleccion !== null) {
-            this.formulario.controls.idDataResponsable.setValue(seleccion, { emitEvent: false });
-          }
-        },
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudieron cargar los responsables', mensajeDeError(err)),
-      });
-  }
-
-  private cargarResponsablesFiltro(areaId: number): void {
-    this.cargandoResponsablesFiltro.set(true);
-    this.areasApi
-      .responsablesDe(areaId)
-      .pipe(finalize(() => this.cargandoResponsablesFiltro.set(false)))
-      .subscribe({
-        next: (lista) => this.responsablesFiltro.set(lista),
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudieron cargar los responsables', mensajeDeError(err)),
-      });
-  }
-
-  private valorNumero(evento: Event): number | null {
-    const valor = (evento.target as HTMLSelectElement).value;
-    return valor ? Number(valor) : null;
   }
 
   private normalizarHora(valor: string): string {
     return valor.length === 5 ? `${valor}:00` : valor;
-  }
-
-  private hoy(): string {
-    const ahora = new Date();
-    const mes = `${ahora.getMonth() + 1}`.padStart(2, '0');
-    const dia = `${ahora.getDate()}`.padStart(2, '0');
-    return `${ahora.getFullYear()}-${mes}-${dia}`;
   }
 }

@@ -75,7 +75,7 @@ public class RolPermisoService {
                             plantilla.setCreadoPor(actor);
                             plantilla.setCreadoEn(LocalDateTime.now());
                             rolPermisoRepository.save(plantilla);
-                            autorizacionCache.invalidarTodo();
+                            transacciones.alConfirmar(autorizacionCache::invalidarTodo);
 
                             return ApiResponse.ok("Permiso agregado al rol.", RolPermisoResponse.of(plantilla));
                         })))
@@ -97,7 +97,7 @@ public class RolPermisoService {
                                         + "' no tiene el permiso con id " + permisoId + ".");
                             }
                             rolPermisoRepository.eliminarPar(rolId, permisoId);
-                            autorizacionCache.invalidarTodo();
+                            transacciones.alConfirmar(autorizacionCache::invalidarTodo);
                             return null;
                         })))
                 .subscribeOn(Schedulers.boundedElastic())

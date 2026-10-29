@@ -1,6 +1,6 @@
 package oracle.bitacora.service;
 
-import oracle.common.config.CacheRespuestas;
+import oracle.common.config.Transacciones;
 
 import oracle.common.support.ActorActual;
 import oracle.common.support.Auditoria;
@@ -27,37 +27,37 @@ import reactor.core.scheduler.Schedulers;
 public class CentroService {
 
     private final CatalogoBitacora catalogo;
-    private final CacheRespuestas cacheRespuestas;
+    private final Transacciones transacciones;
 
     private final DataCentroRepository dataCentroRepository;
 
     public CentroService(DataCentroRepository dataCentroRepository,
-            CatalogoBitacora catalogo, CacheRespuestas cacheRespuestas) {
+            CatalogoBitacora catalogo, Transacciones transacciones) {
         this.catalogo = catalogo;
-        this.cacheRespuestas = cacheRespuestas;
+        this.transacciones = transacciones;
         this.dataCentroRepository = dataCentroRepository;
     }
 
     public Mono<ApiResponse<List<CentroResponse>>> listar() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.listar", () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.listar", () -> transacciones.consultar(() -> {
                         List<CentroResponse> lista = dataCentroRepository.findAll(Listas.limitado()).stream()
                                 .map(CentroResponse::of).toList();
                         Listas.avisarSiCorto(log, lista.size(), "CentroService.listar");
                         return lista;
-                    }))
+                    })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Centros listados.", lista));
     }
 
     public Mono<ApiResponse<CentroResponse>> obtenerPorId(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.obtenerPorId id=" + id, () ->
-                        ApiResponse.ok("Centro encontrado.", CentroResponse.of(obtenerCentro(id)))))
+        return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.obtenerPorId id=" + id, () -> transacciones.consultar(() ->
+                        ApiResponse.ok("Centro encontrado.", CentroResponse.of(obtenerCentro(id))))))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<CentroResponse>> crear(CentroCrearRequest peticion) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.crear centro=" + peticion.centro(), () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.crear centro=" + peticion.centro(), () -> transacciones.ejecutar(() -> {
             if (dataCentroRepository.existsByCentro(peticion.centro())) {
                 throw new ConflictoException("Ya existe un centro con el nombre '" + peticion.centro() + "'.");
             }
@@ -66,15 +66,15 @@ public class CentroService {
             centro.setCentro(peticion.centro().trim());
             Auditoria.alCrear(centro, actor);
             dataCentroRepository.save(centro);
-            cambioCatalogo();
+            catalogo.registrarCambio();
 
             return ApiResponse.ok("Centro creado.", CentroResponse.of(centro));
-        })).subscribeOn(Schedulers.boundedElastic());
+        }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<CentroResponse>> actualizar(Long id, CentroActualizarRequest peticion) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.actualizar id=" + id, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.actualizar id=" + id, () -> transacciones.ejecutar(() -> {
             DataCentro centro = obtenerCentro(id);
 
             if (peticion.centro() != null && !peticion.centro().trim().equals(centro.getCentro())) {
@@ -86,13 +86,13 @@ public class CentroService {
 
             Auditoria.alActualizar(centro, actor);
             dataCentroRepository.save(centro);
-            cambioCatalogo();
+            catalogo.registrarCambio();
             return ApiResponse.ok("Centro actualizado.", CentroResponse.of(centro));
-        })).subscribeOn(Schedulers.boundedElastic());
+        }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<Void>> eliminar(Long id) {
-        return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "CentroService.eliminar id=" + id, () -> {
+        return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "CentroService.eliminar id=" + id, () -> transacciones.ejecutar(() -> {
                     DataCentro centro = obtenerCentro(id);
                     long incidencias = dataCentroRepository.contarIncidencias(id);
                     if (incidencias > 0) {
@@ -101,9 +101,9 @@ public class CentroService {
                                         + incidencias + " incidencia(s) registrada(s).");
                     }
                     dataCentroRepository.delete(centro);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
                     return null;
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(Mono.fromSupplier(() -> ApiResponse.<Void>ok("Centro eliminado.", null)));
     }
@@ -111,11 +111,5 @@ public class CentroService {
     private DataCentro obtenerCentro(Long id) {
         return dataCentroRepository.findById(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("No existe el centro con id " + id + "."));
-    }
-
-    /** Un cambio de catalogo invalida los nombres cacheados y los agregados del dashboard. */
-    private void cambioCatalogo() {
-        catalogo.invalidar();
-        cacheRespuestas.invalidarTodo();
     }
 }

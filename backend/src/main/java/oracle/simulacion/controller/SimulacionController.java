@@ -1,7 +1,9 @@
 package oracle.simulacion.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
+import oracle.common.exception.ApiError;
 import oracle.common.response.ApiResponse;
 import oracle.common.response.PaginaResponse;
 import oracle.simulacion.request.ConfiguracionActualizarRequest;
@@ -14,8 +16,10 @@ import oracle.simulacion.response.DashboardSimulacionResponse;
 import oracle.simulacion.response.HistorialSimulacionResponse;
 import oracle.simulacion.response.RutaSimulacionResponse;
 import oracle.simulacion.service.SimulacionConfiguracionService;
+import oracle.simulacion.service.SimulacionExcel;
 import oracle.simulacion.service.SimulacionRegistroService;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.async.DeferredResult;
 import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Mono;
 
@@ -34,6 +39,9 @@ import reactor.core.publisher.Mono;
 @RestController
 @RequestMapping("/api/simulacion")
 public class SimulacionController {
+
+  /** Timeout de la carga de archivos; el proxy nginx corta a los 60 s. */
+  private static final long TIMEOUT_CARGA_MS = 55_000;
 
   private final SimulacionRegistroService registroService;
   private final SimulacionConfiguracionService configuracionService;
@@ -62,14 +70,41 @@ public class SimulacionController {
     return registroService.opciones();
   }
 
+  /**
+   * Alta de un registro desde un .xlsx/.xls/.csv.
+   *
+   * <p>Usa DeferredResult para tener un timeout propio (55 s, bajo el proxy_read_timeout de 60 s de
+   * nginx) en lugar del global de 15 s: un libro de 100k filas en una instancia de 0,1 vCPU puede
+   * pasar de 15 s y el cliente recibía 500 mientras la carga terminaba igual. Un archivo inválido
+   * responde con su 4xx (400/413/415/422) y el mismo cuerpo ApiError; el resto de errores sigue en
+   * el GlobalExceptionHandler.
+   */
   @PostMapping(value = "/registros", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   @PreAuthorize("hasAuthority('CREAR_REGISTRO_SIMULACION')")
-  public Mono<ApiResponse<ArchivoSimulacionResponse>> subir(
+  public DeferredResult<ResponseEntity<?>> subir(
       @RequestPart("archivo") MultipartFile archivo,
       @RequestParam(required = false) String nombreRegistro,
       @RequestParam(required = false) String etiqueta,
-      @RequestParam(required = false) String colorHex) {
-    return registroService.subir(archivo, nombreRegistro, etiqueta, colorHex);
+      @RequestParam(required = false) String colorHex,
+      HttpServletRequest peticion) {
+    String ruta = peticion.getRequestURI();
+    DeferredResult<ResponseEntity<?>> resultado = new DeferredResult<>(TIMEOUT_CARGA_MS);
+    registroService
+        .subir(archivo, nombreRegistro, etiqueta, colorHex)
+        .<ResponseEntity<?>>map(ResponseEntity::ok)
+        .onErrorResume(
+            SimulacionExcel.ArchivoInvalidoException.class,
+            (error) ->
+                Mono.just(
+                    ResponseEntity.status(error.estado())
+                        .body(
+                            ApiError.de(
+                                error.estado().value(),
+                                error.estado().getReasonPhrase(),
+                                error.getMessage(),
+                                ruta))))
+        .subscribe(resultado::setResult, resultado::setErrorResult);
+    return resultado;
   }
 
   @PutMapping("/registros/{id}")

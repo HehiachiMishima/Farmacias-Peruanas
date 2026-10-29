@@ -91,7 +91,7 @@ public class UsuarioPermisoService {
                                 : "Override actualizado a deny (otorgado=FALSE).";
                     }
                     usuarioPermisoRepository.save(override);
-                    autorizacionCache.invalidar(usuarioId);
+                    transacciones.alConfirmar(() -> autorizacionCache.invalidar(usuarioId));
 
                     return ApiResponse.ok(mensaje, UsuarioPermisoResponse.of(override));
                 })))
@@ -115,7 +115,7 @@ public class UsuarioPermisoService {
                                 "El usuario no tiene un override para el permiso con id " + permisoId + ".");
                     }
                     usuarioPermisoRepository.eliminarPar(usuarioId, permisoId);
-                    autorizacionCache.invalidar(usuarioId);
+                    transacciones.alConfirmar(() -> autorizacionCache.invalidar(usuarioId));
                     return null;
                 })))
                 .subscribeOn(Schedulers.boundedElastic())

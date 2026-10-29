@@ -1,8 +1,8 @@
 import { Service, inject, signal } from '@angular/core';
 import { PERMISOS } from '../config/permisos';
 import { Usuario } from '../models';
+import { Api } from './api';
 import { SesionStore } from './sesion';
-import { UsuariosApi } from './usuarios.api';
 
 /**
  * Caché id → nombre de usuario para resolver las columnas creado_por / actualizado_por.
@@ -10,7 +10,7 @@ import { UsuariosApi } from './usuarios.api';
  */
 @Service()
 export class DirectorioUsuarios {
-  private readonly usuariosApi = inject(UsuariosApi);
+  private readonly api = inject(Api);
   private readonly sesion = inject(SesionStore);
 
   private readonly nombres = signal<Map<number, string>>(new Map());
@@ -18,6 +18,12 @@ export class DirectorioUsuarios {
 
   private cargando = false;
   private cargado = false;
+  /** Cambia al cerrar sesión: descarta la respuesta de una carga anterior. */
+  private ronda = 0;
+
+  constructor() {
+    this.sesion.alLimpiar(() => this.vaciar());
+  }
 
   /** Alimenta el directorio con una lista ya obtenida (evita una petición extra). */
   establecer(lista: Usuario[]): void {
@@ -38,15 +44,27 @@ export class DirectorioUsuarios {
       return;
     }
     this.cargando = true;
-    this.usuariosApi.listar().subscribe({
+    const ronda = this.ronda;
+    this.api.get<Usuario[]>('/usuarios').subscribe({
       next: (lista) => {
-        this.establecer(lista);
-        this.cargando = false;
+        if (ronda === this.ronda) {
+          this.establecer(lista);
+          this.cargando = false;
+        }
       },
       error: () => {
-        this.cargando = false;
+        if (ronda === this.ronda) {
+          this.cargando = false;
+        }
       },
     });
+  }
+
+  private vaciar(): void {
+    this.ronda++;
+    this.cargando = false;
+    this.cargado = false;
+    this.nombres.set(new Map());
   }
 
   nombre(id: number): string | null {

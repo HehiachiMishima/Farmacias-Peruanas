@@ -1,24 +1,27 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
-import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { PERMISOS } from '../../../../../../core/config/permisos';
-import { Notificaciones } from '../../../../../../core/services/notificaciones';
-import { BitacoraCatalogos } from '../../../../../../core/services/bitacora-catalogos';
+import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { DirectorioUsuarios } from '../../../../../../core/services/directorio-usuarios';
-import { SistemasApi } from '../../../../../../core/services/sistemas.api';
-import { Sistema, TipoIncidencia } from '../../../../../../core/models';
-import { HasPermiso } from '../../../../../../shared/directives/has-permiso.directive';
+import { Notificaciones } from '../../../../../../core/services/notificaciones';
+import { EdicionCrud } from '../../../../../../core/utils/edicion-crud';
+import { ListadoLocal } from '../../../../../../core/utils/listado-local';
 import { ColumnasRedimensionables } from '../../../../../../shared/directives/columnas-redimensionables.directive';
+import { HasPermiso } from '../../../../../../shared/directives/has-permiso.directive';
+import { ActorLabelPipe } from '../../../../../../shared/pipes/actor-label.pipe';
 import { EmptyState } from '../../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../../shared/ui/paginador/paginador';
-import { ActorLabelPipe } from '../../../../../../shared/pipes/actor-label.pipe';
+import { Sistema, TipoIncidencia } from '../../../data/bitacora.model';
+import { SistemasApi } from '../../../data/sistemas.api';
+import { BitacoraCatalogos } from '../../../state/bitacora-catalogos';
 
 @Component({
   selector: 'app-bitacora-sistemas',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ReactiveFormsModule,
     DatePipe,
@@ -42,74 +45,47 @@ export class Sistemas {
 
   readonly permisos = PERMISOS;
 
-  readonly cargando = signal(true);
-  readonly error = signal<string | null>(null);
-  readonly sistemasLista = signal<Sistema[]>([]);
-  readonly busqueda = signal('');
-
-  readonly filtrados = computed(() => {
-    const termino = this.busqueda().trim().toLowerCase();
-    const lista = this.sistemasLista();
-    if (!termino) {
-      return lista;
-    }
-    return lista.filter((sistema) => sistema.sistema.toLowerCase().includes(termino));
-  });
-
-  readonly pagina = signal(1);
-  readonly porPagina = signal(10);
-
-  readonly totalPaginas = computed(() =>
-    Math.max(1, Math.ceil(this.filtrados().length / this.porPagina())),
+  private readonly listado = new ListadoLocal<Sistema>(
+    () => this.sistemasApi.listar(),
+    (sistema) => sistema.sistema,
   );
+  readonly cargando = this.listado.cargando;
+  readonly error = this.listado.error;
+  readonly busqueda = this.listado.busqueda;
+  readonly filtrados = this.listado.filtrados;
+  readonly pagina = this.listado.pagina;
+  readonly porPagina = this.listado.porPagina;
+  readonly paginaActual = this.listado.paginaActual;
+  readonly paginados = this.listado.paginados;
 
-  readonly paginaActual = computed(() =>
-    Math.min(Math.max(1, this.pagina()), this.totalPaginas()),
-  );
-
-  readonly paginados = computed(() => {
-    const inicio = (this.paginaActual() - 1) * this.porPagina();
-    return this.filtrados().slice(inicio, inicio + this.porPagina());
-  });
-
-  buscar(valor: string): void {
-    this.busqueda.set(valor);
-    this.pagina.set(1);
-  }
-
-  cambiarPorPagina(valor: number): void {
-    this.porPagina.set(valor);
-    this.pagina.set(1);
-  }
-
-  readonly formAbierto = signal(false);
-  readonly editando = signal<Sistema | null>(null);
-  readonly guardando = signal(false);
+  private readonly edicion = new EdicionCrud<Sistema>();
+  readonly formAbierto = this.edicion.formAbierto;
+  readonly editando = this.edicion.editando;
+  readonly guardando = this.edicion.guardando;
+  readonly eliminarAbierto = this.edicion.eliminarAbierto;
+  readonly aEliminar = this.edicion.aEliminar;
+  readonly eliminando = this.edicion.eliminando;
 
   readonly formulario = this.fb.nonNullable.group({
     sistema: ['', [Validators.required, Validators.maxLength(50)]],
   });
-
-  readonly eliminarAbierto = signal(false);
-  readonly aEliminar = signal<Sistema | null>(null);
-  readonly eliminando = signal(false);
 
   readonly tiposAbierto = signal(false);
   readonly sistemaTipos = signal<Sistema | null>(null);
   readonly tiposLista = signal<TipoIncidencia[]>([]);
   readonly cargandoTipos = signal(false);
 
-  readonly tipoFormAbierto = signal(false);
-  readonly tipoEditando = signal<TipoIncidencia | null>(null);
-  readonly tipoGuardando = signal(false);
+  private readonly edicionTipo = new EdicionCrud<TipoIncidencia>();
+  readonly tipoFormAbierto = this.edicionTipo.formAbierto;
+  readonly tipoEditando = this.edicionTipo.editando;
+  readonly tipoGuardando = this.edicionTipo.guardando;
+  readonly tipoEliminarAbierto = this.edicionTipo.eliminarAbierto;
+  readonly tipoAEliminar = this.edicionTipo.aEliminar;
+  readonly tipoEliminando = this.edicionTipo.eliminando;
 
   readonly tipoFormulario = this.fb.nonNullable.group({
     incidencia: ['', [Validators.required, Validators.maxLength(50)]],
   });
-
-  readonly tipoEliminarAbierto = signal(false);
-  readonly tipoAEliminar = signal<TipoIncidencia | null>(null);
-  readonly tipoEliminando = signal(false);
 
   constructor() {
     this.directorio.cargar();
@@ -117,15 +93,15 @@ export class Sistemas {
   }
 
   cargar(): void {
-    this.cargando.set(true);
-    this.error.set(null);
-    this.sistemasApi
-      .listar()
-      .pipe(finalize(() => this.cargando.set(false)))
-      .subscribe({
-        next: (lista) => this.sistemasLista.set(lista),
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
-      });
+    this.listado.recargar();
+  }
+
+  buscar(valor: string): void {
+    this.listado.buscar(valor);
+  }
+
+  cambiarPorPagina(valor: number): void {
+    this.listado.cambiarPorPagina(valor);
   }
 
   campoInvalido(campo: 'sistema'): boolean {
@@ -134,20 +110,17 @@ export class Sistemas {
   }
 
   abrirCrear(): void {
-    this.editando.set(null);
     this.formulario.reset({ sistema: '' });
-    this.formAbierto.set(true);
+    this.edicion.abrir(null);
   }
 
   abrirEditar(sistema: Sistema): void {
-    this.editando.set(sistema);
     this.formulario.reset({ sistema: sistema.sistema });
-    this.formAbierto.set(true);
+    this.edicion.abrir(sistema);
   }
 
   cerrarForm(): void {
-    this.formAbierto.set(false);
-    this.editando.set(null);
+    this.edicion.cerrar();
   }
 
   guardar(): void {
@@ -162,57 +135,40 @@ export class Sistemas {
     const valores = this.formulario.getRawValue();
     const editando = this.editando();
     const peticion = { sistema: valores.sistema };
-
-    this.guardando.set(true);
     const peticion$ = editando
       ? this.sistemasApi.actualizar(editando.id, peticion)
       : this.sistemasApi.crear(peticion);
 
-    peticion$.pipe(finalize(() => this.guardando.set(false))).subscribe({
-      next: (sistema) => {
-        this.catalogos.invalidar();
-        this.notificaciones.exito(
-          'Guardado',
-          `Sistema ${sistema.sistema} ${editando ? 'actualizado' : 'creado'}.`,
-        );
-        this.cerrarForm();
-        this.cargar();
-      },
-      error: (err: unknown) => this.notificaciones.error('No se pudo guardar', mensajeDeError(err)),
+    this.edicion.guardar(peticion$, (sistema, editado) => {
+      this.catalogos.invalidar();
+      this.notificaciones.exito(
+        'Guardado',
+        `Sistema ${sistema.sistema} ${editado ? 'actualizado' : 'creado'}.`,
+      );
+      this.cerrarForm();
+      this.cargar();
     });
   }
 
   confirmarEliminar(sistema: Sistema): void {
-    this.aEliminar.set(sistema);
-    this.eliminarAbierto.set(true);
+    this.edicion.confirmarEliminar(sistema);
   }
 
   eliminar(): void {
-    const sistema = this.aEliminar();
-    if (!sistema || this.eliminando()) {
-      return;
-    }
-    this.eliminando.set(true);
-    this.sistemasApi
-      .eliminar(sistema.id)
-      .pipe(finalize(() => this.eliminando.set(false)))
-      .subscribe({
-        next: () => {
-          this.sistemasLista.update((lista) => lista.filter((item) => item.id !== sistema.id));
-          this.catalogos.invalidar();
-          this.notificaciones.exito('Eliminado', `Sistema ${sistema.sistema} eliminado.`);
-          this.eliminarAbierto.set(false);
-          this.aEliminar.set(null);
-        },
-        error: (err: unknown) => this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
-      });
+    this.edicion.eliminar(
+      (sistema) => this.sistemasApi.eliminar(sistema.id),
+      (sistema) => {
+        this.listado.quitar(sistema.id);
+        this.catalogos.invalidar();
+        this.notificaciones.exito('Eliminado', `Sistema ${sistema.sistema} eliminado.`);
+      },
+    );
   }
 
   abrirTipos(sistema: Sistema): void {
     this.sistemaTipos.set(sistema);
     this.tiposAbierto.set(true);
-    this.tipoFormAbierto.set(false);
-    this.tipoEditando.set(null);
+    this.edicionTipo.cerrar();
     this.cargarTipos();
   }
 
@@ -233,20 +189,17 @@ export class Sistemas {
   }
 
   abrirTipoCrear(): void {
-    this.tipoEditando.set(null);
     this.tipoFormulario.reset({ incidencia: '' });
-    this.tipoFormAbierto.set(true);
+    this.edicionTipo.abrir(null);
   }
 
   abrirTipoEditar(tipo: TipoIncidencia): void {
-    this.tipoEditando.set(tipo);
     this.tipoFormulario.reset({ incidencia: tipo.incidencia });
-    this.tipoFormAbierto.set(true);
+    this.edicionTipo.abrir(tipo);
   }
 
   cerrarTipoForm(): void {
-    this.tipoFormAbierto.set(false);
-    this.tipoEditando.set(null);
+    this.edicionTipo.cerrar();
   }
 
   campoTipoInvalido(): boolean {
@@ -267,50 +220,37 @@ export class Sistemas {
     const valores = this.tipoFormulario.getRawValue();
     const editando = this.tipoEditando();
     const peticion = { incidencia: valores.incidencia };
-
-    this.tipoGuardando.set(true);
     const peticion$ = editando
       ? this.sistemasApi.actualizarTipo(sistema.id, editando.id, peticion)
       : this.sistemasApi.crearTipo(sistema.id, peticion);
 
-    peticion$.pipe(finalize(() => this.tipoGuardando.set(false))).subscribe({
-      next: () => {
-        this.catalogos.invalidar();
-        this.notificaciones.exito(
-          'Guardado',
-          `Tipo de incidencia ${editando ? 'actualizado' : 'creado'}.`,
-        );
-        this.cerrarTipoForm();
-        this.cargarTipos();
-      },
-      error: (err: unknown) => this.notificaciones.error('No se pudo guardar', mensajeDeError(err)),
+    this.edicionTipo.guardar(peticion$, (_tipo, editado) => {
+      this.catalogos.invalidar();
+      this.notificaciones.exito(
+        'Guardado',
+        `Tipo de incidencia ${editado ? 'actualizado' : 'creado'}.`,
+      );
+      this.cerrarTipoForm();
+      this.cargarTipos();
     });
   }
 
   confirmarEliminarTipo(tipo: TipoIncidencia): void {
-    this.tipoAEliminar.set(tipo);
-    this.tipoEliminarAbierto.set(true);
+    this.edicionTipo.confirmarEliminar(tipo);
   }
 
   eliminarTipo(): void {
     const sistema = this.sistemaTipos();
-    const tipo = this.tipoAEliminar();
-    if (!sistema || !tipo || this.tipoEliminando()) {
+    if (!sistema) {
       return;
     }
-    this.tipoEliminando.set(true);
-    this.sistemasApi
-      .eliminarTipo(sistema.id, tipo.id)
-      .pipe(finalize(() => this.tipoEliminando.set(false)))
-      .subscribe({
-        next: () => {
-          this.tiposLista.update((lista) => lista.filter((item) => item.id !== tipo.id));
-          this.catalogos.invalidar();
-          this.notificaciones.exito('Eliminado', `Tipo de incidencia ${tipo.incidencia} eliminado.`);
-          this.tipoEliminarAbierto.set(false);
-          this.tipoAEliminar.set(null);
-        },
-        error: (err: unknown) => this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
-      });
+    this.edicionTipo.eliminar(
+      (tipo) => this.sistemasApi.eliminarTipo(sistema.id, tipo.id),
+      (tipo) => {
+        this.tiposLista.update((lista) => lista.filter((item) => item.id !== tipo.id));
+        this.catalogos.invalidar();
+        this.notificaciones.exito('Eliminado', `Tipo de incidencia ${tipo.incidencia} eliminado.`);
+      },
+    );
   }
 }

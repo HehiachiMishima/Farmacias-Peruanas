@@ -1,7 +1,6 @@
 package oracle.common.security;
 
 import java.time.Instant;
-import oracle.admin.model.Usuario;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -32,15 +31,15 @@ public class JwtService {
         this.ttlMs = ttlMs;
     }
 
-    /** Genera el token para el usuario y devuelve tambien su expiracion. */
-    public TokenGenerado generar(Usuario usuario) {
+    /** Genera el token para el usuario (id y nombre de usuario) y devuelve tambien su expiracion. */
+    public TokenGenerado generar(Long usuarioId, String usuario) {
         Instant ahora = Instant.now();
         Instant expira = ahora.plusMillis(ttlMs);
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(emisor)
-                .subject(String.valueOf(usuario.getId()))
-                .claim("usuario", usuario.getUsuario())
+                .subject(String.valueOf(usuarioId))
+                .claim("usuario", usuario)
                 .issuedAt(ahora)
                 .expiresAt(expira)
                 .build();

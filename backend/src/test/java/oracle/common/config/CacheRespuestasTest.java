@@ -2,6 +2,9 @@ package oracle.common.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -34,6 +37,34 @@ class CacheRespuestasTest {
         cache.obtener("k", () -> contador.incrementAndGet());
 
         assertThat(contador.get()).isEqualTo(2);
+    }
+
+    @Test
+    void unCalculoEnCursoNoSobreviveAInvalidarTodo() throws Exception {
+        CacheRespuestas cache = cache(true);
+        AtomicInteger datos = new AtomicInteger(1);
+        CountDownLatch dentro = new CountDownLatch(1);
+        CountDownLatch salida = new CountDownLatch(1);
+
+        CompletableFuture<Integer> lento = CompletableFuture.supplyAsync(() -> cache.obtener("k", () -> {
+            int leido = datos.get();
+            dentro.countDown();
+            try {
+                salida.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return leido;
+        }));
+        assertThat(dentro.await(5, TimeUnit.SECONDS)).isTrue();
+
+        // Commit de una incidencia mientras el dashboard se calculaba con los datos viejos.
+        datos.set(2);
+        cache.invalidarTodo();
+        salida.countDown();
+
+        assertThat(lento.get(5, TimeUnit.SECONDS)).isEqualTo(1);
+        assertThat(cache.obtener("k", datos::get)).isEqualTo(2);
     }
 
     @Test

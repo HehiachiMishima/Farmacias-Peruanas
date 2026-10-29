@@ -74,7 +74,7 @@ public class UsuarioRolService {
                             asignacion.setCreadoPor(actor);
                             asignacion.setCreadoEn(LocalDateTime.now());
                             usuarioRolRepository.save(asignacion);
-                            autorizacionCache.invalidar(usuarioId);
+                            transacciones.alConfirmar(() -> autorizacionCache.invalidar(usuarioId));
 
                             return ApiResponse.ok("Rol asignado.", UsuarioRolResponse.of(asignacion));
                         })))
@@ -95,7 +95,7 @@ public class UsuarioRolService {
                                         + "' no tiene el rol con id " + rolId + ".");
                             }
                             usuarioRolRepository.eliminarPar(usuarioId, rolId);
-                            autorizacionCache.invalidar(usuarioId);
+                            transacciones.alConfirmar(() -> autorizacionCache.invalidar(usuarioId));
                             return null;
                         })))
                 .subscribeOn(Schedulers.boundedElastic())

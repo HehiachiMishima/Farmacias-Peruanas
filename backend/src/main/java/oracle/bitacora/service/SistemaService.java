@@ -1,6 +1,6 @@
 package oracle.bitacora.service;
 
-import oracle.common.config.CacheRespuestas;
+import oracle.common.config.Transacciones;
 
 import oracle.common.support.ActorActual;
 import oracle.common.support.Auditoria;
@@ -32,40 +32,40 @@ import reactor.core.scheduler.Schedulers;
 public class SistemaService {
 
     private final CatalogoBitacora catalogo;
-    private final CacheRespuestas cacheRespuestas;
+    private final Transacciones transacciones;
 
     private final DataSistemaRepository dataSistemaRepository;
     private final DataIncidenciaRepository dataIncidenciaRepository;
 
     public SistemaService(DataSistemaRepository dataSistemaRepository,
             DataIncidenciaRepository dataIncidenciaRepository,
-            CatalogoBitacora catalogo, CacheRespuestas cacheRespuestas) {
+            CatalogoBitacora catalogo, Transacciones transacciones) {
         this.catalogo = catalogo;
-        this.cacheRespuestas = cacheRespuestas;
+        this.transacciones = transacciones;
         this.dataSistemaRepository = dataSistemaRepository;
         this.dataIncidenciaRepository = dataIncidenciaRepository;
     }
 
     public Mono<ApiResponse<List<SistemaResponse>>> listar() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.listar", () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.listar", () -> transacciones.consultar(() -> {
                         List<SistemaResponse> lista = dataSistemaRepository.findAll(Listas.limitado()).stream()
                                 .map(SistemaResponse::of).toList();
                         Listas.avisarSiCorto(log, lista.size(), "SistemaService.listar");
                         return lista;
-                    }))
+                    })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Sistemas listados.", lista));
     }
 
     public Mono<ApiResponse<SistemaResponse>> obtenerPorId(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.obtenerPorId id=" + id, () ->
-                        ApiResponse.ok("Sistema encontrado.", SistemaResponse.of(obtenerSistema(id)))))
+        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.obtenerPorId id=" + id, () -> transacciones.consultar(() ->
+                        ApiResponse.ok("Sistema encontrado.", SistemaResponse.of(obtenerSistema(id))))))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<SistemaResponse>> crear(SistemaCrearRequest peticion) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.crear sistema=" + peticion.sistema(), () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.crear sistema=" + peticion.sistema(), () -> transacciones.ejecutar(() -> {
             if (dataSistemaRepository.existsBySistema(peticion.sistema())) {
                 throw new ConflictoException("Ya existe un sistema con el nombre '" + peticion.sistema() + "'.");
             }
@@ -74,15 +74,15 @@ public class SistemaService {
             sistema.setSistema(peticion.sistema().trim());
             Auditoria.alCrear(sistema, actor);
             dataSistemaRepository.save(sistema);
-            cambioCatalogo();
+            catalogo.registrarCambio();
 
             return ApiResponse.ok("Sistema creado.", SistemaResponse.of(sistema));
-        })).subscribeOn(Schedulers.boundedElastic());
+        }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<SistemaResponse>> actualizar(Long id, SistemaActualizarRequest peticion) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.actualizar id=" + id, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.actualizar id=" + id, () -> transacciones.ejecutar(() -> {
             DataSistema sistema = obtenerSistema(id);
 
             if (peticion.sistema() != null && !peticion.sistema().trim().equals(sistema.getSistema())) {
@@ -94,13 +94,13 @@ public class SistemaService {
 
             Auditoria.alActualizar(sistema, actor);
             dataSistemaRepository.save(sistema);
-            cambioCatalogo();
+            catalogo.registrarCambio();
             return ApiResponse.ok("Sistema actualizado.", SistemaResponse.of(sistema));
-        })).subscribeOn(Schedulers.boundedElastic());
+        }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<Void>> eliminar(Long id) {
-        return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "SistemaService.eliminar id=" + id, () -> {
+        return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "SistemaService.eliminar id=" + id, () -> transacciones.ejecutar(() -> {
                     DataSistema sistema = obtenerSistema(id);
                     long tipos = dataIncidenciaRepository.countByIdDataSistema(id);
                     long incidencias = dataSistemaRepository.contarIncidencias(id);
@@ -111,19 +111,19 @@ public class SistemaService {
                                         + incidencias + " incidencia(s) registrada(s).");
                     }
                     dataSistemaRepository.delete(sistema);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
                     return null;
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(Mono.fromSupplier(() -> ApiResponse.<Void>ok("Sistema eliminado.", null)));
     }
 
     public Mono<ApiResponse<List<TipoIncidenciaResponse>>> tiposDe(Long sistemaId) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.tiposDe sistemaId=" + sistemaId, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.tiposDe sistemaId=" + sistemaId, () -> transacciones.consultar(() -> {
                     obtenerSistema(sistemaId);
                     return dataIncidenciaRepository.findByIdDataSistemaOrderById(sistemaId).stream()
                             .map(TipoIncidenciaResponse::of).toList();
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Tipos de incidencia del sistema.", lista));
     }
@@ -131,7 +131,7 @@ public class SistemaService {
     public Mono<ApiResponse<TipoIncidenciaResponse>> crearTipo(Long sistemaId, TipoIncidenciaCrearRequest peticion) {
         Long actor = ActorActual.id();
         return Mono.fromCallable(() -> Trazas.medir(log,
-                "SistemaService.crearTipo sistemaId=" + sistemaId + " incidencia=" + peticion.incidencia(), () -> {
+                "SistemaService.crearTipo sistemaId=" + sistemaId + " incidencia=" + peticion.incidencia(), () -> transacciones.ejecutar(() -> {
                     obtenerSistema(sistemaId);
                     if (dataIncidenciaRepository.existsByIdDataSistemaAndIncidencia(sistemaId, peticion.incidencia())) {
                         throw new ConflictoException(
@@ -143,16 +143,16 @@ public class SistemaService {
                     tipo.setIncidencia(peticion.incidencia().trim());
                     Auditoria.alCrear(tipo, actor);
                     dataIncidenciaRepository.save(tipo);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
 
                     return ApiResponse.ok("Tipo de incidencia creado.", TipoIncidenciaResponse.of(tipo));
-                })).subscribeOn(Schedulers.boundedElastic());
+                }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<TipoIncidenciaResponse>> actualizarTipo(Long sistemaId, Long tipoId,
             TipoIncidenciaActualizarRequest peticion) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.actualizarTipo tipoId=" + tipoId, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.actualizarTipo tipoId=" + tipoId, () -> transacciones.ejecutar(() -> {
             DataIncidencia tipo = obtenerTipo(sistemaId, tipoId);
 
             if (peticion.incidencia() != null && !peticion.incidencia().trim().equals(tipo.getIncidencia())) {
@@ -166,13 +166,13 @@ public class SistemaService {
 
             Auditoria.alActualizar(tipo, actor);
             dataIncidenciaRepository.save(tipo);
-            cambioCatalogo();
+            catalogo.registrarCambio();
             return ApiResponse.ok("Tipo de incidencia actualizado.", TipoIncidenciaResponse.of(tipo));
-        })).subscribeOn(Schedulers.boundedElastic());
+        }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<Void>> eliminarTipo(Long sistemaId, Long tipoId) {
-        return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "SistemaService.eliminarTipo tipoId=" + tipoId, () -> {
+        return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "SistemaService.eliminarTipo tipoId=" + tipoId, () -> transacciones.ejecutar(() -> {
                     DataIncidencia tipo = obtenerTipo(sistemaId, tipoId);
                     long incidencias = dataIncidenciaRepository.contarIncidencias(tipoId);
                     if (incidencias > 0) {
@@ -181,9 +181,9 @@ public class SistemaService {
                                         + incidencias + " incidencia(s) registrada(s).");
                     }
                     dataIncidenciaRepository.delete(tipo);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
                     return null;
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(Mono.fromSupplier(() -> ApiResponse.<Void>ok("Tipo de incidencia eliminado.", null)));
     }
@@ -202,11 +202,5 @@ public class SistemaService {
                     "El tipo de incidencia con id " + tipoId + " no pertenece al sistema con id " + sistemaId + ".");
         }
         return tipo;
-    }
-
-    /** Un cambio de catalogo invalida los nombres cacheados y los agregados del dashboard. */
-    private void cambioCatalogo() {
-        catalogo.invalidar();
-        cacheRespuestas.invalidarTodo();
     }
 }

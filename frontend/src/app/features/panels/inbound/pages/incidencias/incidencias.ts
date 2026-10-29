@@ -1,5 +1,12 @@
 import { DatePipe, formatDate } from '@angular/common';
-import { Component, LOCALE_ID, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  LOCALE_ID,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Subject, debounceTime, finalize } from 'rxjs';
@@ -7,14 +14,16 @@ import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
 import { exportarCsv } from '../../../../../core/utils/csv.util';
+import { valorTexto } from '../../../../../core/utils/evento.util';
+import { hoy } from '../../../../../core/utils/fecha.util';
 import {
   IncidenciaInbound,
   IncidenciaInboundCrearRequest,
   IncidenciaInboundFiltros,
-} from '../../../../../core/models';
+} from '../../data/inbound.model';
 import { DirectorioUsuarios } from '../../../../../core/services/directorio-usuarios';
-import { InboundCatalogos } from '../../../../../core/services/inbound-catalogos';
-import { InboundIncidenciasApi } from '../../../../../core/services/inbound-incidencias.api';
+import { InboundCatalogos } from '../../state/inbound-catalogos';
+import { InboundIncidenciasApi } from '../../data/inbound-incidencias.api';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
 import { ColumnasRedimensionables } from '../../../../../shared/directives/columnas-redimensionables.directive';
@@ -22,18 +31,19 @@ import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
-import { ChipFiltro, FiltrosActivos, fechaChip } from '../../../../../shared/ui/panel-filtros/filtros-activos';
+import {
+  EstadoFiltros,
+  filtroCatalogo,
+  filtroFecha,
+} from '../../../../../shared/ui/panel-filtros/estado-filtros';
+import { FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
 
 type CampoFormulario =
-  | 'ordenCompra'
-  | 'idDataProveedor'
-  | 'idDataIncidenciaInbound'
-  | 'skuProducto'
-  | 'nUnidades';
+  'ordenCompra' | 'idDataProveedor' | 'idDataIncidenciaInbound' | 'skuProducto' | 'nUnidades';
 
 const CABECERAS_EXPORT = [
   'Orden de compra',
@@ -49,7 +59,22 @@ const CABECERAS_EXPORT = [
 
 @Component({
   selector: 'app-inbound-incidencias',
-  imports: [ReactiveFormsModule, DatePipe, ActorLabelPipe, Icon, Modal, EmptyState, HasPermiso, ColumnasRedimensionables, Paginador, PanelFiltros, SelectBuscable, FiltrosActivos, RangoRapido],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    ReactiveFormsModule,
+    DatePipe,
+    ActorLabelPipe,
+    Icon,
+    Modal,
+    EmptyState,
+    HasPermiso,
+    ColumnasRedimensionables,
+    Paginador,
+    PanelFiltros,
+    SelectBuscable,
+    FiltrosActivos,
+    RangoRapido,
+  ],
   templateUrl: './incidencias.html',
   styleUrl: './incidencias.scss',
 })
@@ -63,55 +88,37 @@ export class InboundIncidencias {
 
   readonly permisos = PERMISOS;
 
-
-
   readonly proveedores = this.catalogos.proveedores;
   readonly tipos = this.catalogos.tipos;
 
-  readonly opcionesProveedor = computed(() => this.proveedores().map((p) => ({ id: p.id, etiqueta: p.proveedor })));
-  readonly opcionesTipo = computed(() => this.tipos().map((t) => ({ id: t.id, etiqueta: t.incidenciaInbound })));
+  readonly opcionesProveedor = computed(() =>
+    this.proveedores().map((p) => ({ id: p.id, etiqueta: p.proveedor })),
+  );
+  readonly opcionesTipo = computed(() =>
+    this.tipos().map((t) => ({ id: t.id, etiqueta: t.incidenciaInbound })),
+  );
 
   readonly filtroBusqueda = signal('');
-  readonly filtroProveedor = signal<number | null>(null);
-  readonly filtroTipo = signal<number | null>(null);
-  readonly filtroDesde = signal('');
-  readonly filtroHasta = signal('');
-  readonly filtrosAbierto = signal(false);
+  readonly panelFiltros = new EstadoFiltros({
+    proveedor: filtroCatalogo('Proveedor', 'truck', this.proveedores, (p) => p.proveedor),
+    tipo: filtroCatalogo('Tipo', 'incidencias', this.tipos, (t) => t.incidenciaInbound),
+    desde: filtroFecha('Desde'),
+    hasta: filtroFecha('Hasta'),
+  });
+  readonly filtroProveedor = this.panelFiltros.valores.proveedor;
+  readonly filtroTipo = this.panelFiltros.valores.tipo;
+  readonly filtroDesde = this.panelFiltros.valores.desde;
+  readonly filtroHasta = this.panelFiltros.valores.hasta;
+  readonly filtrosAbierto = this.panelFiltros.abierto;
+  /** Filtros del panel aplicados, como chips removibles. */
+  readonly chips = this.panelFiltros.chips;
+  readonly filtrosActivos = this.panelFiltros.activos;
 
   private readonly busqueda$ = new Subject<string>();
 
-  readonly filtrosActivos = computed(() => {
-    let total = 0;
-    if (this.filtroProveedor() !== null) total++;
-    if (this.filtroTipo() !== null) total++;
-    if (this.filtroDesde()) total++;
-    if (this.filtroHasta()) total++;
-    return total;
-  });
-
-  /** Filtros del panel aplicados, como chips removibles. */
-  readonly chips = computed<ChipFiltro[]>(() => {
-    const chips: ChipFiltro[] = [];
-    const proveedor = this.filtroProveedor();
-    if (proveedor !== null) {
-      const nombre = this.proveedores().find((p) => p.id === proveedor)?.proveedor ?? `#${proveedor}`;
-      chips.push({ clave: 'proveedor', etiqueta: 'Proveedor', valor: nombre, icono: 'truck' });
-    }
-    const tipo = this.filtroTipo();
-    if (tipo !== null) {
-      const nombre = this.tipos().find((t) => t.id === tipo)?.incidenciaInbound ?? `#${tipo}`;
-      chips.push({ clave: 'tipo', etiqueta: 'Tipo', valor: nombre, icono: 'incidencias' });
-    }
-    if (this.filtroDesde()) {
-      chips.push({ clave: 'desde', etiqueta: 'Desde', valor: fechaChip(this.filtroDesde()), icono: 'calendario' });
-    }
-    if (this.filtroHasta()) {
-      chips.push({ clave: 'hasta', etiqueta: 'Hasta', valor: fechaChip(this.filtroHasta()), icono: 'calendario' });
-    }
-    return chips;
-  });
-
-  readonly hayFiltros = computed(() => this.filtrosActivos() > 0 || this.filtroBusqueda().trim() !== '');
+  readonly hayFiltros = computed(
+    () => this.filtrosActivos() > 0 || this.filtroBusqueda().trim() !== '',
+  );
 
   readonly pagina = signal(1);
   readonly porPagina = signal(10);
@@ -202,16 +209,21 @@ export class InboundIncidencias {
             i.actualizadoEn ? formatDate(i.actualizadoEn, 'dd/MM/yyyy HH:mm', this.locale) : '—',
             this.directorio.etiqueta(i.actualizadoPor),
           ]);
-          exportarCsv(`incidencias_inbound_${this.hoy()}.csv`, CABECERAS_EXPORT, filas);
+          exportarCsv(`incidencias_inbound_${hoy()}.csv`, CABECERAS_EXPORT, filas);
           this.notificaciones.exito('Exportado', `Se exportaron ${filas.length} incidencias.`);
         },
-        error: (err: unknown) => this.notificaciones.error('No se pudo exportar', mensajeDeError(err)),
+        error: (err: unknown) =>
+          this.notificaciones.error('No se pudo exportar', mensajeDeError(err)),
       });
   }
 
-  buscar(valor: string): void { this.busqueda$.next(valor); }
+  buscar(valor: string): void {
+    this.busqueda$.next(valor);
+  }
 
-  alternarFiltros(): void { this.filtrosAbierto.update((a) => !a); }
+  alternarFiltros(): void {
+    this.panelFiltros.alternar();
+  }
 
   setFiltroProveedor(id: number | null): void {
     this.filtroProveedor.set(id);
@@ -224,20 +236,17 @@ export class InboundIncidencias {
   }
 
   setFiltroDesde(evento: Event): void {
-    this.filtroDesde.set((evento.target as HTMLInputElement).value);
+    this.filtroDesde.set(valorTexto(evento));
     this.cargarDesde(1);
   }
 
   setFiltroHasta(evento: Event): void {
-    this.filtroHasta.set((evento.target as HTMLInputElement).value);
+    this.filtroHasta.set(valorTexto(evento));
     this.cargarDesde(1);
   }
 
   quitarFiltro(clave: string): void {
-    if (clave === 'proveedor') this.filtroProveedor.set(null);
-    if (clave === 'tipo') this.filtroTipo.set(null);
-    if (clave === 'desde') this.filtroDesde.set('');
-    if (clave === 'hasta') this.filtroHasta.set('');
+    this.panelFiltros.quitar(clave);
     this.cargarDesde(1);
   }
 
@@ -249,15 +258,17 @@ export class InboundIncidencias {
 
   limpiarFiltros(): void {
     this.filtroBusqueda.set('');
-    this.filtroProveedor.set(null);
-    this.filtroTipo.set(null);
-    this.filtroDesde.set('');
-    this.filtroHasta.set('');
+    this.panelFiltros.limpiar();
     this.cargarDesde(1);
   }
 
-  cambiarPorPagina(valor: number): void { this.porPagina.set(valor); this.cargarDesde(1); }
-  cambiarPagina(pagina: number): void { this.cargarDesde(pagina); }
+  cambiarPorPagina(valor: number): void {
+    this.porPagina.set(valor);
+    this.cargarDesde(1);
+  }
+  cambiarPagina(pagina: number): void {
+    this.cargarDesde(pagina);
+  }
 
   campoInvalido(campo: CampoFormulario): boolean {
     const control = this.formulario.controls[campo];
@@ -288,11 +299,17 @@ export class InboundIncidencias {
     this.formAbierto.set(true);
   }
 
-  cerrarForm(): void { this.formAbierto.set(false); this.editando.set(null); }
+  cerrarForm(): void {
+    this.formAbierto.set(false);
+    this.editando.set(null);
+  }
 
   guardar(): void {
     if (this.guardando()) return;
-    if (this.formulario.invalid) { this.formulario.markAllAsTouched(); return; }
+    if (this.formulario.invalid) {
+      this.formulario.markAllAsTouched();
+      return;
+    }
     const v = this.formulario.getRawValue();
     const peticion: IncidenciaInboundCrearRequest = {
       ordenCompra: v.ordenCompra,
@@ -306,7 +323,10 @@ export class InboundIncidencias {
     const req$ = editando ? this.api.actualizar(editando.id, peticion) : this.api.crear(peticion);
     req$.pipe(finalize(() => this.guardando.set(false))).subscribe({
       next: (i) => {
-        this.notificaciones.exito('Guardado', `Incidencia ${i.ordenCompra} ${editando ? 'actualizada' : 'registrada'}.`);
+        this.notificaciones.exito(
+          'Guardado',
+          `Incidencia ${i.ordenCompra} ${editando ? 'actualizada' : 'registrada'}.`,
+        );
         this.cerrarForm();
         this.cargar();
       },
@@ -314,29 +334,35 @@ export class InboundIncidencias {
     });
   }
 
-  confirmarEliminar(i: IncidenciaInbound): void { this.aEliminar.set(i); this.eliminarAbierto.set(true); }
-  abrirVer(i: IncidenciaInbound): void { this.aVer.set(i); this.verAbierto.set(true); }
-  cerrarVer(): void { this.verAbierto.set(false); this.aVer.set(null); }
+  confirmarEliminar(i: IncidenciaInbound): void {
+    this.aEliminar.set(i);
+    this.eliminarAbierto.set(true);
+  }
+  abrirVer(i: IncidenciaInbound): void {
+    this.aVer.set(i);
+    this.verAbierto.set(true);
+  }
+  cerrarVer(): void {
+    this.verAbierto.set(false);
+    this.aVer.set(null);
+  }
 
   eliminar(): void {
     const i = this.aEliminar();
     if (!i || this.eliminando()) return;
     this.eliminando.set(true);
-    this.api.eliminar(i.id).pipe(finalize(() => this.eliminando.set(false))).subscribe({
-      next: () => {
-        this.notificaciones.exito('Eliminado', `Incidencia ${i.ordenCompra} eliminada.`);
-        this.eliminarAbierto.set(false);
-        this.aEliminar.set(null);
-        this.cargar();
-      },
-      error: (err: unknown) => this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
-    });
-  }
-
-  private hoy(): string {
-    const ahora = new Date();
-    const mes = `${ahora.getMonth() + 1}`.padStart(2, '0');
-    const dia = `${ahora.getDate()}`.padStart(2, '0');
-    return `${ahora.getFullYear()}-${mes}-${dia}`;
+    this.api
+      .eliminar(i.id)
+      .pipe(finalize(() => this.eliminando.set(false)))
+      .subscribe({
+        next: () => {
+          this.notificaciones.exito('Eliminado', `Incidencia ${i.ordenCompra} eliminada.`);
+          this.eliminarAbierto.set(false);
+          this.aEliminar.set(null);
+          this.cargar();
+        },
+        error: (err: unknown) =>
+          this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
+      });
   }
 }

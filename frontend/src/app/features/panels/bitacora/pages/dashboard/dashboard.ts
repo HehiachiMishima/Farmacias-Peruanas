@@ -1,12 +1,13 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { finalize } from 'rxjs';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { valorNumero, valorTexto } from '../../../../../core/utils/evento.util';
 import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
-import { mensajeDeError } from '../../../../../core/errors/error.util';
-import { AnaliticaBitacora, IncidenciaFiltros, Responsable } from '../../../../../core/models';
-import { AreasApi } from '../../../../../core/services/areas.api';
-import { BitacoraCatalogos } from '../../../../../core/services/bitacora-catalogos';
-import { IncidenciasApi } from '../../../../../core/services/incidencias.api';
-import { Notificaciones } from '../../../../../core/services/notificaciones';
+import { OpcionesDependientes } from '../../../../../core/utils/opciones-dependientes';
+import { escaparHtml } from '../../../../../core/utils/texto.util';
+import { AnaliticaBitacora } from '../../data/analitica.model';
+import { IncidenciaFiltros, Responsable } from '../../data/bitacora.model';
+import { AreasApi } from '../../data/areas.api';
+import { BitacoraCatalogos } from '../../state/bitacora-catalogos';
+import { IncidenciasApi } from '../../data/incidencias.api';
 import { BulletChart, ItemBullet } from '../../../../../shared/ui/charts/bullet-chart';
 import { ColumnChart, Columna } from '../../../../../shared/ui/charts/column-chart';
 import { duracion, entero, porcentaje, variacion } from '../../../../../shared/ui/charts/formato';
@@ -20,10 +21,14 @@ import { ItemTreemap, Treemap } from '../../../../../shared/ui/charts/treemap';
 import { ItemWaffle, WaffleChart } from '../../../../../shared/ui/charts/waffle-chart';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
-import { ChipFiltro, FiltrosActivos, fechaChip } from '../../../../../shared/ui/panel-filtros/filtros-activos';
+import {
+  EstadoFiltros,
+  filtroCatalogo,
+  filtroFecha,
+} from '../../../../../shared/ui/panel-filtros/estado-filtros';
+import { FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
-
 
 /**
  * Dashboard Bitácora: sistemas y tipos de incidencia.
@@ -34,6 +39,7 @@ import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros
  */
 @Component({
   selector: 'app-bitacora-dashboard',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     BulletChart,
     ColumnChart,
@@ -58,7 +64,6 @@ export class DashboardBitacora {
   private readonly incidenciasApi = inject(IncidenciasApi);
   private readonly catalogos = inject(BitacoraCatalogos);
   private readonly areasApi = inject(AreasApi);
-  private readonly notificaciones = inject(Notificaciones);
 
   private readonly recurso = new RecursoRemoto<AnaliticaBitacora>(() =>
     this.incidenciasApi.analitica(this.filtros()),
@@ -71,44 +76,36 @@ export class DashboardBitacora {
   readonly sistemas = this.catalogos.sistemas;
   readonly areas = this.catalogos.areas;
 
-  readonly filtroCentro = signal<number | null>(null);
-  readonly filtroSistema = signal<number | null>(null);
-  readonly filtroArea = signal<number | null>(null);
-  readonly filtroResponsable = signal<number | null>(null);
-  readonly filtroDesde = signal('');
-  readonly filtroHasta = signal('');
-  readonly responsablesFiltro = signal<Responsable[]>([]);
-  readonly cargandoResponsablesFiltro = signal(false);
-  readonly filtrosAbierto = signal(false);
+  private readonly responsablesDelFiltro = new OpcionesDependientes(
+    (areaId) => this.areasApi.responsablesDe(areaId),
+    'No se pudieron cargar los responsables',
+  );
+  readonly responsablesFiltro = this.responsablesDelFiltro.opciones;
+  readonly cargandoResponsablesFiltro = this.responsablesDelFiltro.cargando;
 
+  readonly panelFiltros = new EstadoFiltros({
+    centro: filtroCatalogo('Centro', 'centro', this.centros, (c) => c.centro),
+    sistema: filtroCatalogo('Sistema', 'sistema', this.sistemas, (s) => s.sistema),
+    area: filtroCatalogo('Área', 'area', this.areas, (a) => a.area),
+    responsable: filtroCatalogo(
+      'Responsable',
+      'responsable',
+      this.responsablesFiltro,
+      (r) => r.responsable,
+    ),
+    desde: filtroFecha('Desde'),
+    hasta: filtroFecha('Hasta'),
+  });
+  readonly filtroCentro = this.panelFiltros.valores.centro;
+  readonly filtroSistema = this.panelFiltros.valores.sistema;
+  readonly filtroArea = this.panelFiltros.valores.area;
+  readonly filtroResponsable = this.panelFiltros.valores.responsable;
+  readonly filtroDesde = this.panelFiltros.valores.desde;
+  readonly filtroHasta = this.panelFiltros.valores.hasta;
+  readonly filtrosAbierto = this.panelFiltros.abierto;
   /** Filtros del panel aplicados, como chips removibles. */
-  readonly chips = computed<ChipFiltro[]>(() => {
-    const chips: ChipFiltro[] = [];
-    const nombre = <T extends { id: number }>(lista: T[], id: number, campo: keyof T): string =>
-      String(lista.find((x) => x.id === id)?.[campo] ?? `#${id}`);
-    const centro = this.filtroCentro();
-    if (centro !== null) chips.push({ clave: 'centro', etiqueta: 'Centro', valor: nombre(this.centros(), centro, 'centro'), icono: 'centro' });
-    const sistema = this.filtroSistema();
-    if (sistema !== null) chips.push({ clave: 'sistema', etiqueta: 'Sistema', valor: nombre(this.sistemas(), sistema, 'sistema'), icono: 'sistema' });
-    const area = this.filtroArea();
-    if (area !== null) chips.push({ clave: 'area', etiqueta: 'Área', valor: nombre(this.areas(), area, 'area'), icono: 'area' });
-    const responsable = this.filtroResponsable();
-    if (responsable !== null) chips.push({ clave: 'responsable', etiqueta: 'Responsable', valor: nombre(this.responsablesFiltro(), responsable, 'responsable'), icono: 'responsable' });
-    if (this.filtroDesde()) chips.push({ clave: 'desde', etiqueta: 'Desde', valor: fechaChip(this.filtroDesde()), icono: 'calendario' });
-    if (this.filtroHasta()) chips.push({ clave: 'hasta', etiqueta: 'Hasta', valor: fechaChip(this.filtroHasta()), icono: 'calendario' });
-    return chips;
-  });
-
-  readonly filtrosActivos = computed(() => {
-    let total = 0;
-    if (this.filtroCentro() !== null) total++;
-    if (this.filtroSistema() !== null) total++;
-    if (this.filtroArea() !== null) total++;
-    if (this.filtroResponsable() !== null) total++;
-    if (this.filtroDesde()) total++;
-    if (this.filtroHasta()) total++;
-    return total;
-  });
+  readonly chips = this.panelFiltros.chips;
+  readonly filtrosActivos = this.panelFiltros.activos;
 
   // ---------------- KPIs ----------------
   readonly kpis = computed(() => this.datos()?.kpis ?? null);
@@ -174,7 +171,7 @@ export class DashboardBitacora {
         icono: 'sistema',
         color: 'var(--brand)',
         kicker: 'Sistema más crítico',
-        html: `<strong>${escapar(sistema.etiqueta)}</strong> acumula <strong>${entero(sistema.total)}</strong> incidencias (${porcentaje(sistema.total / total)}), con un tiempo medio de solución de <strong>${duracion(sistema.mttrSegundos)}</strong>.`,
+        html: `<strong>${escaparHtml(sistema.etiqueta)}</strong> acumula <strong>${entero(sistema.total)}</strong> incidencias (${porcentaje(sistema.total / total)}), con un tiempo medio de solución de <strong>${duracion(sistema.mttrSegundos)}</strong>.`,
       });
     }
     const cruce = [...d.centroSistema].sort((a, b) => b.valor - a.valor)[0];
@@ -183,7 +180,7 @@ export class DashboardBitacora {
         icono: 'centro',
         color: 'var(--accent)',
         kicker: 'Punto caliente',
-        html: `<strong>${escapar(cruce.fila)}</strong> con <strong>${escapar(cruce.columna)}</strong> es la combinación centro-sistema con más casos: <strong>${entero(cruce.valor)}</strong>.`,
+        html: `<strong>${escaparHtml(cruce.fila)}</strong> con <strong>${escaparHtml(cruce.columna)}</strong> es la combinación centro-sistema con más casos: <strong>${entero(cruce.valor)}</strong>.`,
       });
     }
     const tipo = d.tipos[0];
@@ -192,7 +189,7 @@ export class DashboardBitacora {
         icono: 'incidencias',
         color: 'var(--warning)',
         kicker: 'Incidencia más repetida',
-        html: `<strong>${escapar(tipo.tipo)}</strong> (${escapar(tipo.sistema)}) se repitió <strong>${entero(tipo.total)}</strong> veces.`,
+        html: `<strong>${escaparHtml(tipo.tipo)}</strong> (${escaparHtml(tipo.sistema)}) se repitió <strong>${entero(tipo.total)}</strong> veces.`,
       });
     }
     const hora = [...d.porHora].sort((a, b) => b.valor - a.valor)[0];
@@ -289,7 +286,9 @@ export class DashboardBitacora {
     });
   });
 
-  readonly granularidad = computed(() => (this.datos()?.granularidad === 'dia' ? 'por día' : 'por mes'));
+  readonly granularidad = computed(() =>
+    this.datos()?.granularidad === 'dia' ? 'por día' : 'por mes',
+  );
 
   constructor() {
     this.cargarCatalogos();
@@ -316,56 +315,48 @@ export class DashboardBitacora {
   }
 
   alternarFiltros(): void {
-    this.filtrosAbierto.update((abierto) => !abierto);
+    this.panelFiltros.alternar();
   }
 
   setFiltroCentro(evento: Event): void {
-    this.filtroCentro.set(this.valorNumero(evento));
+    this.filtroCentro.set(valorNumero(evento));
     this.cargar();
   }
 
   setFiltroSistema(evento: Event): void {
-    this.filtroSistema.set(this.valorNumero(evento));
+    this.filtroSistema.set(valorNumero(evento));
     this.cargar();
   }
 
   setFiltroArea(evento: Event): void {
-    const areaId = this.valorNumero(evento);
+    const areaId = valorNumero(evento);
     this.filtroArea.set(areaId);
     this.filtroResponsable.set(null);
-    this.responsablesFiltro.set([]);
-    if (areaId !== null) {
-      this.cargarResponsablesFiltro(areaId);
-    }
+    this.responsablesDelFiltro.elegir(areaId);
     this.cargar();
   }
 
   setFiltroResponsable(evento: Event): void {
-    this.filtroResponsable.set(this.valorNumero(evento));
+    this.filtroResponsable.set(valorNumero(evento));
     this.cargar();
   }
 
   setFiltroDesde(evento: Event): void {
-    this.filtroDesde.set((evento.target as HTMLInputElement).value);
+    this.filtroDesde.set(valorTexto(evento));
     this.cargar();
   }
 
   setFiltroHasta(evento: Event): void {
-    this.filtroHasta.set((evento.target as HTMLInputElement).value);
+    this.filtroHasta.set(valorTexto(evento));
     this.cargar();
   }
 
   quitarFiltro(clave: string): void {
-    if (clave === 'centro') this.filtroCentro.set(null);
-    if (clave === 'sistema') this.filtroSistema.set(null);
+    this.panelFiltros.quitar(clave);
     if (clave === 'area') {
-      this.filtroArea.set(null);
       this.filtroResponsable.set(null);
-      this.responsablesFiltro.set([]);
+      this.responsablesDelFiltro.elegir(null);
     }
-    if (clave === 'responsable') this.filtroResponsable.set(null);
-    if (clave === 'desde') this.filtroDesde.set('');
-    if (clave === 'hasta') this.filtroHasta.set('');
     this.cargar();
   }
 
@@ -376,35 +367,8 @@ export class DashboardBitacora {
   }
 
   limpiarFiltros(): void {
-    this.filtroCentro.set(null);
-    this.filtroSistema.set(null);
-    this.filtroArea.set(null);
-    this.filtroResponsable.set(null);
-    this.filtroDesde.set('');
-    this.filtroHasta.set('');
-    this.responsablesFiltro.set([]);
+    this.panelFiltros.limpiar();
+    this.responsablesDelFiltro.elegir(null);
     this.cargar();
   }
-
-  private cargarResponsablesFiltro(areaId: number): void {
-    this.cargandoResponsablesFiltro.set(true);
-    this.areasApi
-      .responsablesDe(areaId)
-      .pipe(finalize(() => this.cargandoResponsablesFiltro.set(false)))
-      .subscribe({
-        next: (lista) => this.responsablesFiltro.set(lista),
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudieron cargar los responsables', mensajeDeError(err)),
-      });
-  }
-
-  private valorNumero(evento: Event): number | null {
-    const valor = (evento.target as HTMLSelectElement).value;
-    return valor ? Number(valor) : null;
-  }
-}
-
-/** Los nombres vienen de la BD: se escapan antes de insertarlos como HTML en los hallazgos. */
-function escapar(texto: string): string {
-  return texto.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }

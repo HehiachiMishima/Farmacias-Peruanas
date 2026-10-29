@@ -1,14 +1,14 @@
-import { Component, HostListener, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  HostListener,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import {
-  Observable,
-  Subject,
-  debounceTime,
-  finalize,
-  of,
-  switchMap,
-} from 'rxjs';
+import { Observable, Subject, debounceTime, finalize, of, switchMap } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import {
@@ -16,12 +16,12 @@ import {
   ConfiguracionSimulacion,
   ConfiguracionSimulacionRequest,
   HistorialSimulacion,
-  Pagina,
   RutaSimulacion,
-} from '../../../../../core/models';
+} from '../../data/simulacion.model';
+import { Pagina } from '../../../../../core/models';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
 import { SesionStore } from '../../../../../core/services/sesion';
-import { SimulacionApi } from '../../../../../core/services/simulacion.api';
+import { SimulacionApi } from '../../data/simulacion.api';
 import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
 import { ColumnasRedimensionables } from '../../../../../shared/directives/columnas-redimensionables.directive';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
@@ -46,6 +46,7 @@ import {
 
 @Component({
   selector: 'app-simulacion-configuracion',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     HasPermiso,
     ColumnasRedimensionables,

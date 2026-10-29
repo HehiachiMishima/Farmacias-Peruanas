@@ -2,7 +2,7 @@ package oracle.inbound.service;
 
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import oracle.common.config.CacheRespuestas;
+import oracle.common.config.Transacciones;
 import oracle.common.exception.ConflictoException;
 import oracle.common.exception.RecursoNoEncontradoException;
 import oracle.common.response.ApiResponse;
@@ -11,6 +11,7 @@ import oracle.common.support.ActorActual;
 import oracle.common.support.Auditoria;
 import oracle.common.support.Filtros;
 import oracle.common.support.Listas;
+import oracle.common.support.Paginacion;
 import oracle.common.support.Trazas;
 import oracle.inbound.model.DataProveedor;
 import oracle.inbound.repository.DataProveedorRepository;
@@ -34,47 +35,42 @@ public class ProveedorService {
 
     private final DataProveedorRepository repo;
     private final CatalogoInbound catalogo;
-    private final CacheRespuestas cacheRespuestas;
+    private final Transacciones transacciones;
 
     public ProveedorService(DataProveedorRepository repo, CatalogoInbound catalogo,
-            CacheRespuestas cacheRespuestas) {
+            Transacciones transacciones) {
         this.repo = repo;
         this.catalogo = catalogo;
-        this.cacheRespuestas = cacheRespuestas;
+        this.transacciones = transacciones;
     }
 
     public Mono<ApiResponse<List<DataProveedorResponse>>> listarTodos() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "ProveedorService.listarTodos", () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "ProveedorService.listarTodos", () -> transacciones.consultar(() -> {
                     List<DataProveedorResponse> lista = repo
                             .findAll(Listas.limitado(Sort.by(Sort.Direction.ASC, "proveedor")))
                             .stream().map(this::aResponse).toList();
                     Listas.avisarSiCorto(log, lista.size(), "ProveedorService.listarTodos");
                     return lista;
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Proveedores listados.", lista));
     }
 
     public Mono<ApiResponse<PaginaResponse<DataProveedorResponse>>> listarPaginado(int pagina, int tamano,
             String texto) {
-        PageRequest pageable = PageRequest.of(Math.max(pagina, 1) - 1,
-                Math.min(Math.max(tamano, 1), MAX_TAMANO_PAGINA),
-                Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id")));
-        String termino = Filtros.normalizar(texto);
-        Specification<DataProveedor> spec = (root, query, cb) -> termino == null
-                ? cb.conjunction()
-                : cb.like(cb.lower(root.get("proveedor")), "%" + termino.toLowerCase() + "%");
-        return Mono.fromCallable(() -> Trazas.medir(log, "ProveedorService.listarPaginado", () -> {
+        PageRequest pageable = Paginacion.pagina(pagina, tamano, MAX_TAMANO_PAGINA, Paginacion.RECIENTES);
+        Specification<DataProveedor> spec = Filtros.contiene("proveedor", texto);
+        return Mono.fromCallable(() -> Trazas.medir(log, "ProveedorService.listarPaginado", () -> transacciones.consultar(() -> {
                     Page<DataProveedor> page = repo.findAll(spec, pageable);
                     return PaginaResponse.de(page, page.getContent().stream().map(this::aResponse).toList());
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(d -> ApiResponse.ok("Proveedores listados.", d));
     }
 
     public Mono<ApiResponse<DataProveedorResponse>> crear(ProveedorCrearRequest req) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "ProveedorService.crear", () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "ProveedorService.crear", () -> transacciones.ejecutar(() -> {
                     String nombre = req.proveedor().trim();
                     if (repo.existsByProveedorIgnoreCase(nombre)) {
                         throw new ConflictoException("Ya existe un proveedor con el nombre '" + nombre + "'.");
@@ -83,15 +79,15 @@ public class ProveedorService {
                     p.setProveedor(nombre);
                     Auditoria.alCrear(p, actor);
                     DataProveedor guardado = repo.save(p);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
                     return ApiResponse.ok("Proveedor creado.", aResponse(guardado));
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<DataProveedorResponse>> actualizar(Long id, ProveedorActualizarRequest req) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "ProveedorService.actualizar id=" + id, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "ProveedorService.actualizar id=" + id, () -> transacciones.ejecutar(() -> {
                     DataProveedor p = obtener(id);
                     if (req.proveedor() != null && !req.proveedor().isBlank()) {
                         String nombre = req.proveedor().trim();
@@ -102,14 +98,14 @@ public class ProveedorService {
                     }
                     Auditoria.alActualizar(p, actor);
                     DataProveedor guardado = repo.save(p);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
                     return ApiResponse.ok("Proveedor actualizado.", aResponse(guardado));
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<Void>> eliminar(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "ProveedorService.eliminar id=" + id, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "ProveedorService.eliminar id=" + id, () -> transacciones.ejecutar(() -> {
                     DataProveedor p = obtener(id);
                     long usos = repo.contarIncidencias(id);
                     if (usos > 0) {
@@ -117,9 +113,9 @@ public class ProveedorService {
                                 + "': tiene " + usos + " incidencia(s) registrada(s).");
                     }
                     repo.delete(p);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
                     return ApiResponse.<Void>ok("Proveedor eliminado.", null);
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -131,11 +127,5 @@ public class ProveedorService {
     private DataProveedorResponse aResponse(DataProveedor p) {
         return new DataProveedorResponse(p.getId(), p.getProveedor(), p.getCreadoEn(), p.getActualizadoEn(),
                 p.getCreadoPor(), p.getActualizadoPor());
-    }
-
-    /** Un cambio de catalogo invalida los nombres cacheados y los agregados del dashboard. */
-    private void cambioCatalogo() {
-        catalogo.invalidar();
-        cacheRespuestas.invalidarTodo();
     }
 }

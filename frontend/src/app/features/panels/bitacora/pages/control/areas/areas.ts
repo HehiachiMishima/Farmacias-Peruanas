@@ -1,24 +1,27 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
-import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { PERMISOS } from '../../../../../../core/config/permisos';
-import { Notificaciones } from '../../../../../../core/services/notificaciones';
-import { BitacoraCatalogos } from '../../../../../../core/services/bitacora-catalogos';
+import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { DirectorioUsuarios } from '../../../../../../core/services/directorio-usuarios';
-import { AreasApi } from '../../../../../../core/services/areas.api';
-import { Area, Responsable } from '../../../../../../core/models';
-import { HasPermiso } from '../../../../../../shared/directives/has-permiso.directive';
+import { Notificaciones } from '../../../../../../core/services/notificaciones';
+import { EdicionCrud } from '../../../../../../core/utils/edicion-crud';
+import { ListadoLocal } from '../../../../../../core/utils/listado-local';
 import { ColumnasRedimensionables } from '../../../../../../shared/directives/columnas-redimensionables.directive';
+import { HasPermiso } from '../../../../../../shared/directives/has-permiso.directive';
+import { ActorLabelPipe } from '../../../../../../shared/pipes/actor-label.pipe';
 import { EmptyState } from '../../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../../shared/ui/paginador/paginador';
-import { ActorLabelPipe } from '../../../../../../shared/pipes/actor-label.pipe';
+import { AreasApi } from '../../../data/areas.api';
+import { Area, Responsable } from '../../../data/bitacora.model';
+import { BitacoraCatalogos } from '../../../state/bitacora-catalogos';
 
 @Component({
   selector: 'app-bitacora-areas',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ReactiveFormsModule,
     DatePipe,
@@ -42,74 +45,47 @@ export class Areas {
 
   readonly permisos = PERMISOS;
 
-  readonly cargando = signal(true);
-  readonly error = signal<string | null>(null);
-  readonly areasLista = signal<Area[]>([]);
-  readonly busqueda = signal('');
-
-  readonly filtrados = computed(() => {
-    const termino = this.busqueda().trim().toLowerCase();
-    const lista = this.areasLista();
-    if (!termino) {
-      return lista;
-    }
-    return lista.filter((area) => area.area.toLowerCase().includes(termino));
-  });
-
-  readonly pagina = signal(1);
-  readonly porPagina = signal(10);
-
-  readonly totalPaginas = computed(() =>
-    Math.max(1, Math.ceil(this.filtrados().length / this.porPagina())),
+  private readonly listado = new ListadoLocal<Area>(
+    () => this.areasApi.listar(),
+    (area) => area.area,
   );
+  readonly cargando = this.listado.cargando;
+  readonly error = this.listado.error;
+  readonly busqueda = this.listado.busqueda;
+  readonly filtrados = this.listado.filtrados;
+  readonly pagina = this.listado.pagina;
+  readonly porPagina = this.listado.porPagina;
+  readonly paginaActual = this.listado.paginaActual;
+  readonly paginados = this.listado.paginados;
 
-  readonly paginaActual = computed(() =>
-    Math.min(Math.max(1, this.pagina()), this.totalPaginas()),
-  );
-
-  readonly paginados = computed(() => {
-    const inicio = (this.paginaActual() - 1) * this.porPagina();
-    return this.filtrados().slice(inicio, inicio + this.porPagina());
-  });
-
-  buscar(valor: string): void {
-    this.busqueda.set(valor);
-    this.pagina.set(1);
-  }
-
-  cambiarPorPagina(valor: number): void {
-    this.porPagina.set(valor);
-    this.pagina.set(1);
-  }
-
-  readonly formAbierto = signal(false);
-  readonly editando = signal<Area | null>(null);
-  readonly guardando = signal(false);
+  private readonly edicion = new EdicionCrud<Area>();
+  readonly formAbierto = this.edicion.formAbierto;
+  readonly editando = this.edicion.editando;
+  readonly guardando = this.edicion.guardando;
+  readonly eliminarAbierto = this.edicion.eliminarAbierto;
+  readonly aEliminar = this.edicion.aEliminar;
+  readonly eliminando = this.edicion.eliminando;
 
   readonly formulario = this.fb.nonNullable.group({
     area: ['', [Validators.required, Validators.maxLength(50)]],
   });
-
-  readonly eliminarAbierto = signal(false);
-  readonly aEliminar = signal<Area | null>(null);
-  readonly eliminando = signal(false);
 
   readonly hijosAbierto = signal(false);
   readonly areaHijos = signal<Area | null>(null);
   readonly hijosLista = signal<Responsable[]>([]);
   readonly cargandoHijos = signal(false);
 
-  readonly hijoFormAbierto = signal(false);
-  readonly hijoEditando = signal<Responsable | null>(null);
-  readonly hijoGuardando = signal(false);
+  private readonly edicionHijo = new EdicionCrud<Responsable>();
+  readonly hijoFormAbierto = this.edicionHijo.formAbierto;
+  readonly hijoEditando = this.edicionHijo.editando;
+  readonly hijoGuardando = this.edicionHijo.guardando;
+  readonly hijoEliminarAbierto = this.edicionHijo.eliminarAbierto;
+  readonly hijoAEliminar = this.edicionHijo.aEliminar;
+  readonly hijoEliminando = this.edicionHijo.eliminando;
 
   readonly hijoFormulario = this.fb.nonNullable.group({
     responsable: ['', [Validators.required, Validators.maxLength(50)]],
   });
-
-  readonly hijoEliminarAbierto = signal(false);
-  readonly hijoAEliminar = signal<Responsable | null>(null);
-  readonly hijoEliminando = signal(false);
 
   constructor() {
     this.directorio.cargar();
@@ -117,15 +93,15 @@ export class Areas {
   }
 
   cargar(): void {
-    this.cargando.set(true);
-    this.error.set(null);
-    this.areasApi
-      .listar()
-      .pipe(finalize(() => this.cargando.set(false)))
-      .subscribe({
-        next: (lista) => this.areasLista.set(lista),
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
-      });
+    this.listado.recargar();
+  }
+
+  buscar(valor: string): void {
+    this.listado.buscar(valor);
+  }
+
+  cambiarPorPagina(valor: number): void {
+    this.listado.cambiarPorPagina(valor);
   }
 
   campoInvalido(campo: 'area'): boolean {
@@ -134,20 +110,17 @@ export class Areas {
   }
 
   abrirCrear(): void {
-    this.editando.set(null);
     this.formulario.reset({ area: '' });
-    this.formAbierto.set(true);
+    this.edicion.abrir(null);
   }
 
   abrirEditar(area: Area): void {
-    this.editando.set(area);
     this.formulario.reset({ area: area.area });
-    this.formAbierto.set(true);
+    this.edicion.abrir(area);
   }
 
   cerrarForm(): void {
-    this.formAbierto.set(false);
-    this.editando.set(null);
+    this.edicion.cerrar();
   }
 
   guardar(): void {
@@ -162,57 +135,40 @@ export class Areas {
     const valores = this.formulario.getRawValue();
     const editando = this.editando();
     const peticion = { area: valores.area };
-
-    this.guardando.set(true);
     const peticion$ = editando
       ? this.areasApi.actualizar(editando.id, peticion)
       : this.areasApi.crear(peticion);
 
-    peticion$.pipe(finalize(() => this.guardando.set(false))).subscribe({
-      next: (area) => {
-        this.catalogos.invalidar();
-        this.notificaciones.exito(
-          'Guardado',
-          `Área ${area.area} ${editando ? 'actualizada' : 'creada'}.`,
-        );
-        this.cerrarForm();
-        this.cargar();
-      },
-      error: (err: unknown) => this.notificaciones.error('No se pudo guardar', mensajeDeError(err)),
+    this.edicion.guardar(peticion$, (area, editado) => {
+      this.catalogos.invalidar();
+      this.notificaciones.exito(
+        'Guardado',
+        `Área ${area.area} ${editado ? 'actualizada' : 'creada'}.`,
+      );
+      this.cerrarForm();
+      this.cargar();
     });
   }
 
   confirmarEliminar(area: Area): void {
-    this.aEliminar.set(area);
-    this.eliminarAbierto.set(true);
+    this.edicion.confirmarEliminar(area);
   }
 
   eliminar(): void {
-    const area = this.aEliminar();
-    if (!area || this.eliminando()) {
-      return;
-    }
-    this.eliminando.set(true);
-    this.areasApi
-      .eliminar(area.id)
-      .pipe(finalize(() => this.eliminando.set(false)))
-      .subscribe({
-        next: () => {
-          this.areasLista.update((lista) => lista.filter((item) => item.id !== area.id));
-          this.catalogos.invalidar();
-          this.notificaciones.exito('Eliminado', `Área ${area.area} eliminada.`);
-          this.eliminarAbierto.set(false);
-          this.aEliminar.set(null);
-        },
-        error: (err: unknown) => this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
-      });
+    this.edicion.eliminar(
+      (area) => this.areasApi.eliminar(area.id),
+      (area) => {
+        this.listado.quitar(area.id);
+        this.catalogos.invalidar();
+        this.notificaciones.exito('Eliminado', `Área ${area.area} eliminada.`);
+      },
+    );
   }
 
   abrirHijos(area: Area): void {
     this.areaHijos.set(area);
     this.hijosAbierto.set(true);
-    this.hijoFormAbierto.set(false);
-    this.hijoEditando.set(null);
+    this.edicionHijo.cerrar();
     this.cargarHijos();
   }
 
@@ -233,20 +189,17 @@ export class Areas {
   }
 
   abrirHijoCrear(): void {
-    this.hijoEditando.set(null);
     this.hijoFormulario.reset({ responsable: '' });
-    this.hijoFormAbierto.set(true);
+    this.edicionHijo.abrir(null);
   }
 
   abrirHijoEditar(responsable: Responsable): void {
-    this.hijoEditando.set(responsable);
     this.hijoFormulario.reset({ responsable: responsable.responsable });
-    this.hijoFormAbierto.set(true);
+    this.edicionHijo.abrir(responsable);
   }
 
   cerrarHijoForm(): void {
-    this.hijoFormAbierto.set(false);
-    this.hijoEditando.set(null);
+    this.edicionHijo.cerrar();
   }
 
   campoHijoInvalido(): boolean {
@@ -267,47 +220,34 @@ export class Areas {
     const valores = this.hijoFormulario.getRawValue();
     const editando = this.hijoEditando();
     const peticion = { responsable: valores.responsable };
-
-    this.hijoGuardando.set(true);
     const peticion$ = editando
       ? this.areasApi.actualizarResponsable(area.id, editando.id, peticion)
       : this.areasApi.crearResponsable(area.id, peticion);
 
-    peticion$.pipe(finalize(() => this.hijoGuardando.set(false))).subscribe({
-      next: () => {
-        this.catalogos.invalidar();
-        this.notificaciones.exito('Guardado', `Responsable ${editando ? 'actualizado' : 'creado'}.`);
-        this.cerrarHijoForm();
-        this.cargarHijos();
-      },
-      error: (err: unknown) => this.notificaciones.error('No se pudo guardar', mensajeDeError(err)),
+    this.edicionHijo.guardar(peticion$, (_responsable, editado) => {
+      this.catalogos.invalidar();
+      this.notificaciones.exito('Guardado', `Responsable ${editado ? 'actualizado' : 'creado'}.`);
+      this.cerrarHijoForm();
+      this.cargarHijos();
     });
   }
 
   confirmarEliminarHijo(responsable: Responsable): void {
-    this.hijoAEliminar.set(responsable);
-    this.hijoEliminarAbierto.set(true);
+    this.edicionHijo.confirmarEliminar(responsable);
   }
 
   eliminarHijo(): void {
     const area = this.areaHijos();
-    const responsable = this.hijoAEliminar();
-    if (!area || !responsable || this.hijoEliminando()) {
+    if (!area) {
       return;
     }
-    this.hijoEliminando.set(true);
-    this.areasApi
-      .eliminarResponsable(area.id, responsable.id)
-      .pipe(finalize(() => this.hijoEliminando.set(false)))
-      .subscribe({
-        next: () => {
-          this.hijosLista.update((lista) => lista.filter((item) => item.id !== responsable.id));
-          this.catalogos.invalidar();
-          this.notificaciones.exito('Eliminado', `Responsable ${responsable.responsable} eliminado.`);
-          this.hijoEliminarAbierto.set(false);
-          this.hijoAEliminar.set(null);
-        },
-        error: (err: unknown) => this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
-      });
+    this.edicionHijo.eliminar(
+      (responsable) => this.areasApi.eliminarResponsable(area.id, responsable.id),
+      (responsable) => {
+        this.hijosLista.update((lista) => lista.filter((item) => item.id !== responsable.id));
+        this.catalogos.invalidar();
+        this.notificaciones.exito('Eliminado', `Responsable ${responsable.responsable} eliminado.`);
+      },
+    );
   }
 }

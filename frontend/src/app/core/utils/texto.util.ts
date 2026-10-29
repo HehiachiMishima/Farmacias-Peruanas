@@ -11,3 +11,11 @@ export function contieneTexto(
   const buscado = normalizarTexto(termino.trim());
   return !buscado || campos.some((campo) => normalizarTexto(campo).includes(buscado));
 }
+
+/** Escapa un texto (p. ej. nombres de la BD) antes de insertarlo como HTML. */
+export function escaparHtml(texto: string): string {
+  return texto.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  );
+}

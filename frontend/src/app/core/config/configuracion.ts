@@ -9,6 +9,7 @@ export const CONFIG = {
     sesion: 'oracle.sesion',
     tema: 'oracle.tema',
     intro: 'oracle.intro',
+    sidebar: 'oracle.sidebar',
   },
   rutas: {
     intro: '/intro',

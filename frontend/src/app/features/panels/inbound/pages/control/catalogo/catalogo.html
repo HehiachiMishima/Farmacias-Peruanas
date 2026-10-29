@@ -1,0 +1,182 @@
+<div class="toolbar">
+  <div class="ui-search toolbar__grow">
+    <ui-icon name="search" [size]="18" />
+    <input
+      type="search"
+      class="ui-input"
+      placeholder="Buscar {{ catalogo.singular }}…"
+      [value]="busqueda()"
+      (input)="buscar($any($event.target).value)"
+    />
+  </div>
+  <button
+    type="button"
+    class="ui-btn ui-btn--secondary ui-btn--sm"
+    (click)="cargar()"
+    [disabled]="cargando()"
+  >
+    <ui-icon name="refresh" [size]="16" /> Actualizar
+  </button>
+  <button
+    *hasPermiso="permisos.CREAR_CONTROL_INBOUND"
+    type="button"
+    class="ui-btn ui-btn--primary"
+    (click)="abrir(null)"
+  >
+    <ui-icon name="plus" [size]="18" /> Nuevo {{ catalogo.singular }}
+  </button>
+</div>
+
+<div class="table-card" [class.table-card--refrescando]="refrescando()">
+  @if (cargaInicial()) {
+    <div class="loading"><span class="ui-spinner"></span> Cargando {{ catalogo.plural }}…</div>
+  } @else if (error()) {
+    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!">
+      <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()">
+        <ui-icon name="refresh" [size]="16" /> Reintentar
+      </button>
+    </ui-empty>
+  } @else if (items().length === 0) {
+    <ui-empty
+      [icono]="catalogo.icono"
+      [titulo]="busqueda() ? 'Sin resultados' : 'Aún no hay ' + catalogo.plural"
+      [mensaje]="
+        busqueda()
+          ? 'Ningún ' + catalogo.singular + ' coincide.'
+          : 'Crea el primer ' + catalogo.singular + ' del catálogo.'
+      "
+    ></ui-empty>
+  } @else {
+    <div class="ui-table-wrap">
+      <table class="ui-table" appColumnasRedimensionables>
+        <thead>
+          <tr>
+            <th>{{ catalogo.titulo }}</th>
+            <th>Creado por</th>
+            <th>Actualizado por</th>
+            <th>Creado</th>
+            <th>Actualizado</th>
+            <th class="col-actions">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of items(); track item.id) {
+            <tr>
+              <td>
+                <span class="ui-table__primary">{{ catalogo.nombre(item) }}</span>
+              </td>
+              <td class="u-muted">{{ item.creadoPor | actorLabel }}</td>
+              <td class="u-muted">{{ item.actualizadoPor | actorLabel }}</td>
+              <td class="u-muted">{{ item.creadoEn | date: 'dd/MM/yyyy HH:mm' }}</td>
+              <td class="u-muted">
+                {{ item.actualizadoEn ? (item.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—' }}
+              </td>
+              <td>
+                <div class="row-actions">
+                  <button
+                    *hasPermiso="permisos.MODIFICAR_CONTROL_INBOUND"
+                    type="button"
+                    class="ui-icon-btn"
+                    title="Editar"
+                    (click)="abrir(item)"
+                  >
+                    <ui-icon name="edit" [size]="18" />
+                  </button>
+                  <button
+                    *hasPermiso="permisos.ELIMINAR_CONTROL_INBOUND"
+                    type="button"
+                    class="ui-icon-btn ui-icon-btn--danger"
+                    title="Eliminar"
+                    (click)="edicion.confirmarEliminar(item)"
+                  >
+                    <ui-icon name="trash" [size]="18" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <ui-paginador
+      [pagina]="paginaActual()"
+      [total]="total()"
+      [porPagina]="porPagina()"
+      (paginaCambia)="cambiarPagina($event)"
+      (porPaginaCambia)="cambiarPorPagina($event)"
+    />
+  }
+</div>
+
+<ui-modal
+  [abierto]="edicion.formAbierto()"
+  [titulo]="(edicion.editando() ? 'Editar ' : 'Nuevo ') + catalogo.singular"
+  (cerrar)="edicion.cerrar()"
+>
+  <form class="grid-form" [formGroup]="formulario" (ngSubmit)="guardar()" novalidate>
+    <div class="ui-field" style="grid-column: 1 / -1">
+      <label class="ui-label">Nombre <span class="ui-required">*</span></label>
+      <input
+        class="ui-input"
+        [class.ui-input--invalid]="campoInvalido()"
+        formControlName="nombre"
+        [placeholder]="catalogo.placeholder"
+      />
+      @if (campoInvalido()) {
+        <span class="ui-error">El nombre es obligatorio.</span>
+      }
+    </div>
+  </form>
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--ghost" (click)="edicion.cerrar()">Cancelar</button>
+    <button
+      type="button"
+      class="ui-btn ui-btn--primary"
+      (click)="guardar()"
+      [disabled]="edicion.guardando()"
+    >
+      @if (edicion.guardando()) {
+        <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+      }
+      {{ edicion.editando() ? 'Guardar cambios' : 'Crear ' + catalogo.singular }}
+    </button>
+  </div>
+</ui-modal>
+
+<ui-modal
+  [abierto]="edicion.eliminarAbierto()"
+  ancho="sm"
+  [compacto]="true"
+  [titulo]="'Eliminar ' + catalogo.singular"
+  (cerrar)="edicion.eliminarAbierto.set(false)"
+>
+  @if (edicion.aEliminar(); as item) {
+    <div class="confirm">
+      <span class="confirm__icon"><ui-icon name="trash" [size]="22" /></span>
+      <div class="confirm__text">
+        <p class="confirm__title">
+          ¿Eliminar el {{ catalogo.singular }}
+          <span class="u-mono">{{ catalogo.nombre(item) }}</span
+          >?
+        </p>
+        <p class="confirm__desc">Esta acción no se puede deshacer.</p>
+      </div>
+    </div>
+  }
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--ghost" (click)="edicion.eliminarAbierto.set(false)">
+      Cancelar
+    </button>
+    <button
+      type="button"
+      class="ui-btn ui-btn--danger"
+      (click)="eliminar()"
+      [disabled]="edicion.eliminando()"
+    >
+      @if (edicion.eliminando()) {
+        <span class="ui-spinner" style="width: 16px; height: 16px"></span>
+      }
+      Eliminar
+    </button>
+  </div>
+</ui-modal>

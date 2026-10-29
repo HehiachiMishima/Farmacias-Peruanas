@@ -7,6 +7,7 @@ import oracle.common.support.EjecutorAnalitica;
 import oracle.common.support.ActorActual;
 import oracle.common.support.Auditoria;
 import oracle.common.support.ExportacionJson;
+import oracle.common.support.Paginacion;
 import oracle.common.support.Trazas;
 
 import jakarta.persistence.criteria.Predicate;
@@ -18,6 +19,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import oracle.common.exception.ConflictoException;
 import oracle.common.exception.RecursoNoEncontradoException;
 import oracle.bitacora.model.DataIncidencia;
@@ -40,8 +42,6 @@ import oracle.common.response.PaginaResponse;
 import oracle.common.config.CacheRespuestas;
 import oracle.common.config.Transacciones;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
@@ -64,8 +64,6 @@ public class IncidenciaService {
 
     /** Tope de filas por página que acepta el servidor. */
     private static final int MAX_TAMANO_PAGINA = 200;
-    /** Filas por consulta al exportar en flujo: acota la memoria de la JVM. */
-    private static final int TAMANO_LOTE_EXPORT = 1_000;
 
     private final IncidenciaRepository incidenciaRepository;
     private final DataCentroRepository dataCentroRepository;
@@ -111,12 +109,9 @@ public class IncidenciaService {
 
     public Mono<ApiResponse<PaginaResponse<IncidenciaResponse>>> listar(FiltroIncidencia filtro, int pagina,
             int tamano) {
-        int paginaSegura = Math.max(1, pagina);
-        int tamanoSeguro = Math.min(Math.max(1, tamano), MAX_TAMANO_PAGINA);
-        Sort orden = Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id"));
         return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.listar", () -> {
-                    Page<Incidencia> resultado = incidenciaRepository.findAll(
-                            especificacion(filtro), PageRequest.of(paginaSegura - 1, tamanoSeguro, orden));
+                    Page<Incidencia> resultado = incidenciaRepository.findAll(especificacion(filtro),
+                            Paginacion.pagina(pagina, tamano, MAX_TAMANO_PAGINA, Paginacion.RECIENTES));
                     List<IncidenciaResponse> contenido = resolverLista(resultado.getContent());
                     return ApiResponse.ok("Incidencias listadas.",
                             PaginaResponse.de(resultado, contenido));
@@ -126,7 +121,7 @@ public class IncidenciaService {
 
     /**
      * Exporta el filtro completo escribiendo el JSON directamente al flujo de
-     * respuesta: lee por lotes de {@value #TAMANO_LOTE_EXPORT} filas y nunca
+     * respuesta: lee por lotes de {@value ExportacionJson#TAMANO_LOTE} filas y nunca
      * materializa la lista completa, así el pico de memoria queda acotado
      * aunque el filtro devuelva cientos de miles de filas.
      *
@@ -135,37 +130,9 @@ public class IncidenciaService {
      * datos, timestamp), así el contrato con el frontend no cambia.
      */
     public StreamingResponseBody exportarEnFlujo(FiltroIncidencia filtro) {
-        Sort orden = Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id"));
-        return salida -> {
-            try {
-                ExportacionJson.escribir(json, salida, "Incidencias exportadas.", gen -> {
-                    Map<Long, String> centros = catalogo.centros();
-                    Map<Long, String> sistemas = catalogo.sistemas();
-                    Map<Long, String> tipos = catalogo.tipos();
-                    Map<Long, String> areas = catalogo.areas();
-                    Map<Long, String> responsables = catalogo.responsables();
-                    int pagina = 0;
-                    while (true) {
-                        Page<Incidencia> lote = incidenciaRepository.findAll(especificacion(filtro),
-                                PageRequest.of(pagina, TAMANO_LOTE_EXPORT, orden));
-                        for (Incidencia incidencia : lote.getContent()) {
-                            json.writeValue(gen, IncidenciaResponse.of(incidencia,
-                                    centros.get(incidencia.getIdDataCentro()),
-                                    sistemas.get(incidencia.getIdDataSistema()),
-                                    tipos.get(incidencia.getIdDataIncidencia()),
-                                    areas.get(incidencia.getIdDataArea()),
-                                    responsables.get(incidencia.getIdDataResponsable())));
-                        }
-                        if (lote.getContent().size() < TAMANO_LOTE_EXPORT) {
-                            break;
-                        }
-                        pagina++;
-                    }
-                });
-            } catch (Exception e) {
-                log.error("Exportación de incidencias interrumpida: {}", e.getMessage(), e);
-            }
-        };
+        Specification<Incidencia> spec = especificacion(filtro);
+        return ExportacionJson.enLotes(json, "Incidencias exportadas.", Paginacion.RECIENTES,
+                pageable -> incidenciaRepository.findAll(spec, pageable), this::conversor, log, "incidencias");
     }
 
     public Mono<ApiResponse<EstadisticaResponse>> estadisticas(FiltroIncidencia filtro) {
@@ -190,24 +157,18 @@ public class IncidenciaService {
 
     private Mono<AnaliticaBitacoraResponse> calcularAnalitica(FiltroIncidencia filtro) {
         return Mono.zip(
-                r -> new AnaliticaBitacoraResponse(
-                        (AnaliticaBitacoraResponse.Kpis) r[0],
-                        lista(r[1]), lista(r[2]), lista(r[3]), lista(r[4]), lista(r[5]), lista(r[6]),
+                        ejecutor.consulta(() -> analiticaRepository.kpis(filtro)),
+                        ejecutor.consulta(() -> analiticaRepository.porSistema(filtro)),
+                        ejecutor.consulta(() -> analiticaRepository.porCentro(filtro)),
+                        ejecutor.consulta(() -> analiticaRepository.porArea(filtro)),
+                        ejecutor.consulta(() -> analiticaRepository.porTipo(filtro)),
+                        ejecutor.consulta(() -> analiticaRepository.centroPorSistema(filtro)),
+                        ejecutor.consulta(() -> analiticaRepository.tendencia(filtro)),
+                        ejecutor.consulta(() -> analiticaRepository.porHora(filtro)))
+                .map(r -> new AnaliticaBitacoraResponse(
+                        r.getT1(), r.getT2(), r.getT3(), r.getT4(), r.getT5(), r.getT6(), r.getT7(),
                         analiticaRepository.granularidad(filtro),
-                        lista(r[7])),
-                ejecutor.consulta(() -> analiticaRepository.kpis(filtro)),
-                ejecutor.consulta(() -> analiticaRepository.porSistema(filtro)),
-                ejecutor.consulta(() -> analiticaRepository.porCentro(filtro)),
-                ejecutor.consulta(() -> analiticaRepository.porArea(filtro)),
-                ejecutor.consulta(() -> analiticaRepository.porTipo(filtro)),
-                ejecutor.consulta(() -> analiticaRepository.centroPorSistema(filtro)),
-                ejecutor.consulta(() -> analiticaRepository.tendencia(filtro)),
-                ejecutor.consulta(() -> analiticaRepository.porHora(filtro)));
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T> List<T> lista(Object valor) {
-        return (List<T>) valor;
+                        r.getT8()));
     }
 
     private EstadisticaResponse calcularEstadisticas(FiltroIncidencia filtro) {
@@ -244,7 +205,7 @@ public class IncidenciaService {
             Auditoria.alCrear(incidencia, actor);
             incidencia.setCreadoEn(componerCreadoEn(peticion.fechaCreacion(), peticion.horaInicio()));
             incidenciaRepository.save(incidencia);
-            cacheRespuestas.invalidarTodo();
+            transacciones.alConfirmar(cacheRespuestas::invalidarTodo);
 
             return ApiResponse.ok("Incidencia registrada.", resolver(incidencia));
         }))).subscribeOn(Schedulers.boundedElastic());
@@ -266,7 +227,7 @@ public class IncidenciaService {
             Auditoria.alActualizar(incidencia, actor);
             incidencia.setCreadoEn(componerCreadoEn(peticion.fechaCreacion(), peticion.horaInicio()));
             incidenciaRepository.save(incidencia);
-            cacheRespuestas.invalidarTodo();
+            transacciones.alConfirmar(cacheRespuestas::invalidarTodo);
 
             return ApiResponse.ok("Incidencia actualizada.", resolver(incidencia));
         }))).subscribeOn(Schedulers.boundedElastic());
@@ -276,7 +237,7 @@ public class IncidenciaService {
         return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "IncidenciaService.eliminar id=" + id, () -> transacciones.ejecutar(() -> {
                     Incidencia incidencia = obtenerIncidencia(id);
                     incidenciaRepository.delete(incidencia);
-                    cacheRespuestas.invalidarTodo();
+                    transacciones.alConfirmar(cacheRespuestas::invalidarTodo);
                     return null;
                 })))
                 .subscribeOn(Schedulers.boundedElastic())
@@ -331,20 +292,22 @@ public class IncidenciaService {
         if (incidencias.isEmpty()) {
             return List.of();
         }
+        return incidencias.stream().map(conversor()).toList();
+    }
+
+    /** Convierte incidencias a respuesta con un mismo snapshot de nombres de catálogo. */
+    private Function<Incidencia, IncidenciaResponse> conversor() {
         Map<Long, String> centros = catalogo.centros();
         Map<Long, String> sistemas = catalogo.sistemas();
         Map<Long, String> tipos = catalogo.tipos();
         Map<Long, String> areas = catalogo.areas();
         Map<Long, String> responsables = catalogo.responsables();
-
-        return incidencias.stream()
-                .map(i -> IncidenciaResponse.of(i,
-                        centros.get(i.getIdDataCentro()),
-                        sistemas.get(i.getIdDataSistema()),
-                        tipos.get(i.getIdDataIncidencia()),
-                        areas.get(i.getIdDataArea()),
-                        responsables.get(i.getIdDataResponsable())))
-                .toList();
+        return i -> IncidenciaResponse.of(i,
+                centros.get(i.getIdDataCentro()),
+                sistemas.get(i.getIdDataSistema()),
+                tipos.get(i.getIdDataIncidencia()),
+                areas.get(i.getIdDataArea()),
+                responsables.get(i.getIdDataResponsable()));
     }
 
     private Incidencia obtenerIncidencia(Long id) {

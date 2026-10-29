@@ -1,4 +1,4 @@
-import { ArchivoSimulacion } from '../../../core/models';
+import { ArchivoSimulacion } from './data/simulacion.model';
 
 /** Valores iniciales del backend al registrar un archivo. */
 export const VELOCIDAD_INICIAL = 100;
@@ -49,7 +49,9 @@ export function compararNombre(a: string, b: string): number {
 
 /** Texto del registro en los selectores: «Nombre · etiqueta» (la etiqueta es opcional). */
 export function etiquetaRegistro(registro: ArchivoSimulacion): string {
-  return registro.etiqueta ? `${registro.nombreRegistro} · ${registro.etiqueta}` : registro.nombreRegistro;
+  return registro.etiqueta
+    ? `${registro.nombreRegistro} · ${registro.etiqueta}`
+    : registro.nombreRegistro;
 }
 
 /** Convierte horas decimales a un texto compacto: 3.5 → «3h 30m». */

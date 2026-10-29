@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { CATALOGO_PROVEEDORES, CATALOGO_TIPOS } from './catalogo/catalogos';
 import { InboundControl } from './control';
 
 export const INBOUND_CONTROL_ROUTES: Routes = [
@@ -9,11 +10,13 @@ export const INBOUND_CONTROL_ROUTES: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'proveedores' },
       {
         path: 'proveedores',
-        loadComponent: () => import('./proveedores/proveedores').then((m) => m.ProveedoresInbound),
+        data: { catalogo: CATALOGO_PROVEEDORES },
+        loadComponent: () => import('./catalogo/catalogo').then((m) => m.CatalogoInbound),
       },
       {
         path: 'tipos',
-        loadComponent: () => import('./tipos/tipos').then((m) => m.TiposInbound),
+        data: { catalogo: CATALOGO_TIPOS },
+        loadComponent: () => import('./catalogo/catalogo').then((m) => m.CatalogoInbound),
       },
     ],
   },

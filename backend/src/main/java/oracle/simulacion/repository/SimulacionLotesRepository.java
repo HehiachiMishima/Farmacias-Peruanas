@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
@@ -81,6 +82,10 @@ public class SimulacionLotesRepository {
       List<SimulacionExcel.FilaRuta> rutas,
       Map<String, Long> clusters,
       Map<String, Long> chutes) {
+    // Las rutas repiten pocos clusters/chutes: la clave (normalización Unicode) se calcula una
+    // vez por nombre distinto, no dos veces por ruta.
+    Map<String, Long> idCluster = new HashMap<>();
+    Map<String, Long> idChute = new HashMap<>();
     jdbc.batchUpdate(
         """
         INSERT INTO rutas_proyeccion
@@ -92,9 +97,9 @@ public class SimulacionLotesRepository {
         LOTE,
         (ps, ruta) -> {
           ps.setLong(1, archivoId);
-          ps.setLong(2, chutes.get(SimulacionExcel.clave(ruta.chute())));
-          ps.setLong(3, clusters.get(SimulacionExcel.clave(ruta.cluster())));
-          ps.setString(4, ruta.codigoRuta());
+          ps.setLong(2, idChute.computeIfAbsent(ruta.chute(), (n) -> id(chutes, "chute", n)));
+          ps.setLong(3, idCluster.computeIfAbsent(ruta.cluster(), (n) -> id(clusters, "cluster", n)));
+          ps.setString(4, SimulacionExcel.nombre(ruta.codigoRuta()));
           ps.setBigDecimal(5, ruta.bultos());
           ps.setBigDecimal(6, ruta.unidades());
           ps.setBigDecimal(7, ruta.lineas());
@@ -109,8 +114,12 @@ public class SimulacionLotesRepository {
    * último confirmado, no la instantánea de la transacción.
    */
   private Map<String, Long> asegurarCatalogo(String tabla, Collection<String> nombres) {
-    Map<String, String> porClave = new HashMap<>();
-    nombres.forEach((nombre) -> porClave.putIfAbsent(SimulacionExcel.clave(nombre), nombre.trim()));
+    // Se inserta el nombre canónico (espacios internos colapsados): la colación de MySQL ignora
+    // mayúsculas y tildes pero NO colapsa espacios, así que "CHUTE  1" y "CHUTE 1" serían dos
+    // filas con la misma clave y el id resultante dependería del orden del SELECT.
+    Map<String, String> porClave = new LinkedHashMap<>();
+    nombres.forEach(
+        (nombre) -> porClave.putIfAbsent(SimulacionExcel.clave(nombre), SimulacionExcel.nombre(nombre)));
     List<String> unicos = new ArrayList<>(porClave.values());
     jdbc.batchUpdate(
         "INSERT IGNORE INTO " + tabla + " (nombre, activo) VALUES (?, TRUE)",
@@ -137,5 +146,13 @@ public class SimulacionLotesRepository {
               throw new IllegalStateException("No se pudo registrar " + tabla + " " + faltante);
             });
     return ids;
+  }
+
+  private static long id(Map<String, Long> ids, String tipo, String nombre) {
+    Long id = ids.get(SimulacionExcel.clave(nombre));
+    if (id == null) {
+      throw new IllegalStateException("No se resolvió el id del " + tipo + " " + nombre);
+    }
+    return id;
   }
 }

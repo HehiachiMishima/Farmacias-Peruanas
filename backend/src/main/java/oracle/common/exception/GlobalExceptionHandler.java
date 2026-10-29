@@ -11,17 +11,21 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.QueryTimeoutException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -105,6 +109,14 @@ public class GlobalExceptionHandler {
                 "Falta el parametro obligatorio '" + ex.getParameterName() + "'.", req);
     }
 
+    /** Falta una parte obligatoria de una peticion multipart (p. ej. el archivo). */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiError> parteFaltante(
+            MissingServletRequestPartException ex, HttpServletRequest req) {
+        return cuerpo(HttpStatus.BAD_REQUEST,
+                "Falta la parte obligatoria '" + ex.getRequestPartName() + "'.", req);
+    }
+
     /** Metodo HTTP no soportado por el recurso. */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ApiError> metodoNoSoportado(
@@ -127,6 +139,16 @@ public class GlobalExceptionHandler {
             MaxUploadSizeExceededException ex, HttpServletRequest req) {
         return cuerpo(HttpStatus.CONTENT_TOO_LARGE,
                 "El archivo supera el tamano maximo permitido (20 MB).", req);
+    }
+
+    /**
+     * La peticion asincrona (Mono) supero spring.mvc.async.request-timeout: el
+     * servicio esta saturado o la operacion es demasiado lenta -> 503.
+     */
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public ResponseEntity<ApiError> tiempoAgotado(AsyncRequestTimeoutException ex, HttpServletRequest req) {
+        return cuerpo(HttpStatus.SERVICE_UNAVAILABLE,
+                "La operacion tardo demasiado en responder. Intente de nuevo.", req);
     }
 
     /** Ruta inexistente: ninguna coincidencia de handler ni recurso estatico. */
@@ -179,14 +201,34 @@ public class GlobalExceptionHandler {
         return null;
     }
 
+    /**
+     * Catch-all. Las excepciones propias de Spring que ya declaran su codigo
+     * (ResponseStatusException y demas ErrorResponse) conservan ese codigo en
+     * vez de convertirse en 500.
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> inesperado(Exception ex, HttpServletRequest req) {
+        if (ex instanceof ErrorResponse respuesta && !respuesta.getStatusCode().is5xxServerError()) {
+            String detalle = respuesta.getBody().getDetail();
+            HttpStatusCode status = respuesta.getStatusCode();
+            log.debug("Error {} de Spring: {}", status.value(), ex.getMessage());
+            return cuerpo(status, detalle != null ? detalle : razon(status), req);
+        }
+        if (ex instanceof ErrorResponse respuesta) {
+            log.error("Error {} de Spring", respuesta.getStatusCode().value(), ex);
+            return cuerpo(respuesta.getStatusCode(), "Error interno inesperado.", req);
+        }
         log.error("Error inesperado", ex);
         return cuerpo(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno inesperado.", req);
     }
 
-    private ResponseEntity<ApiError> cuerpo(HttpStatus status, String mensaje, HttpServletRequest req) {
+    private ResponseEntity<ApiError> cuerpo(HttpStatusCode status, String mensaje, HttpServletRequest req) {
         return ResponseEntity.status(status)
-                .body(ApiError.de(status.value(), status.getReasonPhrase(), mensaje, req.getRequestURI()));
+                .body(ApiError.de(status.value(), razon(status), mensaje, req.getRequestURI()));
+    }
+
+    private static String razon(HttpStatusCode status) {
+        HttpStatus conocido = HttpStatus.resolve(status.value());
+        return conocido != null ? conocido.getReasonPhrase() : String.valueOf(status.value());
     }
 }

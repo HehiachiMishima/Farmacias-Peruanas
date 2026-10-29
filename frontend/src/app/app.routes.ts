@@ -12,6 +12,11 @@ import { guestGuard } from './core/guards/guest.guard';
 import { introGuard } from './core/guards/intro.guard';
 import { panelGuard, permisoGuard } from './core/guards/permiso.guard';
 
+/**
+ * Los paneles se protegen con `canMatch`: la sesión y el permiso se comprueban
+ * antes de cargar el panel y de su redirección al primer módulo, de modo que
+ * un enlace directo sin sesión vuelve a esa misma URL tras el login.
+ */
 export const routes: Routes = [
   {
     path: 'intro',
@@ -35,38 +40,36 @@ export const routes: Routes = [
   },
   {
     path: 'admin',
-    canActivate: [permisoGuard(PERMISOS.PANEL_ADMIN)],
+    canMatch: [permisoGuard(PERMISOS.PANEL_ADMIN)],
     loadChildren: () => import('./features/panels/admin/admin.routes').then((m) => m.ADMIN_ROUTES),
   },
   {
     path: 'bitacora',
-    canActivate: [permisoGuard(PERMISOS.PANEL_BITACORA)],
+    canMatch: [permisoGuard(PERMISOS.PANEL_BITACORA)],
     loadChildren: () =>
       import('./features/panels/bitacora/bitacora.routes').then((m) => m.BITACORA_ROUTES),
   },
   {
     path: 'inbound',
-    canActivate: [permisoGuard(PERMISOS.PANEL_INBOUND)],
+    canMatch: [permisoGuard(PERMISOS.PANEL_INBOUND)],
     loadChildren: () =>
       import('./features/panels/inbound/inbound.routes').then((m) => m.INBOUND_ROUTES),
   },
   {
     path: 'simulacion',
-    canActivate: [permisoGuard(PERMISOS.PANEL_SIMULACION)],
+    canMatch: [permisoGuard(PERMISOS.PANEL_SIMULACION)],
     loadChildren: () =>
-      import('./features/panels/simulacion/simulacion.routes').then(
-        (m) => m.SIMULACION_ROUTES,
-      ),
+      import('./features/panels/simulacion/simulacion.routes').then((m) => m.SIMULACION_ROUTES),
   },
   {
     path: 'analisis',
-    canActivate: [panelGuard(PANEL_ANALISIS)],
+    canMatch: [panelGuard(PANEL_ANALISIS)],
     loadChildren: () =>
       import('./features/panels/analisis/analisis.routes').then((m) => m.ANALISIS_ROUTES),
   },
   {
     path: 'trazabilidad',
-    canActivate: [panelGuard(PANEL_TRAZABILIDAD)],
+    canMatch: [panelGuard(PANEL_TRAZABILIDAD)],
     loadChildren: () =>
       import('./features/panels/trazabilidad/trazabilidad.routes').then(
         (m) => m.TRAZABILIDAD_ROUTES,
@@ -74,13 +77,13 @@ export const routes: Routes = [
   },
   {
     path: 'logistica',
-    canActivate: [panelGuard(PANEL_LOGISTICA)],
+    canMatch: [panelGuard(PANEL_LOGISTICA)],
     loadChildren: () =>
       import('./features/panels/logistica/logistica.routes').then((m) => m.LOGISTICA_ROUTES),
   },
   {
     path: 'automatizacion',
-    canActivate: [panelGuard(PANEL_AUTOMATIZACION)],
+    canMatch: [panelGuard(PANEL_AUTOMATIZACION)],
     loadChildren: () =>
       import('./features/panels/automatizacion/automatizacion.routes').then(
         (m) => m.AUTOMATIZACION_ROUTES,
@@ -88,7 +91,7 @@ export const routes: Routes = [
   },
   {
     path: 'sincronizacion',
-    canActivate: [panelGuard(PANEL_SINCRONIZACION)],
+    canMatch: [panelGuard(PANEL_SINCRONIZACION)],
     loadChildren: () =>
       import('./features/panels/sincronizacion/sincronizacion.routes').then(
         (m) => m.SINCRONIZACION_ROUTES,

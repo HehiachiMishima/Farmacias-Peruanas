@@ -171,7 +171,7 @@ public class UsuarioService {
 
             Auditoria.alActualizar(usuario, actor);
             usuarioRepository.save(usuario);
-            autorizacionCache.invalidar(id);
+            transacciones.alConfirmar(() -> autorizacionCache.invalidar(id));
             return ApiResponse.ok("Usuario actualizado.", UsuarioResponse.of(usuario));
         }))).subscribeOn(Schedulers.boundedElastic());
     }
@@ -181,7 +181,7 @@ public class UsuarioService {
                     Usuario usuario = obtenerUsuario(id);
                     verificarNoProtegido(usuario);
                     usuarioRepository.delete(usuario);
-                    autorizacionCache.invalidar(id);
+                    transacciones.alConfirmar(() -> autorizacionCache.invalidar(id));
                     return null;
                 })))
                 .subscribeOn(Schedulers.boundedElastic())
@@ -196,7 +196,7 @@ public class UsuarioService {
             usuario.setActivo(peticion.activo());
             Auditoria.alActualizar(usuario, actor);
             usuarioRepository.save(usuario);
-            autorizacionCache.invalidar(id);
+            transacciones.alConfirmar(() -> autorizacionCache.invalidar(id));
 
             String mensaje = peticion.activo() ? "Usuario activado." : "Usuario desactivado.";
             return ApiResponse.ok(mensaje, UsuarioResponse.of(usuario));

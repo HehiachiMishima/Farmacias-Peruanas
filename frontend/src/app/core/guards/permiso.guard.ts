@@ -1,20 +1,47 @@
 import { inject } from '@angular/core';
-import { CanActivateFn, Router } from '@angular/router';
+import { CanActivateFn, CanMatchFn, Router, UrlTree } from '@angular/router';
+import { CONFIG } from '../config/configuracion';
 import { SesionStore } from '../services/sesion';
 
-export function permisoGuard(permiso: string): CanActivateFn {
-  return () => {
-    const sesion = inject(SesionStore);
-    const router = inject(Router);
+/**
+ * Guard de acceso utilizable como `canMatch` (raíz de cada panel: se evalúa
+ * antes de cargar el panel y de la redirección a su primer módulo) o como
+ * `canActivate` (módulos dentro del panel).
+ */
+type GuardAcceso = CanMatchFn & CanActivateFn;
 
-    if (!sesion.autenticado()) {
-      return router.createUrlTree(['/login']);
-    }
-    if (sesion.tienePermiso(permiso)) {
-      return true;
-    }
-    return router.createUrlTree(['/sin-acceso'], { queryParams: { permiso } });
-  };
+/**
+ * URL que se está intentando abrir. En `canMatch` aún no hay URL final
+ * (las redirecciones no se han resuelto), así que se usa la pedida.
+ */
+function urlEnCurso(router: Router): string {
+  const navegacion = router.currentNavigation();
+  if (!navegacion) {
+    return router.url;
+  }
+  return router.serializeUrl(navegacion.finalUrl ?? navegacion.extractedUrl);
+}
+
+function comprobar(
+  permitido: (sesion: SesionStore) => boolean,
+  permiso: string,
+): boolean | UrlTree {
+  const sesion = inject(SesionStore);
+  const router = inject(Router);
+
+  if (!sesion.autenticado()) {
+    return router.createUrlTree([CONFIG.rutas.login], {
+      queryParams: { returnUrl: urlEnCurso(router) },
+    });
+  }
+  if (permitido(sesion)) {
+    return true;
+  }
+  return router.createUrlTree([CONFIG.rutas.sinAcceso], { queryParams: { permiso } });
+}
+
+export function permisoGuard(permiso: string): GuardAcceso {
+  return () => comprobar((sesion) => sesion.tienePermiso(permiso), permiso);
 }
 
 /**
@@ -22,17 +49,10 @@ export function permisoGuard(permiso: string): CanActivateFn {
  * los paneles marcados como `publico` (aún sin permisos), exigiendo solo estar
  * autenticado.
  */
-export function panelGuard(panel: { permiso: string; publico?: boolean }): CanActivateFn {
-  return () => {
-    const sesion = inject(SesionStore);
-    const router = inject(Router);
-
-    if (!sesion.autenticado()) {
-      return router.createUrlTree(['/login']);
-    }
-    if (panel.publico === true || sesion.tienePermiso(panel.permiso)) {
-      return true;
-    }
-    return router.createUrlTree(['/sin-acceso'], { queryParams: { permiso: panel.permiso } });
-  };
+export function panelGuard(panel: { permiso: string; publico?: boolean }): GuardAcceso {
+  return () =>
+    comprobar(
+      (sesion) => panel.publico === true || sesion.tienePermiso(panel.permiso),
+      panel.permiso,
+    );
 }

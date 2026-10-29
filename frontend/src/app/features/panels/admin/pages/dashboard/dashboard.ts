@@ -1,6 +1,6 @@
-import { Component, computed, inject } from '@angular/core';
-import { AnaliticaAdmin } from '../../../../../core/models';
-import { AdminAnaliticaApi } from '../../../../../core/services/admin-analitica.api';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { AnaliticaAdmin } from '../../data/analitica.model';
+import { AdminAnaliticaApi } from '../../data/admin-analitica.api';
 import { Auth } from '../../../../../core/services/auth';
 import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
 import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
@@ -31,6 +31,7 @@ const COLOR_PANEL: Record<string, string> = {
  */
 @Component({
   selector: 'app-admin-dashboard',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [BarChart, EmptyState, GaugeChart, Icon, Kpi],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',

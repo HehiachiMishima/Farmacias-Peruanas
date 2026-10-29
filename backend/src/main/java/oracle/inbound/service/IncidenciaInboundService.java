@@ -5,6 +5,7 @@ import oracle.inbound.repository.AnaliticaInboundRepository;
 import oracle.inbound.response.AnaliticaInboundResponse;
 
 import oracle.common.support.ExportacionJson;
+import oracle.common.support.Paginacion;
 
 import jakarta.persistence.criteria.Predicate;
 import java.time.LocalDateTime;
@@ -12,6 +13,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.scheduler.Schedulers;
 import tools.jackson.databind.ObjectMapper;
@@ -32,10 +34,7 @@ import oracle.inbound.response.EstadisticaInboundResponse;
 import oracle.inbound.response.IncidenciaInboundResponse;
 import oracle.common.response.PaginaResponse;
 import oracle.inbound.response.ProveedorMensualEstadistica;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import oracle.common.config.CacheRespuestas;
 import oracle.common.config.Transacciones;
@@ -47,7 +46,6 @@ import reactor.core.publisher.Mono;
 @Service
 public class IncidenciaInboundService {
   private static final int MAX_TAMANO_PAGINA = 200;
-  private static final int TAMANO_LOTE_EXPORT = 1_000;
   private static final int TOP_MENSUAL = 5;
 
   private final IncidenciaInboundRepository repo;
@@ -86,13 +84,7 @@ public class IncidenciaInboundService {
 
   public Mono<ApiResponse<PaginaResponse<IncidenciaInboundResponse>>> listar(
       FiltroIncidenciaInbound filtro, int pagina, int tamano) {
-    int p = Math.max(pagina, 1) - 1;
-    int t = Math.min(Math.max(tamano, 1), MAX_TAMANO_PAGINA);
-    Pageable pageable =
-        PageRequest.of(
-            p,
-            t,
-            Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id")));
+    Pageable pageable = Paginacion.pagina(pagina, tamano, MAX_TAMANO_PAGINA, Paginacion.RECIENTES);
     Specification<IncidenciaInbound> spec = especificacion(filtro);
     return Mono.fromCallable(() -> repo.findAll(spec, pageable))
         .map(page -> PaginaResponse.de(page, aRespuestas(page.getContent())))
@@ -102,7 +94,7 @@ public class IncidenciaInboundService {
 
   /**
    * Exporta el filtro completo escribiendo el JSON directamente al flujo de
-   * respuesta: lee por lotes de {@value #TAMANO_LOTE_EXPORT} filas y nunca
+   * respuesta: lee por lotes de {@value ExportacionJson#TAMANO_LOTE} filas y nunca
    * materializa la lista completa, así el pico de memoria queda acotado.
    *
    * Produce el mismo envoltorio que {@code ApiResponse&lt;List&lt;...&gt;&gt;}
@@ -110,41 +102,8 @@ public class IncidenciaInboundService {
    */
   public StreamingResponseBody exportarEnFlujo(FiltroIncidenciaInbound filtro) {
     Specification<IncidenciaInbound> spec = especificacion(filtro);
-    Sort orden = Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id"));
-    return salida -> {
-      try {
-        ExportacionJson.escribir(json, salida, "OK", gen -> {
-          Map<Long, String> proveedores = catalogo.proveedores();
-          Map<Long, String> tipos = catalogo.tipos();
-          int pagina = 0;
-          while (true) {
-            Page<IncidenciaInbound> lote =
-                repo.findAll(spec, PageRequest.of(pagina, TAMANO_LOTE_EXPORT, orden));
-            for (IncidenciaInbound i : lote.getContent()) {
-              json.writeValue(gen, new IncidenciaInboundResponse(
-                  i.getId(),
-                  i.getOrdenCompra(),
-                  i.getIdDataProveedor(),
-                  proveedores.get(i.getIdDataProveedor()),
-                  i.getIdDataIncidenciaInbound(),
-                  tipos.get(i.getIdDataIncidenciaInbound()),
-                  i.getSkuProducto(),
-                  i.getNUnidades(),
-                  i.getCreadoEn(),
-                  i.getActualizadoEn(),
-                  i.getCreadoPor(),
-                  i.getActualizadoPor()));
-            }
-            if (lote.getContent().size() < TAMANO_LOTE_EXPORT) {
-              break;
-            }
-            pagina++;
-          }
-        });
-      } catch (Exception e) {
-        log.error("Exportación de incidencias inbound interrumpida: {}", e.getMessage(), e);
-      }
-    };
+    return ExportacionJson.enLotes(json, "OK", Paginacion.RECIENTES,
+        pageable -> repo.findAll(spec, pageable), this::conversor, log, "incidencias inbound");
   }
 
   public Mono<ApiResponse<EstadisticaInboundResponse>> estadisticas(FiltroIncidenciaInbound filtro) {
@@ -182,28 +141,22 @@ public class IncidenciaInboundService {
 
   private Mono<AnaliticaInboundResponse> calcularAnalitica(FiltroIncidenciaInbound filtro) {
     return Mono.zip(
-        r -> new AnaliticaInboundResponse(
-            (AnaliticaInboundResponse.Kpis) r[0],
-            lista(r[1]), lista(r[2]), lista(r[3]), lista(r[4]), lista(r[5]),
+            ejecutor.consulta(() -> analiticaRepo.kpis(filtro)),
+            ejecutor.consulta(() -> analiticaRepo.proveedores(filtro)),
+            ejecutor.consulta(() -> analiticaRepo.tipos(filtro)),
+            ejecutor.consulta(() -> analiticaRepo.proveedorPorTipo(filtro)),
+            ejecutor.consulta(() -> analiticaRepo.skusRecurrentes(filtro)),
+            ejecutor.consulta(() -> analiticaRepo.tendencia(filtro)),
+            ejecutor.consulta(() -> estadisticasRepo.porProveedorMensual(filtro)))
+        .map(r -> new AnaliticaInboundResponse(
+            r.getT1(), r.getT2(), r.getT3(), r.getT4(), r.getT5(), r.getT6(),
             analiticaRepo.granularidad(filtro),
-            topMensual(lista(r[6]))),
-        ejecutor.consulta(() -> analiticaRepo.kpis(filtro)),
-        ejecutor.consulta(() -> analiticaRepo.proveedores(filtro)),
-        ejecutor.consulta(() -> analiticaRepo.tipos(filtro)),
-        ejecutor.consulta(() -> analiticaRepo.proveedorPorTipo(filtro)),
-        ejecutor.consulta(() -> analiticaRepo.skusRecurrentes(filtro)),
-        ejecutor.consulta(() -> analiticaRepo.tendencia(filtro)),
-        ejecutor.consulta(() -> estadisticasRepo.porProveedorMensual(filtro)));
+            topMensual(r.getT7())));
   }
 
   /** Evolucion mensual solo de los 5 proveedores con mas incidencias (ya vienen ordenados). */
   private static List<ProveedorMensualEstadistica> topMensual(List<ProveedorMensualEstadistica> todos) {
     return todos.size() <= TOP_MENSUAL ? todos : todos.subList(0, TOP_MENSUAL);
-  }
-
-  @SuppressWarnings("unchecked")
-  private static <T> List<T> lista(Object valor) {
-    return (List<T>) valor;
   }
 
   public Mono<ApiResponse<IncidenciaInboundResponse>> obtenerPorId(Long id) {
@@ -228,7 +181,7 @@ public class IncidenciaInboundService {
       i.setNUnidades(req.nUnidades());
       oracle.common.support.Auditoria.alCrear(i, actor);
       IncidenciaInbound guardada = repo.save(i);
-      cacheRespuestas.invalidarTodo();
+      transacciones.alConfirmar(cacheRespuestas::invalidarTodo);
       return guardada;
     })).map(this::aRespuesta).subscribeOn(Schedulers.boundedElastic()).map(d -> ApiResponse.ok("OK", d));
   }
@@ -246,7 +199,7 @@ public class IncidenciaInboundService {
       i.setNUnidades(req.nUnidades());
       oracle.common.support.Auditoria.alActualizar(i, actor);
       IncidenciaInbound guardada = repo.save(i);
-      cacheRespuestas.invalidarTodo();
+      transacciones.alConfirmar(cacheRespuestas::invalidarTodo);
       return guardada;
     })).map(this::aRespuesta).subscribeOn(Schedulers.boundedElastic()).map(d -> ApiResponse.ok("OK", d));
   }
@@ -255,7 +208,7 @@ public class IncidenciaInboundService {
     return Mono.fromCallable(() -> transacciones.ejecutar(() -> {
       if (!repo.existsById(id)) throw new RecursoNoEncontradoException("Incidencia inbound no encontrada");
       repo.deleteById(id);
-      cacheRespuestas.invalidarTodo();
+      transacciones.alConfirmar(cacheRespuestas::invalidarTodo);
       return null;
     })).subscribeOn(Schedulers.boundedElastic()).thenReturn(ApiResponse.ok("OK", null));
   }
@@ -300,23 +253,15 @@ public class IncidenciaInboundService {
     if (lista.isEmpty()) {
       return List.of();
     }
+    return lista.stream().map(conversor()).toList();
+  }
+
+  /** Convierte incidencias a respuesta con un mismo snapshot de nombres de catalogo. */
+  private Function<IncidenciaInbound, IncidenciaInboundResponse> conversor() {
     Map<Long, String> proveedores = catalogo.proveedores();
     Map<Long, String> tipos = catalogo.tipos();
-    return lista.stream()
-        .map(i -> new IncidenciaInboundResponse(
-            i.getId(),
-            i.getOrdenCompra(),
-            i.getIdDataProveedor(),
-            proveedores.get(i.getIdDataProveedor()),
-            i.getIdDataIncidenciaInbound(),
-            tipos.get(i.getIdDataIncidenciaInbound()),
-            i.getSkuProducto(),
-            i.getNUnidades(),
-            i.getCreadoEn(),
-            i.getActualizadoEn(),
-            i.getCreadoPor(),
-            i.getActualizadoPor()))
-        .toList();
+    return i -> IncidenciaInboundResponse.of(
+        i, proveedores.get(i.getIdDataProveedor()), tipos.get(i.getIdDataIncidenciaInbound()));
   }
 
   private IncidenciaInboundResponse aRespuesta(IncidenciaInbound i) {

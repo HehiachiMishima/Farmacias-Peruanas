@@ -78,7 +78,7 @@ public class SeedUsuarioAdmin implements ApplicationRunner {
             return;
         }
 
-        if (usuarioRepository.existsByUsuario(usuario)) {
+        if (usuarioRepository.existsByUsuario(usuario)|| usuarioRepository.existsByEmail(email)) {
             log.info("Usuario semilla '{}' ya existe; no se crea de nuevo.", usuario);
             return;
         }

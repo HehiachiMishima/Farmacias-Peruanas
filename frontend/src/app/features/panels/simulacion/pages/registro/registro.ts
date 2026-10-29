@@ -1,15 +1,26 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Subject, debounceTime, finalize } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
-import { ArchivoSimulacion, RegistroSimulacionActualizarRequest } from '../../../../../core/models';
+import {
+  ArchivoSimulacion,
+  RegistroSimulacionActualizarRequest,
+} from '../../data/simulacion.model';
 import { DirectorioUsuarios } from '../../../../../core/services/directorio-usuarios';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
-import { SimulacionApi } from '../../../../../core/services/simulacion.api';
+import { SimulacionApi } from '../../data/simulacion.api';
 import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
 import { ColumnasRedimensionables } from '../../../../../shared/directives/columnas-redimensionables.directive';
@@ -29,6 +40,7 @@ const CON_TEXTO = /\S/;
 
 @Component({
   selector: 'app-simulacion-registro',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ReactiveFormsModule,
     DatePipe,

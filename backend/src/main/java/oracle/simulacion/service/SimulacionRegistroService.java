@@ -1,11 +1,22 @@
 package oracle.simulacion.service;
 
 import jakarta.persistence.criteria.Predicate;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +37,8 @@ import oracle.simulacion.repository.RutaProyeccionRepository;
 import oracle.simulacion.repository.SimulacionLotesRepository;
 import oracle.simulacion.request.RegistroActualizarRequest;
 import oracle.simulacion.response.ArchivoSimulacionResponse;
+import oracle.simulacion.service.SimulacionExcel.ArchivoInvalidoException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -45,27 +58,50 @@ public class SimulacionRegistroService {
   private static final int OPERARIOS_INICIALES = 2;
   private static final String COLOR_INICIAL = "#1d63ed";
   /**
-   * Cargas que se procesan a la vez por instancia. Leer y guardar un libro
-   * grande usa CPU, memoria y una conexión durante segundos: con un tope, una
-   * ráfaga de subidas responde 429 en lugar de agotar el pool para todos.
+   * Cargas que se procesan a la vez por instancia. En Render free (0,1 vCPU, 512 MB) dos cargas
+   * concurrentes ya se reparten la CPU: más solo alarga cada una hacia el timeout. Una ráfaga
+   * responde 429 en lugar de agotar memoria o el pool para todos.
    */
-  private static final int MAX_CARGAS_SIMULTANEAS = 4;
+  static final int MAX_CARGAS_SIMULTANEAS = 2;
+  /**
+   * Presupuesto de heap (MB) para el parseo de cargas simultáneas. Con -XX:MaxRAMPercentage=70
+   * sobre 512 MB el heap es ~350 MB, de los que la aplicación en reposo usa ~150 MB.
+   */
+  static final int PRESUPUESTO_MEMORIA_MB = 128;
+  /** Ventana en la que la misma carga (mismo usuario, contenido y datos) no se duplica. */
+  static final Duration VENTANA_DUPLICADOS = Duration.ofMinutes(10);
+  static final String MENSAJE_CREADO = "Registro creado.";
+  static final String MENSAJE_REPETIDO =
+      "Este archivo ya se había registrado hace un momento; se devuelve el registro existente.";
 
   private final ArchivoExcelRepository archivoRepo;
   private final RutaProyeccionRepository rutaRepo;
   private final SimulacionLotesRepository lotes;
   private final Transacciones transacciones;
   private final Semaphore cargas = new Semaphore(MAX_CARGAS_SIMULTANEAS);
+  private final Semaphore memoria = new Semaphore(PRESUPUESTO_MEMORIA_MB);
+  private final CargasRecientes recientes;
 
+  @Autowired
   public SimulacionRegistroService(
       ArchivoExcelRepository archivoRepo,
       RutaProyeccionRepository rutaRepo,
       SimulacionLotesRepository lotes,
       Transacciones transacciones) {
+    this(archivoRepo, rutaRepo, lotes, transacciones, Clock.systemUTC());
+  }
+
+  SimulacionRegistroService(
+      ArchivoExcelRepository archivoRepo,
+      RutaProyeccionRepository rutaRepo,
+      SimulacionLotesRepository lotes,
+      Transacciones transacciones,
+      Clock reloj) {
     this.archivoRepo = archivoRepo;
     this.rutaRepo = rutaRepo;
     this.lotes = lotes;
     this.transacciones = transacciones;
+    this.recientes = new CargasRecientes(reloj, VENTANA_DUPLICADOS);
   }
 
   public Mono<ApiResponse<PaginaResponse<ArchivoSimulacionResponse>>> listar(
@@ -121,26 +157,69 @@ public class SimulacionRegistroService {
         .map((datos) -> ApiResponse.ok("Registros disponibles.", datos));
   }
 
+  /**
+   * Alta de un registro desde un archivo. Idempotente en una ventana corta: si el mismo usuario
+   * reenvía el mismo contenido con los mismos datos (p. ej. reintento tras un timeout del
+   * cliente), se devuelve el registro ya creado en lugar de duplicarlo; si la primera carga sigue
+   * en proceso, responde 409.
+   */
   public Mono<ApiResponse<ArchivoSimulacionResponse>> subir(
       MultipartFile archivo, String nombreRegistro, String etiqueta, String colorHex) {
     Long actor = ActorActual.id();
     return Mono.fromCallable(
-            () -> {
-              if (!cargas.tryAcquire()) {
-                throw new LimiteExcedidoException(
-                    "Hay varias cargas en proceso. Intenta de nuevo en unos segundos.");
-              }
-              try {
-                return Trazas.medir(
+            () ->
+                Trazas.medir(
                     log,
                     "SimulacionRegistroService.subir",
-                    () -> registrar(archivo, nombreRegistro, etiqueta, colorHex, actor));
-              } finally {
-                cargas.release();
-              }
-            })
-        .subscribeOn(Schedulers.boundedElastic())
-        .map((datos) -> ApiResponse.ok("Registro creado.", datos));
+                    () -> procesar(archivo, nombreRegistro, etiqueta, colorHex, actor)))
+        .subscribeOn(Schedulers.boundedElastic());
+  }
+
+  private ApiResponse<ArchivoSimulacionResponse> procesar(
+      MultipartFile archivo, String nombreRegistro, String etiqueta, String colorHex, Long actor) {
+    validarArchivo(archivo);
+    String color = normalizarColor(colorHex);
+    String huella = huella(archivo, actor, nombreRegistro, etiqueta, color);
+    Long previo = recientes.reservar(huella);
+    if (previo != null) {
+      Optional<ArchivoSimulacionResponse> existente = existente(previo);
+      if (existente.isPresent()) {
+        log.info("Carga repetida de simulación: se devuelve el registro {}", previo);
+        return ApiResponse.ok(MENSAJE_REPETIDO, existente.get());
+      }
+      // El registro se borró entretanto: se procesa como nuevo.
+      recientes.olvidar(huella, previo);
+      if (recientes.reservar(huella) != null) {
+        throw cargaEnCurso();
+      }
+    }
+    boolean registrado = false;
+    try {
+      int costo = costoMemoriaMb(archivo);
+      if (!cargas.tryAcquire()) {
+        throw ocupado();
+      }
+      try {
+        if (!memoria.tryAcquire(costo)) {
+          throw ocupado();
+        }
+        try {
+          ArchivoSimulacionResponse creado =
+              registrar(archivo, nombreRegistro, etiqueta, color, actor);
+          recientes.completar(huella, creado.id());
+          registrado = true;
+          return ApiResponse.ok(MENSAJE_CREADO, creado);
+        } finally {
+          memoria.release(costo);
+        }
+      } finally {
+        cargas.release();
+      }
+    } finally {
+      if (!registrado) {
+        recientes.liberar(huella);
+      }
+    }
   }
 
   public Mono<ApiResponse<ArchivoSimulacionResponse>> actualizar(
@@ -185,17 +264,81 @@ public class SimulacionRegistroService {
         .thenReturn(ApiResponse.ok("Registro eliminado.", null));
   }
 
-  /** Lee el archivo fuera de la transacción y guarda todo en una sola. */
-  private ArchivoSimulacionResponse registrar(
-      MultipartFile archivo, String nombreRegistro, String etiqueta, String colorHex, Long actor) {
+  private static void validarArchivo(MultipartFile archivo) {
     if (archivo == null || archivo.isEmpty()) {
-      throw new ConflictoException("Selecciona un archivo para registrar.");
+      throw ArchivoInvalidoException.ilegible("Selecciona un archivo para registrar.");
     }
     String nombreOriginal = archivo.getOriginalFilename();
     if (nombreOriginal == null || nombreOriginal.isBlank()) {
-      throw new ConflictoException("El archivo no tiene nombre.");
+      throw ArchivoInvalidoException.ilegible("El archivo no tiene nombre.");
     }
-    String color = normalizarColor(colorHex);
+  }
+
+  /**
+   * Heap estimado (MB) para parsear el archivo, medido con SimulacionExcelBenchmark: un .xlsx de
+   * 4,2 MB (100k filas) necesita 25–57 MB de heap; un .csv de 5 MB, ~25 MB. .xls (HSSF) carga el
+   * libro entero, de ahí el mismo factor que .xlsx. Un archivo más caro que el presupuesto corre
+   * solo.
+   */
+  static int costoMemoriaMb(MultipartFile archivo) {
+    String nombre = String.valueOf(archivo.getOriginalFilename()).toLowerCase(Locale.ROOT);
+    long megas = Math.max(1, archivo.getSize() / (1024 * 1024));
+    long costo = nombre.endsWith(".csv") ? 8 + megas * 4 : 16 + megas * 12;
+    return (int) Math.min(costo, PRESUPUESTO_MEMORIA_MB);
+  }
+
+  private static LimiteExcedidoException ocupado() {
+    return new LimiteExcedidoException(
+        "Hay varias cargas en proceso. Intenta de nuevo en unos segundos.");
+  }
+
+  private static ConflictoException cargaEnCurso() {
+    return new ConflictoException(
+        "Este archivo ya se está registrando. Espera unos segundos y revisa el listado.");
+  }
+
+  private Optional<ArchivoSimulacionResponse> existente(Long id) {
+    return transacciones.consultar(
+        () -> archivoRepo.findById(id).map((archivo) -> aResponses(List.of(archivo)).get(0)));
+  }
+
+  /**
+   * SHA-256 del contenido más usuario y datos del formulario: un reintento idéntico produce la
+   * misma huella; el mismo archivo con otro nombre de registro es otra carga.
+   */
+  static String huella(
+      MultipartFile archivo, Long actor, String nombreRegistro, String etiqueta, String color) {
+    try {
+      MessageDigest sha = MessageDigest.getInstance("SHA-256");
+      try (InputStream entrada = archivo.getInputStream()) {
+        byte[] bufer = new byte[64 * 1024];
+        int leidos;
+        while ((leidos = entrada.read(bufer)) > 0) {
+          sha.update(bufer, 0, leidos);
+        }
+      }
+      String datos =
+          "\n" + actor + "\n" + archivo.getOriginalFilename() + "\n" + limpio(nombreRegistro)
+              + "\n" + limpio(etiqueta) + "\n" + color;
+      sha.update(datos.getBytes(StandardCharsets.UTF_8));
+      return HexFormat.of().formatHex(sha.digest());
+    } catch (IOException e) {
+      log.warn("No se pudo leer el archivo '{}' para calcular su huella", archivo.getOriginalFilename(), e);
+      throw ArchivoInvalidoException.ilegible(
+          "No se pudo leer el archivo. Verifica que no esté dañado y vuelve a subirlo.");
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("SHA-256 no disponible", e);
+    }
+  }
+
+  private static String limpio(String texto) {
+    return texto == null ? "" : texto.trim();
+  }
+
+  /** Lee el archivo fuera de la transacción y guarda todo en una sola. */
+  private ArchivoSimulacionResponse registrar(
+      MultipartFile archivo, String nombreRegistro, String etiqueta, String color, Long actor) {
+    String nombreOriginal = archivo.getOriginalFilename();
     SimulacionExcel.Analisis analisis = SimulacionExcel.analizar(archivo);
     ArchivoExcel guardado =
         transacciones.ejecutar(
@@ -280,5 +423,76 @@ public class SimulacionRegistroService {
 
   private String limitar(String texto, int maximo) {
     return texto.length() <= maximo ? texto : texto.substring(0, maximo);
+  }
+
+  /**
+   * Cargas en curso o recién completadas, por huella (solo en memoria de esta instancia; sin
+   * cambios de esquema). Tamaño acotado: las entradas vencidas se purgan al reservar y, si aun así
+   * se llena, una carga completada simplemente no se recuerda.
+   */
+  static final class CargasRecientes {
+    private static final int MAX_ENTRADAS = 1_000;
+    private static final Long EN_CURSO = -1L;
+
+    private record Entrada(Long archivoId, Instant momento) {}
+
+    private final Map<String, Entrada> entradas = new ConcurrentHashMap<>();
+    private final Clock reloj;
+    private final Duration ventana;
+
+    CargasRecientes(Clock reloj, Duration ventana) {
+      this.reloj = reloj;
+      this.ventana = ventana;
+    }
+
+    /**
+     * Reserva la huella para procesarla. Devuelve null si quedó reservada para quien llama, o el
+     * id del registro creado hace menos de la ventana. Lanza 409 si otra carga igual sigue en
+     * curso.
+     */
+    Long reservar(String huella) {
+      Instant ahora = reloj.instant();
+      if (entradas.size() > MAX_ENTRADAS / 2) {
+        entradas.values().removeIf((e) -> !EN_CURSO.equals(e.archivoId()) && vencida(e, ahora));
+      }
+      Entrada nueva = new Entrada(EN_CURSO, ahora);
+      Entrada actual =
+          entradas.compute(
+              huella,
+              (clave, previa) -> previa == null || (!EN_CURSO.equals(previa.archivoId()) && vencida(previa, ahora))
+                  ? nueva
+                  : previa);
+      if (actual == nueva) {
+        return null;
+      }
+      if (EN_CURSO.equals(actual.archivoId())) {
+        throw cargaEnCurso();
+      }
+      return actual.archivoId();
+    }
+
+    void completar(String huella, Long archivoId) {
+      if (entradas.size() >= MAX_ENTRADAS) {
+        entradas.remove(huella);
+        return;
+      }
+      entradas.put(huella, new Entrada(archivoId, reloj.instant()));
+    }
+
+    void liberar(String huella) {
+      entradas.computeIfPresent(huella, (clave, e) -> EN_CURSO.equals(e.archivoId()) ? null : e);
+    }
+
+    void olvidar(String huella, Long archivoId) {
+      entradas.computeIfPresent(huella, (clave, e) -> archivoId.equals(e.archivoId()) ? null : e);
+    }
+
+    int tamano() {
+      return entradas.size();
+    }
+
+    private boolean vencida(Entrada entrada, Instant ahora) {
+      return entrada.momento().plus(ventana).isBefore(ahora);
+    }
   }
 }

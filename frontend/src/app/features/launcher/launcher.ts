@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { PANELES, PanelDef, modulosAccesibles, panelAccesible } from '../../core/config/paneles';
 import { Auth } from '../../core/services/auth';
@@ -8,6 +8,7 @@ import { Icon } from '../../shared/ui/icon/icon';
 
 @Component({
   selector: 'app-launcher',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Icon],
   templateUrl: './launcher.html',
   styleUrl: './launcher.scss',
@@ -60,7 +61,10 @@ export class Launcher {
       void this.router.navigateByUrl(panel.ruta);
       return;
     }
-    this.notificaciones.error('Acceso denegado', `No tienes permiso para acceder a ${panel.nombre}.`);
+    this.notificaciones.error(
+      'Acceso denegado',
+      `No tienes permiso para acceder a ${panel.nombre}.`,
+    );
   }
 
   alternarTema(evento: Event): void {

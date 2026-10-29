@@ -1,7 +1,17 @@
-import { Component, DestroyRef, HostListener, computed, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  HostListener,
+  computed,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
+import { CONFIG } from '../../core/config/configuracion';
 import { PanelDef, modulosAccesibles } from '../../core/config/paneles';
 import { Auth } from '../../core/services/auth';
 import { TemaService } from '../../core/services/tema';
@@ -19,6 +29,7 @@ const ESCRITORIO = '(min-width: 1024px)';
  */
 @Component({
   selector: 'app-panel-shell',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon, MiCuenta],
   templateUrl: './panel-shell.html',
   styleUrl: './panel-shell.scss',
@@ -77,10 +88,13 @@ export class PanelShell {
 
     // Reloj de la barra superior: se alinea al cambio de minuto.
     let intervalo: ReturnType<typeof setInterval> | undefined;
-    const arranque = setTimeout(() => {
-      this.ahora.set(new Date());
-      intervalo = setInterval(() => this.ahora.set(new Date()), 60_000);
-    }, 60_000 - (Date.now() % 60_000));
+    const arranque = setTimeout(
+      () => {
+        this.ahora.set(new Date());
+        intervalo = setInterval(() => this.ahora.set(new Date()), 60_000);
+      },
+      60_000 - (Date.now() % 60_000),
+    );
 
     destroyRef.onDestroy(() => {
       this.consulta.removeEventListener('change', alCambiar);
@@ -135,7 +149,7 @@ export class PanelShell {
 
   private leerPreferencia(): boolean {
     try {
-      return localStorage.getItem('oracle.sidebar') !== 'riel';
+      return localStorage.getItem(CONFIG.almacenamiento.sidebar) !== 'riel';
     } catch {
       return true;
     }
@@ -143,7 +157,7 @@ export class PanelShell {
 
   private guardarPreferencia(expandido: boolean): void {
     try {
-      localStorage.setItem('oracle.sidebar', expandido ? 'expandido' : 'riel');
+      localStorage.setItem(CONFIG.almacenamiento.sidebar, expandido ? 'expandido' : 'riel');
     } catch {
       /* almacenamiento no disponible */
     }

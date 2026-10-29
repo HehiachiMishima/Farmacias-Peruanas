@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { fechaIso } from '../../../core/utils/fecha.util';
 
 export interface RangoFechas {
   desde: string;
@@ -11,17 +12,11 @@ interface Opcion {
   rango: () => RangoFechas;
 }
 
-function iso(fecha: Date): string {
-  const mes = `${fecha.getMonth() + 1}`.padStart(2, '0');
-  const dia = `${fecha.getDate()}`.padStart(2, '0');
-  return `${fecha.getFullYear()}-${mes}-${dia}`;
-}
-
 function haceDias(dias: number): RangoFechas {
   const hoy = new Date();
   const desde = new Date(hoy);
   desde.setDate(hoy.getDate() - (dias - 1));
-  return { desde: iso(desde), hasta: iso(hoy) };
+  return { desde: fechaIso(desde), hasta: fechaIso(hoy) };
 }
 
 const OPCIONES: Opcion[] = [
@@ -33,7 +28,10 @@ const OPCIONES: Opcion[] = [
     etiqueta: 'Este mes',
     rango: () => {
       const hoy = new Date();
-      return { desde: iso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)), hasta: iso(hoy) };
+      return {
+        desde: fechaIso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)),
+        hasta: fechaIso(hoy),
+      };
     },
   },
   {
@@ -41,7 +39,7 @@ const OPCIONES: Opcion[] = [
     etiqueta: 'Este año',
     rango: () => {
       const hoy = new Date();
-      return { desde: iso(new Date(hoy.getFullYear(), 0, 1)), hasta: iso(hoy) };
+      return { desde: fechaIso(new Date(hoy.getFullYear(), 0, 1)), hasta: fechaIso(hoy) };
     },
   },
 ];
@@ -79,9 +77,11 @@ export class RangoRapido {
     if (!desde || !hasta) {
       return null;
     }
-    return OPCIONES.find((o) => {
-      const r = o.rango();
-      return r.desde === desde && r.hasta === hasta;
-    })?.id ?? null;
+    return (
+      OPCIONES.find((o) => {
+        const r = o.rango();
+        return r.desde === desde && r.hasta === hasta;
+      })?.id ?? null
+    );
   });
 }

@@ -2,7 +2,7 @@ package oracle.inbound.service;
 
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import oracle.common.config.CacheRespuestas;
+import oracle.common.config.Transacciones;
 import oracle.common.exception.ConflictoException;
 import oracle.common.exception.RecursoNoEncontradoException;
 import oracle.common.response.ApiResponse;
@@ -11,6 +11,7 @@ import oracle.common.support.ActorActual;
 import oracle.common.support.Auditoria;
 import oracle.common.support.Filtros;
 import oracle.common.support.Listas;
+import oracle.common.support.Paginacion;
 import oracle.common.support.Trazas;
 import oracle.inbound.model.DataIncidenciaInbound;
 import oracle.inbound.repository.DataIncidenciaInboundRepository;
@@ -34,47 +35,42 @@ public class IncidenciaInboundTipoService {
 
     private final DataIncidenciaInboundRepository repo;
     private final CatalogoInbound catalogo;
-    private final CacheRespuestas cacheRespuestas;
+    private final Transacciones transacciones;
 
     public IncidenciaInboundTipoService(DataIncidenciaInboundRepository repo, CatalogoInbound catalogo,
-            CacheRespuestas cacheRespuestas) {
+            Transacciones transacciones) {
         this.repo = repo;
         this.catalogo = catalogo;
-        this.cacheRespuestas = cacheRespuestas;
+        this.transacciones = transacciones;
     }
 
     public Mono<ApiResponse<List<DataIncidenciaInboundResponse>>> listarTodos() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaInboundTipoService.listarTodos", () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaInboundTipoService.listarTodos", () -> transacciones.consultar(() -> {
                     List<DataIncidenciaInboundResponse> lista = repo
                             .findAll(Listas.limitado(Sort.by(Sort.Direction.ASC, "incidenciaInbound")))
                             .stream().map(this::aResponse).toList();
                     Listas.avisarSiCorto(log, lista.size(), "IncidenciaInboundTipoService.listarTodos");
                     return lista;
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Tipos de incidencia listados.", lista));
     }
 
     public Mono<ApiResponse<PaginaResponse<DataIncidenciaInboundResponse>>> listarPaginado(int pagina, int tamano,
             String texto) {
-        PageRequest pageable = PageRequest.of(Math.max(pagina, 1) - 1,
-                Math.min(Math.max(tamano, 1), MAX_TAMANO_PAGINA),
-                Sort.by(Sort.Direction.DESC, "creadoEn").and(Sort.by(Sort.Direction.DESC, "id")));
-        String termino = Filtros.normalizar(texto);
-        Specification<DataIncidenciaInbound> spec = (root, query, cb) -> termino == null
-                ? cb.conjunction()
-                : cb.like(cb.lower(root.get("incidenciaInbound")), "%" + termino.toLowerCase() + "%");
-        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaInboundTipoService.listarPaginado", () -> {
+        PageRequest pageable = Paginacion.pagina(pagina, tamano, MAX_TAMANO_PAGINA, Paginacion.RECIENTES);
+        Specification<DataIncidenciaInbound> spec = Filtros.contiene("incidenciaInbound", texto);
+        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaInboundTipoService.listarPaginado", () -> transacciones.consultar(() -> {
                     Page<DataIncidenciaInbound> page = repo.findAll(spec, pageable);
                     return PaginaResponse.de(page, page.getContent().stream().map(this::aResponse).toList());
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(d -> ApiResponse.ok("Tipos de incidencia listados.", d));
     }
 
     public Mono<ApiResponse<DataIncidenciaInboundResponse>> crear(IncidenciaInboundTipoCrearRequest req) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaInboundTipoService.crear", () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaInboundTipoService.crear", () -> transacciones.ejecutar(() -> {
                     String nombre = req.incidenciaInbound().trim();
                     if (repo.existsByIncidenciaInboundIgnoreCase(nombre)) {
                         throw new ConflictoException("Ya existe un tipo de incidencia con el nombre '" + nombre + "'.");
@@ -83,15 +79,15 @@ public class IncidenciaInboundTipoService {
                     p.setIncidenciaInbound(nombre);
                     Auditoria.alCrear(p, actor);
                     DataIncidenciaInbound guardado = repo.save(p);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
                     return ApiResponse.ok("Tipo de incidencia creado.", aResponse(guardado));
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<DataIncidenciaInboundResponse>> actualizar(Long id, IncidenciaInboundTipoActualizarRequest req) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaInboundTipoService.actualizar id=" + id, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaInboundTipoService.actualizar id=" + id, () -> transacciones.ejecutar(() -> {
                     DataIncidenciaInbound p = obtener(id);
                     if (req.incidenciaInbound() != null && !req.incidenciaInbound().isBlank()) {
                         String nombre = req.incidenciaInbound().trim();
@@ -102,14 +98,14 @@ public class IncidenciaInboundTipoService {
                     }
                     Auditoria.alActualizar(p, actor);
                     DataIncidenciaInbound guardado = repo.save(p);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
                     return ApiResponse.ok("Tipo de incidencia actualizado.", aResponse(guardado));
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<Void>> eliminar(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaInboundTipoService.eliminar id=" + id, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaInboundTipoService.eliminar id=" + id, () -> transacciones.ejecutar(() -> {
                     DataIncidenciaInbound p = obtener(id);
                     long usos = repo.contarIncidencias(id);
                     if (usos > 0) {
@@ -117,9 +113,9 @@ public class IncidenciaInboundTipoService {
                                 + "': tiene " + usos + " incidencia(s) registrada(s).");
                     }
                     repo.delete(p);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
                     return ApiResponse.<Void>ok("Tipo de incidencia eliminado.", null);
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
@@ -131,11 +127,5 @@ public class IncidenciaInboundTipoService {
     private DataIncidenciaInboundResponse aResponse(DataIncidenciaInbound p) {
         return new DataIncidenciaInboundResponse(p.getId(), p.getIncidenciaInbound(), p.getCreadoEn(), p.getActualizadoEn(),
                 p.getCreadoPor(), p.getActualizadoPor());
-    }
-
-    /** Un cambio de catalogo invalida los nombres cacheados y los agregados del dashboard. */
-    private void cambioCatalogo() {
-        catalogo.invalidar();
-        cacheRespuestas.invalidarTodo();
     }
 }

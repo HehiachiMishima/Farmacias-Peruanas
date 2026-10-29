@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { forkJoin, finalize } from 'rxjs';
 import { esAccesoDenegado, mensajeDeError } from '../../../../../core/errors/error.util';
@@ -7,10 +7,12 @@ import { PERMISOS } from '../../../../../core/config/permisos';
 import { Auth } from '../../../../../core/services/auth';
 import { DirectorioUsuarios } from '../../../../../core/services/directorio-usuarios';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
-import { PermisosApi } from '../../../../../core/services/permisos.api';
-import { RolesApi } from '../../../../../core/services/roles.api';
-import { UsuariosApi } from '../../../../../core/services/usuarios.api';
-import { Permiso, Rol, Usuario } from '../../../../../core/models';
+import { PermisosApi } from '../../data/permisos.api';
+import { RolesApi } from '../../data/roles.api';
+import { UsuariosApi } from '../../data/usuarios.api';
+import { Permiso } from '../../data/permiso.model';
+import { Rol } from '../../data/rol.model';
+import { Usuario } from '../../../../../core/models';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
 import { ColumnasRedimensionables } from '../../../../../shared/directives/columnas-redimensionables.directive';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
@@ -41,6 +43,7 @@ const SIN_ROL = '__sin_rol__';
 
 @Component({
   selector: 'app-admin-usuarios',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     ReactiveFormsModule,
     DatePipe,
@@ -124,7 +127,12 @@ export class Usuarios {
     const chipRol: ChipFiltro | null =
       rol === null
         ? null
-        : { clave: 'rol', etiqueta: 'Rol', valor: rol === SIN_ROL ? 'Sin rol' : rol, icono: 'roles' };
+        : {
+            clave: 'rol',
+            etiqueta: 'Rol',
+            valor: rol === SIN_ROL ? 'Sin rol' : rol,
+            icono: 'roles',
+          };
     return [
       chipEstado(this.filtroEstado()),
       chipRol,

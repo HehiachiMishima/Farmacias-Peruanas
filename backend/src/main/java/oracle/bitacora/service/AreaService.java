@@ -1,6 +1,6 @@
 package oracle.bitacora.service;
 
-import oracle.common.config.CacheRespuestas;
+import oracle.common.config.Transacciones;
 
 import oracle.common.support.ActorActual;
 import oracle.common.support.Auditoria;
@@ -32,40 +32,40 @@ import reactor.core.scheduler.Schedulers;
 public class AreaService {
 
     private final CatalogoBitacora catalogo;
-    private final CacheRespuestas cacheRespuestas;
+    private final Transacciones transacciones;
 
     private final DataAreaRepository dataAreaRepository;
     private final DataResponsableRepository dataResponsableRepository;
 
     public AreaService(DataAreaRepository dataAreaRepository,
             DataResponsableRepository dataResponsableRepository,
-            CatalogoBitacora catalogo, CacheRespuestas cacheRespuestas) {
+            CatalogoBitacora catalogo, Transacciones transacciones) {
         this.catalogo = catalogo;
-        this.cacheRespuestas = cacheRespuestas;
+        this.transacciones = transacciones;
         this.dataAreaRepository = dataAreaRepository;
         this.dataResponsableRepository = dataResponsableRepository;
     }
 
     public Mono<ApiResponse<List<AreaResponse>>> listar() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.listar", () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.listar", () -> transacciones.consultar(() -> {
                         List<AreaResponse> lista = dataAreaRepository.findAll(Listas.limitado()).stream()
                                 .map(AreaResponse::of).toList();
                         Listas.avisarSiCorto(log, lista.size(), "AreaService.listar");
                         return lista;
-                    }))
+                    })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Areas listadas.", lista));
     }
 
     public Mono<ApiResponse<AreaResponse>> obtenerPorId(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.obtenerPorId id=" + id, () ->
-                        ApiResponse.ok("Area encontrada.", AreaResponse.of(obtenerArea(id)))))
+        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.obtenerPorId id=" + id, () -> transacciones.consultar(() ->
+                        ApiResponse.ok("Area encontrada.", AreaResponse.of(obtenerArea(id))))))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<AreaResponse>> crear(AreaCrearRequest peticion) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.crear area=" + peticion.area(), () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.crear area=" + peticion.area(), () -> transacciones.ejecutar(() -> {
             if (dataAreaRepository.existsByArea(peticion.area())) {
                 throw new ConflictoException("Ya existe un area con el nombre '" + peticion.area() + "'.");
             }
@@ -74,15 +74,15 @@ public class AreaService {
             area.setArea(peticion.area().trim());
             Auditoria.alCrear(area, actor);
             dataAreaRepository.save(area);
-            cambioCatalogo();
+            catalogo.registrarCambio();
 
             return ApiResponse.ok("Area creada.", AreaResponse.of(area));
-        })).subscribeOn(Schedulers.boundedElastic());
+        }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<AreaResponse>> actualizar(Long id, AreaActualizarRequest peticion) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.actualizar id=" + id, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.actualizar id=" + id, () -> transacciones.ejecutar(() -> {
             DataArea area = obtenerArea(id);
 
             if (peticion.area() != null && !peticion.area().trim().equals(area.getArea())) {
@@ -94,13 +94,13 @@ public class AreaService {
 
             Auditoria.alActualizar(area, actor);
             dataAreaRepository.save(area);
-            cambioCatalogo();
+            catalogo.registrarCambio();
             return ApiResponse.ok("Area actualizada.", AreaResponse.of(area));
-        })).subscribeOn(Schedulers.boundedElastic());
+        }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<Void>> eliminar(Long id) {
-        return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "AreaService.eliminar id=" + id, () -> {
+        return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "AreaService.eliminar id=" + id, () -> transacciones.ejecutar(() -> {
                     DataArea area = obtenerArea(id);
                     long responsables = dataResponsableRepository.countByIdDataArea(id);
                     long incidencias = dataAreaRepository.contarIncidencias(id);
@@ -111,19 +111,19 @@ public class AreaService {
                                         + incidencias + " incidencia(s) registrada(s).");
                     }
                     dataAreaRepository.delete(area);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
                     return null;
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(Mono.fromSupplier(() -> ApiResponse.<Void>ok("Area eliminada.", null)));
     }
 
     public Mono<ApiResponse<List<ResponsableResponse>>> responsablesDe(Long areaId) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.responsablesDe areaId=" + areaId, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.responsablesDe areaId=" + areaId, () -> transacciones.consultar(() -> {
                     obtenerArea(areaId);
                     return dataResponsableRepository.findByIdDataAreaOrderById(areaId).stream()
                             .map(ResponsableResponse::of).toList();
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Responsables del area.", lista));
     }
@@ -131,7 +131,7 @@ public class AreaService {
     public Mono<ApiResponse<ResponsableResponse>> crearResponsable(Long areaId, ResponsableCrearRequest peticion) {
         Long actor = ActorActual.id();
         return Mono.fromCallable(() -> Trazas.medir(log,
-                "AreaService.crearResponsable areaId=" + areaId + " responsable=" + peticion.responsable(), () -> {
+                "AreaService.crearResponsable areaId=" + areaId + " responsable=" + peticion.responsable(), () -> transacciones.ejecutar(() -> {
                     obtenerArea(areaId);
                     if (dataResponsableRepository.existsByResponsable(peticion.responsable())) {
                         throw new ConflictoException(
@@ -144,16 +144,16 @@ public class AreaService {
                     responsable.setResponsable(peticion.responsable().trim());
                     Auditoria.alCrear(responsable, actor);
                     dataResponsableRepository.save(responsable);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
 
                     return ApiResponse.ok("Responsable creado.", ResponsableResponse.of(responsable));
-                })).subscribeOn(Schedulers.boundedElastic());
+                }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<ResponsableResponse>> actualizarResponsable(Long areaId, Long responsableId,
             ResponsableActualizarRequest peticion) {
         Long actor = ActorActual.id();
-        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.actualizarResponsable id=" + responsableId, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.actualizarResponsable id=" + responsableId, () -> transacciones.ejecutar(() -> {
             DataResponsable responsable = obtenerResponsable(areaId, responsableId);
 
             if (peticion.responsable() != null && !peticion.responsable().trim().equals(responsable.getResponsable())) {
@@ -167,14 +167,14 @@ public class AreaService {
 
             Auditoria.alActualizar(responsable, actor);
             dataResponsableRepository.save(responsable);
-            cambioCatalogo();
+            catalogo.registrarCambio();
             return ApiResponse.ok("Responsable actualizado.", ResponsableResponse.of(responsable));
-        })).subscribeOn(Schedulers.boundedElastic());
+        }))).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<Void>> eliminarResponsable(Long areaId, Long responsableId) {
         return Mono.<Void>fromRunnable(() -> Trazas.medir(log,
-                "AreaService.eliminarResponsable id=" + responsableId, () -> {
+                "AreaService.eliminarResponsable id=" + responsableId, () -> transacciones.ejecutar(() -> {
                     DataResponsable responsable = obtenerResponsable(areaId, responsableId);
                     long incidencias = dataResponsableRepository.contarIncidencias(responsableId);
                     if (incidencias > 0) {
@@ -183,9 +183,9 @@ public class AreaService {
                                         + incidencias + " incidencia(s) registrada(s).");
                     }
                     dataResponsableRepository.delete(responsable);
-                    cambioCatalogo();
+                    catalogo.registrarCambio();
                     return null;
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(Mono.fromSupplier(() -> ApiResponse.<Void>ok("Responsable eliminado.", null)));
     }
@@ -204,11 +204,5 @@ public class AreaService {
                     "El responsable con id " + responsableId + " no pertenece al area con id " + areaId + ".");
         }
         return responsable;
-    }
-
-    /** Un cambio de catalogo invalida los nombres cacheados y los agregados del dashboard. */
-    private void cambioCatalogo() {
-        catalogo.invalidar();
-        cacheRespuestas.invalidarTodo();
     }
 }

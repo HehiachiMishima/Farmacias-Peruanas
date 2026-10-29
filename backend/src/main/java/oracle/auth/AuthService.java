@@ -122,7 +122,7 @@ public class AuthService {
                             usuario.setContrasena(passwordEncoder.encode(peticion.contrasenaNueva()));
                             Auditoria.alActualizar(usuario, actor);
                             usuarioRepository.save(usuario);
-                            autorizacionCache.invalidar(usuarioId);
+                            transacciones.alConfirmar(() -> autorizacionCache.invalidar(usuarioId));
                             return null;
                         })))
                 .subscribeOn(Schedulers.boundedElastic())
@@ -147,7 +147,7 @@ public class AuthService {
         }
 
         List<String> permisos = resolucionRepository.nombresPermitidos(usuario.getId());
-        JwtService.TokenGenerado token = jwtService.generar(usuario);
+        JwtService.TokenGenerado token = jwtService.generar(usuario.getId(), usuario.getUsuario());
 
         return new AuthResponse(token.valor(), "Bearer", token.expiraEn(), UsuarioResponse.of(usuario), permisos);
     }

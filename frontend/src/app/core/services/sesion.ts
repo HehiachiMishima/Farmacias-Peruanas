@@ -14,6 +14,9 @@ export class SesionStore {
   readonly usuario = computed(() => this._sesion()?.usuario ?? null);
   readonly autenticado = computed(() => this.esVigente(this._sesion()));
 
+  /** Acciones al cerrar la sesión: vaciar cachés con datos del usuario saliente. */
+  private readonly alLimpiarAcciones: (() => void)[] = [];
+
   guardar(sesion: Sesion): void {
     this._sesion.set(sesion);
     try {
@@ -30,7 +33,8 @@ export class SesionStore {
       return;
     }
     const mismos =
-      actual.permisos.length === permisos.length && actual.permisos.every((p, i) => p === permisos[i]);
+      actual.permisos.length === permisos.length &&
+      actual.permisos.every((p, i) => p === permisos[i]);
     if (mismos && JSON.stringify(actual.usuario) === JSON.stringify(usuario)) {
       return;
     }
@@ -44,6 +48,12 @@ export class SesionStore {
     } catch {
       /* almacenamiento no disponible */
     }
+    this.alLimpiarAcciones.forEach((accion) => accion());
+  }
+
+  /** Registra una acción que se ejecuta cada vez que se limpia la sesión. */
+  alLimpiar(accion: () => void): void {
+    this.alLimpiarAcciones.push(accion);
   }
 
   tienePermiso(permiso: string): boolean {

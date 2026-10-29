@@ -9,9 +9,12 @@ paneles según los permisos de cada usuario. Su nombre es un acróstico:
 
 - **Frontend**: Angular 22 (standalone, zoneless, signals) + SCSS. Diseño
   "Atlas": cromo navy, rojo y oro de marca, paleta de señales, modo claro/oscuro.
-- **Backend**: Spring Boot 4.1 (Java 21), API REST stateless con JWT (HS256),
+- **Backend**: Spring Boot 4.1 (Java 25), API REST stateless con JWT (HS256),
   organizado **por paneles**.
 - **Base de datos**: MySQL 8 (Aiven en producción).
+
+Resumen para gerencia (módulos, estado, riesgos y hoja de ruta):
+[docs/resumen-ejecutivo.md](docs/resumen-ejecutivo.md).
 
 ---
 
@@ -72,9 +75,9 @@ La ruta raíz de cada panel redirige a su primer módulo accesible con
 │       ├── simulacion/         # Panel Simulación (registros Excel, configuración, balanceo)
 │       └── common/             # Transversal: config, security, exception, support, web
 └── frontend/src/app/
-    ├── core/                   # config, guards, interceptors, models, services, utils
-    ├── features/               # auth, launcher, panels/{admin,bitacora,inbound,analisis,…}
-    └── shared/                 # directivas, pipes y UI (icon, modal, charts, …)
+    ├── core/                   # solo transversal: sesión, http, guards, interceptors, config, utils
+    ├── features/               # auth, launcher, panels/<panel>/{data,state,pages}
+    └── shared/                 # directivas, pipes y UI (icon, modal, charts, filtros, …)
 ```
 
 Cada panel del backend tiene sus propias capas:

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
@@ -7,8 +7,8 @@ import {
   ArchivoSimulacion,
   ChuteComparativoSimulacion,
   DashboardSimulacion,
-} from '../../../../../core/models';
-import { SimulacionApi } from '../../../../../core/services/simulacion.api';
+} from '../../data/simulacion.model';
+import { SimulacionApi } from '../../data/simulacion.api';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
 import {
   ComparativoChart,
@@ -61,6 +61,7 @@ const METRICAS: ReadonlyArray<{
  */
 @Component({
   selector: 'app-simulacion-dashboard',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     HasPermiso,
     Kpi,

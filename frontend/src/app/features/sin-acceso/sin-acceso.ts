@@ -1,10 +1,11 @@
-import { Component, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
 import { Router } from '@angular/router';
 import { Auth } from '../../core/services/auth';
 import { Icon } from '../../shared/ui/icon/icon';
 
 @Component({
   selector: 'app-sin-acceso',
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Icon],
   template: `
     <div class="denied">
@@ -22,7 +23,9 @@ import { Icon } from '../../shared/ui/icon/icon';
             <ui-icon name="panel" [size]="18" />
             Volver al inicio
           </button>
-          <button type="button" class="ui-btn ui-btn--ghost" (click)="cerrarSesion()">Cerrar sesión</button>
+          <button type="button" class="ui-btn ui-btn--ghost" (click)="cerrarSesion()">
+            Cerrar sesión
+          </button>
         </div>
       </div>
     </div>

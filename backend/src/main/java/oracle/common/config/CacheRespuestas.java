@@ -3,6 +3,7 @@ package oracle.common.config;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -14,12 +15,17 @@ import org.springframework.stereotype.Component;
  * No cachea datos por usuario: la clave la construye quien consulta. Se
  * invalida por completo cuando cambian las incidencias (invalidarTodo), de modo
  * que el dashboard nunca queda desactualizado mas alla del TTL.
+ *
+ * La clave interna incluye una generacion que invalidarTodo() avanza: un
+ * calculo que estaba en curso al invalidar se guarda bajo la generacion vieja
+ * y ya no se sirve (invalidateAll de Caffeine no descarta cargas en vuelo).
  */
 @Component
 public class CacheRespuestas {
 
     private final boolean habilitado;
     private final Cache<String, Object> cache;
+    private final AtomicLong generacion = new AtomicLong();
 
     public CacheRespuestas(
             @Value("${app.stats-cache.enabled:true}") boolean habilitado,
@@ -38,10 +44,11 @@ public class CacheRespuestas {
         if (!habilitado) {
             return calculo.get();
         }
-        return (T) cache.get(clave, k -> calculo.get());
+        return (T) cache.get(generacion.get() + ":" + clave, k -> calculo.get());
     }
 
     public void invalidarTodo() {
+        generacion.incrementAndGet();
         cache.invalidateAll();
     }
 }

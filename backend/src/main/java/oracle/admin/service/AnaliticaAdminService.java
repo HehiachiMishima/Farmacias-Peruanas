@@ -1,7 +1,6 @@
 
 package oracle.admin.service;
 
-import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import oracle.admin.repository.AnaliticaAdminRepository;
 import oracle.admin.response.AnaliticaAdminResponse;
@@ -39,14 +38,7 @@ public class AnaliticaAdminService {
     }
 
     private Mono<AnaliticaAdminResponse> calcular() {
-        return Mono.zip(
-                r -> new AnaliticaAdminResponse((AnaliticaAdminResponse.Kpis) r[0], lista(r[1])),
-                ejecutor.consulta(repo::kpis),
-                ejecutor.consulta(repo::coberturaPaneles));
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T> List<T> lista(Object valor) {
-        return (List<T>) valor;
+        return Mono.zip(ejecutor.consulta(repo::kpis), ejecutor.consulta(repo::coberturaPaneles))
+                .map(r -> new AnaliticaAdminResponse(r.getT1(), r.getT2()));
     }
 }
