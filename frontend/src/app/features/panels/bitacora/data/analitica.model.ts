@@ -1,4 +1,4 @@
-import { CeldaMatriz, Granularidad, PuntoSerie } from '../../../../core/models';
+import { CeldaMatriz } from '../../../../core/models';
 
 /** Analítica del dashboard de Bitácora. */
 export interface AnaliticaBitacora {
@@ -16,9 +16,6 @@ export interface AnaliticaBitacora {
   areas: GrupoBitacora[];
   tipos: { tipo: string; sistema: string; total: number; mttrSegundos: number }[];
   centroSistema: CeldaMatriz[];
-  tendencia: PuntoSerie[];
-  granularidad: Granularidad;
-  porHora: PuntoSerie[];
 }
 
 export interface GrupoBitacora {

@@ -144,7 +144,7 @@ public class IncidenciaService {
     }
 
     /**
-     * Analitica completa del dashboard: 8 agregaciones en paralelo sobre el
+     * Analitica completa del dashboard: 6 agregaciones en paralelo sobre el
      * ejecutor analitico, cacheadas por filtro (single-flight por clave).
      */
     public Mono<ApiResponse<AnaliticaBitacoraResponse>> analitica(FiltroIncidencia filtro) {
@@ -162,13 +162,9 @@ public class IncidenciaService {
                         ejecutor.consulta(() -> analiticaRepository.porCentro(filtro)),
                         ejecutor.consulta(() -> analiticaRepository.porArea(filtro)),
                         ejecutor.consulta(() -> analiticaRepository.porTipo(filtro)),
-                        ejecutor.consulta(() -> analiticaRepository.centroPorSistema(filtro)),
-                        ejecutor.consulta(() -> analiticaRepository.tendencia(filtro)),
-                        ejecutor.consulta(() -> analiticaRepository.porHora(filtro)))
+                        ejecutor.consulta(() -> analiticaRepository.centroPorSistema(filtro)))
                 .map(r -> new AnaliticaBitacoraResponse(
-                        r.getT1(), r.getT2(), r.getT3(), r.getT4(), r.getT5(), r.getT6(), r.getT7(),
-                        analiticaRepository.granularidad(filtro),
-                        r.getT8()));
+                        r.getT1(), r.getT2(), r.getT3(), r.getT4(), r.getT5(), r.getT6()));
     }
 
     private EstadisticaResponse calcularEstadisticas(FiltroIncidencia filtro) {

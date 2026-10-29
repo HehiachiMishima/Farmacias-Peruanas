@@ -8,7 +8,6 @@ import oracle.bitacora.response.AnaliticaBitacoraResponse.Grupo;
 import oracle.bitacora.response.AnaliticaBitacoraResponse.Kpis;
 import oracle.bitacora.response.AnaliticaBitacoraResponse.Tipo;
 import oracle.common.response.CeldaMatriz;
-import oracle.common.response.PuntoSerie;
 import oracle.common.support.CondicionSql;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -21,9 +20,6 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public class AnaliticaIncidenciaRepository {
-
-    /** Por encima de este rango (dias) la tendencia se agrupa por mes. */
-    private static final long MAX_DIAS_SERIE_DIARIA = 92;
 
     private final JdbcTemplate jdbc;
 
@@ -92,38 +88,6 @@ public class AnaliticaIncidenciaRepository {
                 + " GROUP BY i.id_data_centro, ce.centro, i.id_data_sistema, s.sistema";
         return jdbc.query(sql, (rs, n) -> new CeldaMatriz(rs.getString("fila"), rs.getString("columna"),
                 rs.getLong("valor")), c.argumentos());
-    }
-
-    /** Serie temporal: valor = incidencias. */
-    public List<PuntoSerie> tendencia(FiltroIncidencia filtro) {
-        CondicionSql c = CondicionIncidencia.de(filtro);
-        String formato = granularidad(filtro).equals("dia") ? "%Y-%m-%d" : "%Y-%m";
-        String sql = "SELECT DATE_FORMAT(i.creado_en, '" + formato + "') AS periodo, COUNT(*) AS valor, "
-                + "0 AS secundario "
-                + "FROM incidencias i " + c.where()
-                + " GROUP BY periodo ORDER BY periodo";
-        return jdbc.query(sql, (rs, n) -> new PuntoSerie(rs.getString("periodo"), rs.getLong("valor"),
-                rs.getLong("secundario")), c.argumentos());
-    }
-
-    /** Incidencias por hora de inicio (0-23): valor = incidencias. */
-    public List<PuntoSerie> porHora(FiltroIncidencia filtro) {
-        CondicionSql c = CondicionIncidencia.de(filtro);
-        String sql = "SELECT HOUR(i.hora_inicio) AS hora, COUNT(*) AS valor, "
-                + "0 AS secundario "
-                + "FROM incidencias i " + c.where()
-                + " GROUP BY hora ORDER BY hora";
-        return jdbc.query(sql, (rs, n) -> new PuntoSerie(String.format("%02d", rs.getInt("hora")),
-                rs.getLong("valor"), rs.getLong("secundario")), c.argumentos());
-    }
-
-    /** "dia" si el rango pedido es corto; "mes" en otro caso (o sin rango). */
-    public String granularidad(FiltroIncidencia filtro) {
-        if (filtro != null && filtro.desde() != null && filtro.hasta() != null
-                && ChronoUnit.DAYS.between(filtro.desde(), filtro.hasta()) <= MAX_DIAS_SERIE_DIARIA) {
-            return "dia";
-        }
-        return "mes";
     }
 
     private List<Grupo> agrupar(FiltroIncidencia filtro, String tabla, String columna, String fk) {

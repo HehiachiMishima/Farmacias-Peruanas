@@ -34,7 +34,7 @@ export class IncidenciasApi {
     );
   }
 
-  /** Analítica completa del dashboard (KPIs, rankings, cruces y tendencias). */
+  /** Analítica completa del dashboard (KPIs, rankings y cruces). */
   analitica(filtros: IncidenciaFiltros = {}): Observable<AnaliticaBitacora> {
     return this.api.get<AnaliticaBitacora>(
       '/incidencias/analitica',

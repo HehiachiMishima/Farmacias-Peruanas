@@ -94,7 +94,7 @@ public class IncidenciaController {
                 new FiltroIncidencia(centro, sistema, area, responsable, tipo, desde, hasta, texto));
     }
 
-    /** Analitica del dashboard (KPIs, rankings, cruces y tendencias) para el filtro. */
+    /** Analitica del dashboard (KPIs, rankings y cruces) para el filtro. */
     @GetMapping("/analitica")
     @PreAuthorize("hasAuthority('VER_DASHBOARD')")
     public Mono<ApiResponse<AnaliticaBitacoraResponse>> analitica(

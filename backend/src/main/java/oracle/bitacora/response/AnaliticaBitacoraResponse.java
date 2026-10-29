@@ -2,23 +2,15 @@ package oracle.bitacora.response;
 
 import java.util.List;
 import oracle.common.response.CeldaMatriz;
-import oracle.common.response.PuntoSerie;
 
-/**
- * Analitica del panel Bitacora calculada en SQL para el filtro recibido.
- *
- * @param granularidad "dia" o "mes": unidad de la serie {@code tendencia}.
- */
+/** Analitica del panel Bitacora calculada en SQL para el filtro recibido. */
 public record AnaliticaBitacoraResponse(
         Kpis kpis,
         List<Grupo> sistemas,
         List<Grupo> centros,
         List<Grupo> areas,
         List<Tipo> tipos,
-        List<CeldaMatriz> centroSistema,
-        List<PuntoSerie> tendencia,
-        String granularidad,
-        List<PuntoSerie> porHora) {
+        List<CeldaMatriz> centroSistema) {
 
     /**
      * @param totalPeriodoAnterior total del periodo inmediatamente anterior de igual

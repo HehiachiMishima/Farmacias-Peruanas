@@ -8,11 +8,9 @@ import { AreasApi } from '../../data/areas.api';
 import { BitacoraCatalogos } from '../../state/bitacora-catalogos';
 import { IncidenciasApi } from '../../data/incidencias.api';
 import { BulletChart, ItemBullet } from '../../../../../shared/ui/charts/bullet-chart';
-import { ColumnChart, Columna } from '../../../../../shared/ui/charts/column-chart';
-import { duracion, entero, porcentaje, variacion } from '../../../../../shared/ui/charts/formato';
+import { duracion, entero, variacion } from '../../../../../shared/ui/charts/formato';
 import { CeldaCalor, Heatmap } from '../../../../../shared/ui/charts/heatmap';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
-import { LineChart, SerieLinea } from '../../../../../shared/ui/charts/line-chart';
 import { ItemRanking, RankingTiles } from '../../../../../shared/ui/charts/ranking-tiles';
 import { RingChart, SegmentoAnillo } from '../../../../../shared/ui/charts/ring-chart';
 import { GrupoApilado, StackedBars } from '../../../../../shared/ui/charts/stacked-bars';
@@ -34,19 +32,17 @@ import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros
  *
  * Responde: ¿qué sistemas fallan más y cuánto tardamos en resolverlos?, ¿qué
  * tipos se repiten y en qué sistema?, ¿qué combinación centro × sistema
- * concentra los casos?, ¿cómo evoluciona el volumen y a qué hora ocurre?
+ * concentra los casos?, ¿qué centros y áreas concentran las incidencias?
  */
 @Component({
   selector: 'app-bitacora-dashboard',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     BulletChart,
-    ColumnChart,
     EmptyState,
     Heatmap,
     Icon,
     Kpi,
-    LineChart,
     RankingTiles,
     RingChart,
     Treemap,
@@ -219,28 +215,6 @@ export class DashboardBitacora {
 
   readonly mttrGeneral = computed(() => this.kpis()?.mttrSegundos ?? 0);
   readonly mttrGeneralTexto = computed(() => duracion(this.mttrGeneral()));
-
-  readonly tendencia = computed(() => {
-    const serie = this.datos()?.tendencia ?? [];
-    return {
-      etiquetas: serie.map((p) => p.periodo),
-      series: [
-        { nombre: 'Incidencias', color: 'var(--accent)', valores: serie.map((p) => p.valor) },
-      ] as SerieLinea[],
-    };
-  });
-
-  readonly porHora = computed<Columna[]>(() => {
-    const mapa = new Map((this.datos()?.porHora ?? []).map((p) => [p.periodo, p.valor]));
-    return Array.from({ length: 24 }, (_, h) => {
-      const clave = `${h}`.padStart(2, '0');
-      return { etiqueta: clave, valor: mapa.get(clave) ?? 0 };
-    });
-  });
-
-  readonly granularidad = computed(() =>
-    this.datos()?.granularidad === 'dia' ? 'por día' : 'por mes',
-  );
 
   constructor() {
     this.cargarCatalogos();
