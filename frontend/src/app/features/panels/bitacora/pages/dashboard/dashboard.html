@@ -131,18 +131,7 @@
       <ui-empty icono="incidencias" titulo="Sin incidencias" mensaje="No hay incidencias para los filtros aplicados." />
     </div>
   } @else {
-    @if (hallazgos().length > 0) {
-      <section class="dash-insights" aria-label="Hallazgos">
-        @for (h of hallazgos(); track h.kicker) {
-          <article class="dash-insight" [style.--c]="h.color">
-            <span class="dash-insight__icon"><ui-icon [name]="h.icono" [size]="18" /></span>
-            <p class="dash-insight__texto">
-              <span class="dash-insight__kicker">{{ h.kicker }}</span>
-              <span [innerHTML]="h.html"></span>
-            </p>
-          </article>
-        }
-      </section>
+
     }
 
     <div class="dash-grid">
@@ -179,34 +168,6 @@
         </header>
         <div class="dash-card__body">
           <ui-heatmap [celdas]="matriz()" [maxFilas]="12" [maxColumnas]="10" tituloFilas="Centro" tituloColumnas="Sistema" />
-        </div>
-      </article>
-
-      <article class="dash-card dash-card--8" [class.dash-card--cargando]="cargando()">
-        <header class="dash-card__head">
-          <div class="dash-card__titulos">
-            <h2 class="dash-card__titulo"><ui-icon name="tendencia" [size]="18" /> Tendencia de incidencias</h2>
-            <p class="dash-card__sub">Volumen {{ granularidad() }} de incidencias registradas.</p>
-          </div>
-        </header>
-        <div class="dash-card__body">
-          @if (tendencia().etiquetas.length > 0) {
-            <ui-linea [etiquetas]="tendencia().etiquetas" [series]="tendencia().series" [altura]="230" />
-          } @else {
-            <div class="dash-card__vacio">Sin datos en el periodo.</div>
-          }
-        </div>
-      </article>
-
-      <article class="dash-card dash-card--4" [class.dash-card--cargando]="cargando()">
-        <header class="dash-card__head">
-          <div class="dash-card__titulos">
-            <h2 class="dash-card__titulo"><ui-icon name="reloj" [size]="18" /> ¿A qué hora ocurren?</h2>
-            <p class="dash-card__sub">Incidencias por hora de inicio (0–23 h).</p>
-          </div>
-        </header>
-        <div class="dash-card__body">
-          <ui-columnas [datos]="porHora()" [altura]="170" [anchoMinimo]="9" [cadaEtiqueta]="3" prefijoPico="las " />
         </div>
       </article>
 
@@ -263,4 +224,4 @@
       </article>
     </div>
   }
-}
+

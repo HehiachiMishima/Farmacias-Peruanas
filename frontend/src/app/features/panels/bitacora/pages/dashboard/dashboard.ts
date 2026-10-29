@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { valorNumero, valorTexto } from '../../../../../core/utils/evento.util';
 import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
 import { OpcionesDependientes } from '../../../../../core/utils/opciones-dependientes';
-import { escaparHtml } from '../../../../../core/utils/texto.util';
 import { AnaliticaBitacora } from '../../data/analitica.model';
 import { IncidenciaFiltros, Responsable } from '../../data/bitacora.model';
 import { AreasApi } from '../../data/areas.api';
@@ -155,53 +154,6 @@ export class DashboardBitacora {
         variacion: null,
       },
     ];
-  });
-
-  // ---------------- Hallazgos ----------------
-  readonly hallazgos = computed(() => {
-    const d = this.datos();
-    if (!d || d.kpis.total === 0) {
-      return [];
-    }
-    const total = d.kpis.total;
-    const salida: { icono: string; color: string; kicker: string; html: string }[] = [];
-    const sistema = d.sistemas[0];
-    if (sistema) {
-      salida.push({
-        icono: 'sistema',
-        color: 'var(--brand)',
-        kicker: 'Sistema más crítico',
-        html: `<strong>${escaparHtml(sistema.etiqueta)}</strong> acumula <strong>${entero(sistema.total)}</strong> incidencias (${porcentaje(sistema.total / total)}), con un tiempo medio de solución de <strong>${duracion(sistema.mttrSegundos)}</strong>.`,
-      });
-    }
-    const cruce = [...d.centroSistema].sort((a, b) => b.valor - a.valor)[0];
-    if (cruce) {
-      salida.push({
-        icono: 'centro',
-        color: 'var(--accent)',
-        kicker: 'Punto caliente',
-        html: `<strong>${escaparHtml(cruce.fila)}</strong> con <strong>${escaparHtml(cruce.columna)}</strong> es la combinación centro-sistema con más casos: <strong>${entero(cruce.valor)}</strong>.`,
-      });
-    }
-    const tipo = d.tipos[0];
-    if (tipo) {
-      salida.push({
-        icono: 'incidencias',
-        color: 'var(--warning)',
-        kicker: 'Incidencia más repetida',
-        html: `<strong>${escaparHtml(tipo.tipo)}</strong> (${escaparHtml(tipo.sistema)}) se repitió <strong>${entero(tipo.total)}</strong> veces.`,
-      });
-    }
-    const hora = [...d.porHora].sort((a, b) => b.valor - a.valor)[0];
-    if (hora) {
-      salida.push({
-        icono: 'reloj',
-        color: 'var(--violet)',
-        kicker: 'Hora pico',
-        html: `La mayor cantidad de incidencias inicia a las <strong>${hora.periodo}:00</strong> (${entero(hora.valor)} casos).`,
-      });
-    }
-    return salida;
   });
 
   // ---------------- Gráficos ----------------
