@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   HostListener,
   computed,
   inject,
@@ -67,6 +68,7 @@ export class SimulacionConfiguracion {
   private readonly notificaciones = inject(Notificaciones);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly sesion = inject(SesionStore);
 
   readonly permisos = PERMISOS;
@@ -307,7 +309,10 @@ export class SimulacionConfiguracion {
     this.errorOpciones.set(null);
     this.api
       .opciones()
-      .pipe(finalize(() => this.cargandoOpciones.set(false)))
+      .pipe(
+        finalize(() => this.cargandoOpciones.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         next: (lista) => {
           this.registros.set(lista);
@@ -404,6 +409,7 @@ export class SimulacionConfiguracion {
             this.cargando.set(false);
           }
         }),
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
         next: (config) => {
@@ -653,7 +659,10 @@ export class SimulacionConfiguracion {
     this.historialCargando.set(true);
     this.api
       .historial(id)
-      .pipe(finalize(() => this.historialCargando.set(false)))
+      .pipe(
+        finalize(() => this.historialCargando.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         next: (historial) => this.historial.set(historial),
         error: () => this.historialAbierto.set(false),

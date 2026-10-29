@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
@@ -80,6 +88,7 @@ export class SimulacionDashboard {
   private readonly api = inject(SimulacionApi);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly permisos = PERMISOS;
   readonly metricas = METRICAS;
@@ -271,7 +280,10 @@ export class SimulacionDashboard {
     this.errorOpciones.set(null);
     this.api
       .opciones()
-      .pipe(finalize(() => this.cargandoOpciones.set(false)))
+      .pipe(
+        finalize(() => this.cargandoOpciones.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         next: (lista) => {
           this.registros.set(lista);
@@ -336,6 +348,7 @@ export class SimulacionDashboard {
             this.cargando.set(false);
           }
         }),
+        takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
         next: (dashboard) => {
