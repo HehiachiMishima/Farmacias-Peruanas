@@ -5,6 +5,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import oracle.common.response.CeldaMatriz;
 import oracle.common.response.PuntoSerie;
+import oracle.common.config.ZonaNegocio;
 import oracle.common.support.CondicionSql;
 import oracle.inbound.request.FiltroIncidenciaInbound;
 import oracle.inbound.response.AnaliticaInboundResponse.Kpis;
@@ -25,13 +26,15 @@ public class AnaliticaInboundRepository {
     private static final int TOP_SKUS = 10;
 
     private final JdbcTemplate jdbc;
+    private final ZonaNegocio zona;
 
-    public AnaliticaInboundRepository(JdbcTemplate jdbc) {
+    public AnaliticaInboundRepository(JdbcTemplate jdbc, ZonaNegocio zona) {
         this.jdbc = jdbc;
+        this.zona = zona;
     }
 
     public Kpis kpis(FiltroIncidenciaInbound filtro) {
-        CondicionSql c = CondicionInbound.de(filtro);
+        CondicionSql c = CondicionInbound.de(filtro, zona);
         String sql = "SELECT COUNT(*) AS total, COALESCE(SUM(i.n_unidades), 0) AS unidades, "
                 + "COUNT(DISTINCT i.id_data_proveedor) AS proveedores, "
                 + "COUNT(DISTINCT i.orden_compra) AS ocs, "
@@ -45,7 +48,7 @@ public class AnaliticaInboundRepository {
         if (actual == null || anterior == null) {
             return actual;
         }
-        CondicionSql ca = CondicionInbound.de(anterior);
+        CondicionSql ca = CondicionInbound.de(anterior, zona);
         long[] previo = jdbc.queryForObject(
                 "SELECT COUNT(*) AS total, COALESCE(SUM(i.n_unidades), 0) AS unidades FROM incidencias_inbound i "
                         + ca.where(),
@@ -59,7 +62,7 @@ public class AnaliticaInboundRepository {
      * incidencias de cada proveedor, resuelto con ROW_NUMBER en una sola pasada).
      */
     public List<Proveedor> proveedores(FiltroIncidenciaInbound filtro) {
-        CondicionSql c = CondicionInbound.de(filtro);
+        CondicionSql c = CondicionInbound.de(filtro, zona);
         String sql = "WITH base AS ("
                 + "  SELECT i.id_data_proveedor AS pid, i.id_data_incidencia_inbound AS tid,"
                 + "         i.orden_compra, i.sku_producto, i.n_unidades"
@@ -88,7 +91,7 @@ public class AnaliticaInboundRepository {
     }
 
     public List<Tipo> tipos(FiltroIncidenciaInbound filtro) {
-        CondicionSql c = CondicionInbound.de(filtro);
+        CondicionSql c = CondicionInbound.de(filtro, zona);
         String sql = "SELECT COALESCE(t.incidencia_inbound, '—') AS tipo, COUNT(*) AS total, "
                 + "COALESCE(SUM(i.n_unidades), 0) AS unidades, COUNT(DISTINCT i.id_data_proveedor) AS proveedores "
                 + "FROM incidencias_inbound i "
@@ -101,7 +104,7 @@ public class AnaliticaInboundRepository {
     }
 
     public List<CeldaMatriz> proveedorPorTipo(FiltroIncidenciaInbound filtro) {
-        CondicionSql c = CondicionInbound.de(filtro);
+        CondicionSql c = CondicionInbound.de(filtro, zona);
         String sql = "SELECT COALESCE(p.proveedor, '—') AS fila, COALESCE(t.incidencia_inbound, '—') AS columna, "
                 + "COUNT(*) AS valor "
                 + "FROM incidencias_inbound i "
@@ -114,7 +117,7 @@ public class AnaliticaInboundRepository {
     }
 
     public List<Sku> skusRecurrentes(FiltroIncidenciaInbound filtro) {
-        CondicionSql c = CondicionInbound.de(filtro);
+        CondicionSql c = CondicionInbound.de(filtro, zona);
         String sql = "SELECT i.sku_producto AS sku, COUNT(*) AS total, COALESCE(SUM(i.n_unidades), 0) AS unidades, "
                 + "COUNT(DISTINCT i.id_data_proveedor) AS proveedores "
                 + "FROM incidencias_inbound i " + c.where()
@@ -125,9 +128,9 @@ public class AnaliticaInboundRepository {
 
     /** Serie temporal: valor = incidencias, secundario = unidades. */
     public List<PuntoSerie> tendencia(FiltroIncidenciaInbound filtro) {
-        CondicionSql c = CondicionInbound.de(filtro);
+        CondicionSql c = CondicionInbound.de(filtro, zona);
         String formato = granularidad(filtro).equals("dia") ? "%Y-%m-%d" : "%Y-%m";
-        String sql = "SELECT DATE_FORMAT(i.creado_en, '" + formato + "') AS periodo, COUNT(*) AS valor, "
+        String sql = "SELECT DATE_FORMAT(i.creado_en + INTERVAL " + zona.desfaseSegundos() + " SECOND, '" + formato + "') AS periodo, COUNT(*) AS valor, "
                 + "COALESCE(SUM(i.n_unidades), 0) AS secundario "
                 + "FROM incidencias_inbound i " + c.where()
                 + " GROUP BY periodo ORDER BY periodo";

@@ -2,6 +2,7 @@ package oracle.bitacora.service;
 
 import oracle.bitacora.repository.AnaliticaIncidenciaRepository;
 import oracle.bitacora.response.AnaliticaBitacoraResponse;
+import oracle.common.config.ZonaNegocio;
 import oracle.common.support.EjecutorAnalitica;
 
 import oracle.common.support.ActorActual;
@@ -13,8 +14,6 @@ import oracle.common.support.Trazas;
 import jakarta.persistence.criteria.Predicate;
 import tools.jackson.databind.ObjectMapper;
 import java.time.Duration;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,8 +50,8 @@ import reactor.core.scheduler.Schedulers;
 
 /**
  * Registro (bitácora) de incidencias. Valida las FK compuestas del esquema,
- * compone creado_en con la fecha indicada + hora de inicio y calcula el
- * tiempo de solución cuando hay hora de fin.
+ * registra creado_en con la fecha indicada + hora de inicio (instante UTC) y
+ * calcula el tiempo de solución en segundos.
  *
  * El listado se pagina y filtra en el servidor: solo se devuelve la página
  * solicitada y los agregados del dashboard se calculan con SQL (GROUP BY),
@@ -78,6 +77,7 @@ public class IncidenciaService {
     private final ObjectMapper json;
     private final AnaliticaIncidenciaRepository analiticaRepository;
     private final EjecutorAnalitica ejecutor;
+    private final ZonaNegocio zonaNegocio;
 
     public IncidenciaService(IncidenciaRepository incidenciaRepository,
             DataCentroRepository dataCentroRepository,
@@ -91,8 +91,10 @@ public class IncidenciaService {
         Transacciones transacciones,
         ObjectMapper json,
         AnaliticaIncidenciaRepository analiticaRepository,
-        EjecutorAnalitica ejecutor) {
+        EjecutorAnalitica ejecutor,
+        ZonaNegocio zonaNegocio) {
         this.analiticaRepository = analiticaRepository;
+        this.zonaNegocio = zonaNegocio;
         this.ejecutor = ejecutor;
         this.incidenciaRepository = incidenciaRepository;
         this.dataCentroRepository = dataCentroRepository;
@@ -199,7 +201,7 @@ public class IncidenciaService {
                     peticion.ticket(), peticion.idDataArea(), peticion.idDataResponsable(), peticion.descripcion(),
                     peticion.horaInicio(), peticion.horaFin());
             Auditoria.alCrear(incidencia, actor);
-            incidencia.setCreadoEn(componerCreadoEn(peticion.fechaCreacion(), peticion.horaInicio()));
+            incidencia.setCreadoEn(zonaNegocio.instante(peticion.fecha(), peticion.horaInicio()));
             incidenciaRepository.save(incidencia);
             transacciones.alConfirmar(cacheRespuestas::invalidarTodo);
 
@@ -221,7 +223,7 @@ public class IncidenciaService {
                     peticion.ticket(), peticion.idDataArea(), peticion.idDataResponsable(), peticion.descripcion(),
                     peticion.horaInicio(), peticion.horaFin());
             Auditoria.alActualizar(incidencia, actor);
-            incidencia.setCreadoEn(componerCreadoEn(peticion.fechaCreacion(), peticion.horaInicio()));
+            incidencia.setCreadoEn(zonaNegocio.instante(peticion.fecha(), peticion.horaInicio()));
             incidenciaRepository.save(incidencia);
             transacciones.alConfirmar(cacheRespuestas::invalidarTodo);
 
@@ -243,7 +245,8 @@ public class IncidenciaService {
     /**
      * Construye el WHERE dinámico del listado. Solo añade las condiciones
      * informadas y respeta el orden de los índices (id_data_* antes de
-     * creado_en) para que MySQL los aproveche.
+     * creado_en) para que MySQL los aproveche. Los días del filtro son días
+     * del negocio.
      */
     private Specification<Incidencia> especificacion(FiltroIncidencia filtro) {
         return (root, query, cb) -> {
@@ -266,11 +269,11 @@ public class IncidenciaService {
                 }
                 if (filtro.desde() != null) {
                     condiciones.add(cb.greaterThanOrEqualTo(root.get("creadoEn"),
-                            filtro.desde().atStartOfDay()));
+                            zonaNegocio.inicioDelDia(filtro.desde())));
                 }
                 if (filtro.hasta() != null) {
                     condiciones.add(cb.lessThan(root.get("creadoEn"),
-                            filtro.hasta().plusDays(1).atStartOfDay()));
+                            zonaNegocio.inicioDelDia(filtro.hasta().plusDays(1))));
                 }
                 if (filtro.texto() != null && !filtro.texto().isBlank()) {
                     String patron = "%" + filtro.texto().trim().toLowerCase() + "%";
@@ -322,7 +325,7 @@ public class IncidenciaService {
         incidencia.setDescripcion(descripcion.trim());
         incidencia.setHoraInicio(horaInicio);
         incidencia.setHoraFin(horaFin);
-        incidencia.setTiempoSolucion(calcularTiempoSolucion(horaInicio, horaFin));
+        incidencia.setTiempoSolucionSeg(calcularTiempoSolucion(horaInicio, horaFin));
     }
 
     /**
@@ -359,12 +362,8 @@ public class IncidenciaService {
         return resolverLista(List.of(incidencia)).get(0);
     }
 
-    private LocalDateTime componerCreadoEn(LocalDate fecha, LocalTime horaInicio) {
-        return fecha.atTime(horaInicio);
-    }
-
-    /** Tiempo de solución = hora de fin - hora de inicio (cruce de medianoche +24h). */
-    private LocalTime calcularTiempoSolucion(LocalTime inicio, LocalTime fin) {
+    /** Tiempo de solución en segundos = hora de fin - hora de inicio (cruce de medianoche +24h). */
+    private Integer calcularTiempoSolucion(LocalTime inicio, LocalTime fin) {
         if (inicio == null || fin == null) {
             return null;
         }
@@ -375,6 +374,6 @@ public class IncidenciaService {
         if (segundos >= 86_400L) {
             return null;
         }
-        return LocalTime.ofSecondOfDay(segundos);
+        return (int) segundos;
     }
 }

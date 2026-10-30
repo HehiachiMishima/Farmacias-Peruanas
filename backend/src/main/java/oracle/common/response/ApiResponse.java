@@ -1,6 +1,6 @@
 package oracle.common.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * Envoltorio estandar de toda respuesta de la API.
@@ -10,9 +10,9 @@ public record ApiResponse<T>(
         boolean exito,
         String mensaje,
         T datos,
-        LocalDateTime timestamp) {
+        Instant timestamp) {
 
     public static <ApiResponseT> ApiResponse<ApiResponseT> ok(String mensaje, ApiResponseT datos) {
-        return new ApiResponse<>(true, mensaje, datos, LocalDateTime.now());
+        return new ApiResponse<>(true, mensaje, datos, Instant.now());
     }
 }

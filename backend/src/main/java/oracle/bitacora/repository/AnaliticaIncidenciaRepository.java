@@ -8,6 +8,7 @@ import oracle.bitacora.response.AnaliticaBitacoraResponse.Grupo;
 import oracle.bitacora.response.AnaliticaBitacoraResponse.Kpis;
 import oracle.bitacora.response.AnaliticaBitacoraResponse.Tipo;
 import oracle.common.response.CeldaMatriz;
+import oracle.common.config.ZonaNegocio;
 import oracle.common.support.CondicionSql;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -22,17 +23,19 @@ import org.springframework.stereotype.Repository;
 public class AnaliticaIncidenciaRepository {
 
     private final JdbcTemplate jdbc;
+    private final ZonaNegocio zona;
 
-    public AnaliticaIncidenciaRepository(JdbcTemplate jdbc) {
+    public AnaliticaIncidenciaRepository(JdbcTemplate jdbc, ZonaNegocio zona) {
         this.jdbc = jdbc;
+        this.zona = zona;
     }
 
     public Kpis kpis(FiltroIncidencia filtro) {
-        CondicionSql c = CondicionIncidencia.de(filtro);
+        CondicionSql c = CondicionIncidencia.de(filtro, zona);
         String sql = "SELECT COUNT(*) AS total, "
-                + "COUNT(i.tiempo_solucion) AS resueltas, "
-                + "COALESCE(SUM(TIME_TO_SEC(i.tiempo_solucion)), 0) AS segundos, "
-                + "COALESCE(ROUND(AVG(TIME_TO_SEC(i.tiempo_solucion))), 0) AS mttr, "
+                + "COUNT(i.tiempo_solucion_seg) AS resueltas, "
+                + "COALESCE(SUM(i.tiempo_solucion_seg), 0) AS segundos, "
+                + "COALESCE(ROUND(AVG(i.tiempo_solucion_seg)), 0) AS mttr, "
                 + "COUNT(DISTINCT i.id_data_sistema) AS sistemas, "
                 + "COUNT(DISTINCT i.id_data_centro) AS centros "
                 + "FROM incidencias i " + c.where();
@@ -44,7 +47,7 @@ public class AnaliticaIncidenciaRepository {
         if (actual == null || anterior == null) {
             return actual;
         }
-        CondicionSql ca = CondicionIncidencia.de(anterior);
+        CondicionSql ca = CondicionIncidencia.de(anterior, zona);
         Long previo = jdbc.queryForObject("SELECT COUNT(*) FROM incidencias i " + ca.where(), Long.class,
                 ca.argumentos());
         return new Kpis(actual.total(), actual.resueltas(), actual.segundosSolucion(),
@@ -64,9 +67,9 @@ public class AnaliticaIncidenciaRepository {
     }
 
     public List<Tipo> porTipo(FiltroIncidencia filtro) {
-        CondicionSql c = CondicionIncidencia.de(filtro);
+        CondicionSql c = CondicionIncidencia.de(filtro, zona);
         String sql = "SELECT COALESCE(t.incidencia, '—') AS tipo, COALESCE(s.sistema, '—') AS sistema, "
-                + "COUNT(*) AS total, COALESCE(ROUND(AVG(TIME_TO_SEC(i.tiempo_solucion))), 0) AS mttr "
+                + "COUNT(*) AS total, COALESCE(ROUND(AVG(i.tiempo_solucion_seg)), 0) AS mttr "
                 + "FROM incidencias i "
                 + "LEFT JOIN data_incidencia t ON t.id = i.id_data_incidencia "
                 + "LEFT JOIN data_sistema s ON s.id = i.id_data_sistema "
@@ -78,7 +81,7 @@ public class AnaliticaIncidenciaRepository {
     }
 
     public List<CeldaMatriz> centroPorSistema(FiltroIncidencia filtro) {
-        CondicionSql c = CondicionIncidencia.de(filtro);
+        CondicionSql c = CondicionIncidencia.de(filtro, zona);
         String sql = "SELECT COALESCE(ce.centro, '—') AS fila, COALESCE(s.sistema, '—') AS columna, "
                 + "COUNT(*) AS valor "
                 + "FROM incidencias i "
@@ -91,9 +94,9 @@ public class AnaliticaIncidenciaRepository {
     }
 
     private List<Grupo> agrupar(FiltroIncidencia filtro, String tabla, String columna, String fk) {
-        CondicionSql c = CondicionIncidencia.de(filtro);
+        CondicionSql c = CondicionIncidencia.de(filtro, zona);
         String sql = "SELECT COALESCE(t." + columna + ", '—') AS etiqueta, COUNT(*) AS total, "
-                + "COALESCE(ROUND(AVG(TIME_TO_SEC(i.tiempo_solucion))), 0) AS mttr "
+                + "COALESCE(ROUND(AVG(i.tiempo_solucion_seg)), 0) AS mttr "
                 + "FROM incidencias i "
                 + "LEFT JOIN " + tabla + " t ON t.id = " + fk + " "
                 + c.where()

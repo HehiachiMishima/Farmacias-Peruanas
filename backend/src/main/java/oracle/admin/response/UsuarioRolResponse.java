@@ -1,6 +1,6 @@
 package oracle.admin.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.admin.model.UsuarioRol;
 
 /** Salida de la asignacion usuario-rol. */
@@ -9,7 +9,7 @@ public record UsuarioRolResponse(
         Long rolId,
         String usuario,
         String rolNombre,
-        LocalDateTime creadoEn) {
+        Instant creadoEn) {
 
     public static UsuarioRolResponse of(UsuarioRol ur) {
         return new UsuarioRolResponse(

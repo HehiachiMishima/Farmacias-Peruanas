@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { fechaIso } from '../../../core/utils/fecha.util';
+import { diaNegocio, fechaIso } from '../../../core/utils/fecha.util';
 
 export interface RangoFechas {
   desde: string;
@@ -13,7 +13,7 @@ interface Opcion {
 }
 
 function haceDias(dias: number): RangoFechas {
-  const hoy = new Date();
+  const hoy = diaNegocio();
   const desde = new Date(hoy);
   desde.setDate(hoy.getDate() - (dias - 1));
   return { desde: fechaIso(desde), hasta: fechaIso(hoy) };
@@ -27,7 +27,7 @@ const OPCIONES: Opcion[] = [
     id: 'mes',
     etiqueta: 'Este mes',
     rango: () => {
-      const hoy = new Date();
+      const hoy = diaNegocio();
       return {
         desde: fechaIso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)),
         hasta: fechaIso(hoy),
@@ -38,7 +38,7 @@ const OPCIONES: Opcion[] = [
     id: 'anio',
     etiqueta: 'Este año',
     rango: () => {
-      const hoy = new Date();
+      const hoy = diaNegocio();
       return { desde: fechaIso(new Date(hoy.getFullYear(), 0, 1)), hasta: fechaIso(hoy) };
     },
   },

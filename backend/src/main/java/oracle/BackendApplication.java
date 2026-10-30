@@ -10,9 +10,13 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class BackendApplication {
 
-	private static final String ZONA_HORARIA = "America/Lima";
+	/**
+	 * La JVM trabaja en UTC sin importar el servidor donde corra: asi Hibernate
+	 * no desplaza las horas de negocio (TIME) y la auditoria queda en UTC. La
+	 * zona del negocio se declara aparte (app.zona-horaria, ver ZonaNegocio).
+	 */
 	public static void main(String[] args) {
-		TimeZone.setDefault(TimeZone.getTimeZone(ZONA_HORARIA));
+		TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
 		SpringApplication.run(BackendApplication.class, args);
 	}
 

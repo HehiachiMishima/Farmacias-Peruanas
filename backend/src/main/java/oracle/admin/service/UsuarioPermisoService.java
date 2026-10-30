@@ -3,7 +3,7 @@ package oracle.admin.service;
 import oracle.common.support.ActorActual;
 import oracle.common.support.Trazas;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import oracle.common.exception.OperacionNoPermitidaException;
 import oracle.common.exception.RecursoNoEncontradoException;
@@ -78,14 +78,14 @@ public class UsuarioPermisoService {
                         override.setPermiso(permiso);
                         override.setOtorgado(otorgado);
                         override.setCreadoPor(actor);
-                        override.setCreadoEn(LocalDateTime.now());
+                        override.setCreadoEn(Instant.now());
                         override.setActualizadoPor(actor);
-                        override.setActualizadoEn(LocalDateTime.now());
+                        override.setActualizadoEn(Instant.now());
                         mensaje = otorgado ? "Permiso otorgado al usuario." : "Permiso denegado al usuario.";
                     } else {
                         override.setOtorgado(otorgado);
                         override.setActualizadoPor(actor);
-                        override.setActualizadoEn(LocalDateTime.now());
+                        override.setActualizadoEn(Instant.now());
                         mensaje = otorgado
                                 ? "Override actualizado a grant (otorgado=TRUE)."
                                 : "Override actualizado a deny (otorgado=FALSE).";

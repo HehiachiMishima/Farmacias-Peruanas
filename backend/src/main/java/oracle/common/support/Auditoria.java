@@ -1,6 +1,6 @@
 package oracle.common.support;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.common.model.Auditable;
 
 /**
@@ -13,7 +13,7 @@ import oracle.common.model.Auditable;
 public final class Auditoria {
 
     public static void alCrear(Auditable entidad, Long actor) {
-        LocalDateTime ahora = LocalDateTime.now();
+        Instant ahora = Instant.now();
         entidad.setCreadoEn(ahora);
         entidad.setActualizadoEn(ahora);
         entidad.setCreadoPor(actor);
@@ -21,7 +21,7 @@ public final class Auditoria {
     }
 
     public static void alActualizar(Auditable entidad, Long actor) {
-        entidad.setActualizadoEn(LocalDateTime.now());
+        entidad.setActualizadoEn(Instant.now());
         entidad.setActualizadoPor(actor);
     }
 

@@ -1,5 +1,6 @@
 package oracle.bitacora.repository;
 
+import oracle.common.config.ZonaNegocio;
 import oracle.common.support.CondicionSql;
 import java.util.List;
 import oracle.bitacora.request.FiltroIncidencia;
@@ -25,16 +26,18 @@ public class EstadisticaIncidenciaRepository {
             new GrupoEstadistica(rs.getString("etiqueta"), rs.getLong("count"), rs.getLong("segundos"));
 
     private final JdbcTemplate jdbc;
+    private final ZonaNegocio zona;
 
-    public EstadisticaIncidenciaRepository(JdbcTemplate jdbc) {
+    public EstadisticaIncidenciaRepository(JdbcTemplate jdbc, ZonaNegocio zona) {
         this.jdbc = jdbc;
+        this.zona = zona;
     }
 
     /** (total de incidencias, segundos acumulados de solucion) para el filtro. */
     public long[] totales(FiltroIncidencia filtro) {
         CondicionSql condicion = condicion(filtro);
         String sql = "SELECT COUNT(*) AS total, "
-                + "COALESCE(SUM(TIME_TO_SEC(i.tiempo_solucion)), 0) AS segundos "
+                + "COALESCE(SUM(i.tiempo_solucion_seg), 0) AS segundos "
                 + "FROM incidencias i " + condicion.where();
         return jdbc.queryForObject(sql, (rs, fila) -> new long[] {rs.getLong("total"), rs.getLong("segundos")},
                 condicion.args().toArray());
@@ -60,7 +63,7 @@ public class EstadisticaIncidenciaRepository {
         CondicionSql condicion = condicion(filtro);
         String sql = "SELECT COALESCE(t." + columna + ", '—') AS etiqueta, "
                 + "COUNT(*) AS count, "
-                + "COALESCE(SUM(TIME_TO_SEC(i.tiempo_solucion)), 0) AS segundos "
+                + "COALESCE(SUM(i.tiempo_solucion_seg), 0) AS segundos "
                 + "FROM incidencias i "
                 + "LEFT JOIN " + tabla + " t ON t.id = " + fk + " "
                 + condicion.where()
@@ -70,6 +73,6 @@ public class EstadisticaIncidenciaRepository {
     }
 
     private CondicionSql condicion(FiltroIncidencia filtro) {
-        return CondicionIncidencia.de(filtro);
+        return CondicionIncidencia.de(filtro, zona);
     }
 }

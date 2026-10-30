@@ -101,7 +101,8 @@ export interface Incidencia {
   descripcion: string;
   horaInicio: string;
   horaFin: string;
-  tiempoSolucion: string | null;
+  /** Duración en segundos; null si no aplica. */
+  tiempoSolucionSeg: number | null;
   creadoEn: string;
   actualizadoEn: string | null;
   creadoPor: number | null;
@@ -118,7 +119,7 @@ export interface IncidenciaCrearRequest {
   descripcion: string;
   horaInicio: string;
   horaFin: string;
-  fechaCreacion: string;
+  fecha: string;
 }
 
 export type IncidenciaActualizarRequest = IncidenciaCrearRequest;

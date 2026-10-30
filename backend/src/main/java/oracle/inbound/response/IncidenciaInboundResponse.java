@@ -1,5 +1,5 @@
 package oracle.inbound.response;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.inbound.model.IncidenciaInbound;
 public record IncidenciaInboundResponse(
     Long id,
@@ -10,8 +10,8 @@ public record IncidenciaInboundResponse(
     String tipoIncidencia,
     String skuProducto,
     Integer nUnidades,
-    LocalDateTime creadoEn,
-    LocalDateTime actualizadoEn,
+    Instant creadoEn,
+    Instant actualizadoEn,
     Long creadoPor,
     Long actualizadoPor
 ) {

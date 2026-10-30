@@ -3,7 +3,7 @@ package oracle.common.model;
 import jakarta.persistence.Column;
 import jakarta.persistence.EntityListeners;
 import jakarta.persistence.MappedSuperclass;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
@@ -22,11 +22,11 @@ public abstract class Auditable {
 
     @CreatedDate
     @Column(name = "creado_en", nullable = false, updatable = false)
-    private LocalDateTime creadoEn;
+    private Instant creadoEn;
 
     @LastModifiedDate
     @Column(name = "actualizado_en", nullable = false)
-    private LocalDateTime actualizadoEn;
+    private Instant actualizadoEn;
 
     @Column(name = "creado_por")
     private Long creadoPor;

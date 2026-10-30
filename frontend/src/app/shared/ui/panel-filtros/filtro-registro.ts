@@ -1,9 +1,10 @@
+import { diaDeInstante } from '../../../core/utils/fecha.util';
 import { ChipFiltro, fechaChip } from './filtros-activos';
 
 /**
  * Filtros comunes de los catálogos (usuarios, roles, permisos): estado
- * activo/inactivo y periodo de creación. La lógica vive aquí para que las
- * tres pantallas filtren y muestren sus chips igual.
+ * activo/inactivo y periodo de creación (día del negocio). La lógica vive
+ * aquí para que las tres pantallas filtren y muestren sus chips igual.
  */
 
 export type FiltroEstado = 'todos' | 'activos' | 'inactivos';
@@ -27,14 +28,19 @@ export function enPeriodo(iso: string | null | undefined, desde: string, hasta: 
     return true;
   }
   const [inicio, fin] = desde && hasta && desde > hasta ? [hasta, desde] : [desde, hasta];
-  const dia = iso?.slice(0, 10) ?? '';
+  const dia = iso ? diaDeInstante(iso) : '';
   return (!inicio || dia >= inicio) && (!fin || dia <= fin);
 }
 
 export function chipEstado(estado: FiltroEstado): ChipFiltro | null {
   return estado === 'todos'
     ? null
-    : { clave: 'estado', etiqueta: 'Estado', valor: estado === 'activos' ? 'Activos' : 'Inactivos', icono: 'power' };
+    : {
+        clave: 'estado',
+        etiqueta: 'Estado',
+        valor: estado === 'activos' ? 'Activos' : 'Inactivos',
+        icono: 'power',
+      };
 }
 
 export function chipPeriodo(desde: string, hasta: string, etiqueta = 'Creado'): ChipFiltro | null {

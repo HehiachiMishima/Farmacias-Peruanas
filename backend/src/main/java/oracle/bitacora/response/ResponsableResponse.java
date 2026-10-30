@@ -1,6 +1,6 @@
 package oracle.bitacora.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.bitacora.model.DataResponsable;
 
 /** Salida publica de responsable de un area. */
@@ -8,8 +8,8 @@ public record ResponsableResponse(
         Long id,
         Long idDataArea,
         String responsable,
-        LocalDateTime creadoEn,
-        LocalDateTime actualizadoEn,
+        Instant creadoEn,
+        Instant actualizadoEn,
         Long creadoPor,
         Long actualizadoPor) {
 

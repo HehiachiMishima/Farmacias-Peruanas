@@ -1,15 +1,16 @@
 package oracle.bitacora.repository;
 
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import oracle.bitacora.request.FiltroIncidencia;
+import oracle.common.config.ZonaNegocio;
 import oracle.common.support.CondicionSql;
 
 /** WHERE dinamico de la tabla {@code incidencias} (alias {@code i}) a partir del filtro. */
 final class CondicionIncidencia {
 
-    static CondicionSql de(FiltroIncidencia filtro) {
+    /** Los dias del filtro son dias del negocio; se comparan como instantes UTC. */
+    static CondicionSql de(FiltroIncidencia filtro, ZonaNegocio zona) {
         List<String> condiciones = new ArrayList<>();
         List<Object> args = new ArrayList<>();
         if (filtro != null) {
@@ -35,11 +36,11 @@ final class CondicionIncidencia {
             }
             if (filtro.desde() != null) {
                 condiciones.add("i.creado_en >= ?");
-                args.add(Timestamp.valueOf(filtro.desde().atStartOfDay()));
+                args.add(zona.inicioDelDiaSql(filtro.desde()));
             }
             if (filtro.hasta() != null) {
                 condiciones.add("i.creado_en < ?");
-                args.add(Timestamp.valueOf(filtro.hasta().plusDays(1).atStartOfDay()));
+                args.add(zona.inicioDelDiaSql(filtro.hasta().plusDays(1)));
             }
             if (filtro.texto() != null && !filtro.texto().isBlank()) {
                 condiciones.add("(LOWER(i.ticket) LIKE ? OR LOWER(i.descripcion) LIKE ?)");

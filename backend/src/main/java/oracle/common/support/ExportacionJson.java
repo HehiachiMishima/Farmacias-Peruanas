@@ -1,7 +1,7 @@
 package oracle.common.support;
 
 import java.io.OutputStream;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -43,7 +43,7 @@ public final class ExportacionJson {
             gen.writeEndArray();
             gen.writeName("timestamp");
             // Mismo serializador que usa el conversor HTTP para no romper el formato.
-            gen.writeRawValue(json.writeValueAsString(LocalDateTime.now()));
+            gen.writeRawValue(json.writeValueAsString(Instant.now()));
             gen.writeEndObject();
         }
     }

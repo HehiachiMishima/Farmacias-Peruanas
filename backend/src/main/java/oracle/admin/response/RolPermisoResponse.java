@@ -1,6 +1,6 @@
 package oracle.admin.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.admin.model.RolPermiso;
 
 /** Salida de la plantilla rol-permiso. */
@@ -9,7 +9,7 @@ public record RolPermisoResponse(
         String rolNombre,
         Long permisoId,
         String permisoNombre,
-        LocalDateTime creadoEn) {
+        Instant creadoEn) {
 
     public static RolPermisoResponse of(RolPermiso rp) {
         return new RolPermisoResponse(

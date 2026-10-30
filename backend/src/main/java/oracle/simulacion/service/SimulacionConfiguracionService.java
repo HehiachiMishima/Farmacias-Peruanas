@@ -3,7 +3,7 @@ package oracle.simulacion.service;
 import jakarta.persistence.criteria.Predicate;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -1033,7 +1033,7 @@ public class SimulacionConfiguracionService {
     log.setArchivoId(archivoId);
     log.setTipoAccion(accion);
     log.setCreadoPor(actor);
-    log.setCreadoEn(LocalDateTime.now());
+    log.setCreadoEn(Instant.now());
     return log;
   }
 

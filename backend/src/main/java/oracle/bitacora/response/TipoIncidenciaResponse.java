@@ -1,6 +1,6 @@
 package oracle.bitacora.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.bitacora.model.DataIncidencia;
 
 /** Salida publica de tipo de incidencia de un sistema. */
@@ -8,8 +8,8 @@ public record TipoIncidenciaResponse(
         Long id,
         Long idDataSistema,
         String incidencia,
-        LocalDateTime creadoEn,
-        LocalDateTime actualizadoEn,
+        Instant creadoEn,
+        Instant actualizadoEn,
         Long creadoPor,
         Long actualizadoPor) {
 

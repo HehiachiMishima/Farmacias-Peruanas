@@ -14,7 +14,8 @@ import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { exportarCsv } from '../../../../../core/utils/csv.util';
 import { valorNumero, valorTexto } from '../../../../../core/utils/evento.util';
-import { hoy } from '../../../../../core/utils/fecha.util';
+import { CONFIG } from '../../../../../core/config/configuracion';
+import { diaDeInstante, duracionHhmm, hoy } from '../../../../../core/utils/fecha.util';
 import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
 import { OpcionesDependientes } from '../../../../../core/utils/opciones-dependientes';
 import {
@@ -56,7 +57,7 @@ type CampoFormulario =
   | 'descripcion'
   | 'horaInicio'
   | 'horaFin'
-  | 'fechaCreacion';
+  | 'fecha';
 
 const CABECERAS_EXPORT = [
   'Ticket',
@@ -195,7 +196,7 @@ export class Incidencias {
     descripcion: this.fb.nonNullable.control('', [Validators.required, Validators.maxLength(255)]),
     horaInicio: this.fb.nonNullable.control('', Validators.required),
     horaFin: this.fb.nonNullable.control('', Validators.required),
-    fechaCreacion: this.fb.nonNullable.control('', Validators.required),
+    fecha: this.fb.nonNullable.control('', Validators.required),
   });
 
   readonly eliminarAbierto = signal(false);
@@ -270,6 +271,9 @@ export class Incidencias {
     };
   }
 
+  /** Formateador de la plantilla: duración en segundos → «HH:MM». */
+  readonly duracionHhmm = duracionHhmm;
+
   hhmm(valor: string | null): string {
     return valor ? valor.slice(0, 5) : '—';
   }
@@ -294,11 +298,16 @@ export class Incidencias {
             incidencia.responsable ?? '—',
             incidencia.horaInicio,
             incidencia.horaFin,
-            incidencia.tiempoSolucion ?? '—',
-            formatDate(incidencia.creadoEn, 'dd/MM/yyyy HH:mm', this.locale),
+            duracionHhmm(incidencia.tiempoSolucionSeg),
+            formatDate(incidencia.creadoEn, 'dd/MM/yyyy HH:mm', this.locale, CONFIG.zonaHoraria),
             this.directorio.etiqueta(incidencia.creadoPor),
             incidencia.actualizadoEn
-              ? formatDate(incidencia.actualizadoEn, 'dd/MM/yyyy HH:mm', this.locale)
+              ? formatDate(
+                  incidencia.actualizadoEn,
+                  'dd/MM/yyyy HH:mm',
+                  this.locale,
+                  CONFIG.zonaHoraria,
+                )
               : '—',
             this.directorio.etiqueta(incidencia.actualizadoPor),
           ]);
@@ -406,7 +415,7 @@ export class Incidencias {
       descripcion: '',
       horaInicio: '',
       horaFin: '',
-      fechaCreacion: hoy(),
+      fecha: hoy(),
     });
     this.formAbierto.set(true);
   }
@@ -427,7 +436,7 @@ export class Incidencias {
       descripcion: incidencia.descripcion,
       horaInicio: this.hhmm(incidencia.horaInicio),
       horaFin: this.hhmm(incidencia.horaFin),
-      fechaCreacion: incidencia.creadoEn.slice(0, 10),
+      fecha: diaDeInstante(incidencia.creadoEn),
     });
     this.formAbierto.set(true);
   }
@@ -459,7 +468,7 @@ export class Incidencias {
       descripcion: valores.descripcion,
       horaInicio: this.normalizarHora(valores.horaInicio),
       horaFin: this.normalizarHora(valores.horaFin),
-      fechaCreacion: valores.fechaCreacion,
+      fecha: valores.fecha,
     };
 
     const editando = this.editando();

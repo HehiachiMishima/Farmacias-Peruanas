@@ -1,6 +1,6 @@
 package oracle.admin.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.admin.model.Rol;
 
 /** Salida publica de rol. */
@@ -9,8 +9,8 @@ public record RolResponse(
         String nombre,
         String descripcion,
         Boolean activo,
-        LocalDateTime creadoEn,
-        LocalDateTime actualizadoEn,
+        Instant creadoEn,
+        Instant actualizadoEn,
         Long creadoPor,
         Long actualizadoPor) {
 

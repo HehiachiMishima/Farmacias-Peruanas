@@ -1,6 +1,6 @@
 package oracle.admin.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.admin.model.Usuario;
 
 /** Salida publica de usuario. */
@@ -12,8 +12,8 @@ public record UsuarioResponse(
         String email,
         String telefono,
         Boolean activo,
-        LocalDateTime creadoEn,
-        LocalDateTime actualizadoEn,
+        Instant creadoEn,
+        Instant actualizadoEn,
         Long creadoPor,
         Long actualizadoPor) {
 

@@ -1,14 +1,14 @@
 package oracle.bitacora.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.bitacora.model.DataSistema;
 
 /** Salida publica de sistema. */
 public record SistemaResponse(
         Long id,
         String sistema,
-        LocalDateTime creadoEn,
-        LocalDateTime actualizadoEn,
+        Instant creadoEn,
+        Instant actualizadoEn,
         Long creadoPor,
         Long actualizadoPor) {
 

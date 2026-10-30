@@ -1,6 +1,6 @@
 package oracle.simulacion.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record HistorialSimulacionResponse(
     Long id,
@@ -10,5 +10,5 @@ public record HistorialSimulacionResponse(
     String chuteOrigen,
     String chuteDestino,
     String chuteModificado,
-    LocalDateTime creadoEn,
+    Instant creadoEn,
     Long creadoPor) {}

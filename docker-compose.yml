@@ -49,7 +49,7 @@ services:
       DB_NAME: farmacias_peruanas
       DB_USER: root
       DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-local}
-      DB_PARAMS: useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_PARAMS: useSSL=false&allowPublicKeyRetrieval=true
       CORS_ALLOWED_ORIGINS: http://localhost:10000
     ports:
       - "10000:10000"

@@ -1,6 +1,6 @@
 package oracle.admin.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.admin.model.Permiso;
 
 /** Salida publica de permiso. */
@@ -9,8 +9,8 @@ public record PermisoResponse(
         String nombre,
         String descripcion,
         Boolean activo,
-        LocalDateTime creadoEn,
-        LocalDateTime actualizadoEn,
+        Instant creadoEn,
+        Instant actualizadoEn,
         Long creadoPor,
         Long actualizadoPor) {
 

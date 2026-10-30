@@ -1,6 +1,6 @@
 package oracle.bitacora.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.LocalTime;
 import oracle.bitacora.model.Incidencia;
 
@@ -24,9 +24,9 @@ public record IncidenciaResponse(
         String descripcion,
         LocalTime horaInicio,
         LocalTime horaFin,
-        LocalTime tiempoSolucion,
-        LocalDateTime creadoEn,
-        LocalDateTime actualizadoEn,
+        Integer tiempoSolucionSeg,
+        Instant creadoEn,
+        Instant actualizadoEn,
         Long creadoPor,
         Long actualizadoPor) {
 
@@ -45,7 +45,7 @@ public record IncidenciaResponse(
                 i.getIdDataArea(), area,
                 i.getIdDataResponsable(), responsable,
                 i.getDescripcion(),
-                i.getHoraInicio(), i.getHoraFin(), i.getTiempoSolucion(),
+                i.getHoraInicio(), i.getHoraFin(), i.getTiempoSolucionSeg(),
                 i.getCreadoEn(), i.getActualizadoEn(),
                 i.getCreadoPor(), i.getActualizadoPor());
     }

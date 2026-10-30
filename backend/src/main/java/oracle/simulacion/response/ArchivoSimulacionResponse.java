@@ -1,7 +1,7 @@
 package oracle.simulacion.response;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record ArchivoSimulacionResponse(
     Long id,
@@ -16,7 +16,7 @@ public record ArchivoSimulacionResponse(
     BigDecimal unidades,
     BigDecimal lineas,
     BigDecimal cod,
-    LocalDateTime creadoEn,
-    LocalDateTime actualizadoEn,
+    Instant creadoEn,
+    Instant actualizadoEn,
     Long creadoPor,
     Long actualizadoPor) {}

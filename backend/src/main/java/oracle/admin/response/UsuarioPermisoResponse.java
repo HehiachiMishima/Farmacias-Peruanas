@@ -1,6 +1,6 @@
 package oracle.admin.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.admin.model.UsuarioPermiso;
 
 /** Salida de un override individual (grant/deny). */
@@ -10,8 +10,8 @@ public record UsuarioPermisoResponse(
         Long permisoId,
         String permisoNombre,
         Boolean otorgado,
-        LocalDateTime creadoEn,
-        LocalDateTime actualizadoEn) {
+        Instant creadoEn,
+        Instant actualizadoEn) {
 
     public static UsuarioPermisoResponse of(UsuarioPermiso up) {
         return new UsuarioPermisoResponse(

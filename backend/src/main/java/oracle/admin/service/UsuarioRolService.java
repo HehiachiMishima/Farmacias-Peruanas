@@ -3,7 +3,7 @@ package oracle.admin.service;
 import oracle.common.support.ActorActual;
 import oracle.common.support.Trazas;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import oracle.common.exception.ConflictoException;
 import oracle.common.exception.OperacionNoPermitidaException;
@@ -72,7 +72,7 @@ public class UsuarioRolService {
                             asignacion.setUsuario(usuario);
                             asignacion.setRol(rol);
                             asignacion.setCreadoPor(actor);
-                            asignacion.setCreadoEn(LocalDateTime.now());
+                            asignacion.setCreadoEn(Instant.now());
                             usuarioRolRepository.save(asignacion);
                             transacciones.alConfirmar(() -> autorizacionCache.invalidar(usuarioId));
 

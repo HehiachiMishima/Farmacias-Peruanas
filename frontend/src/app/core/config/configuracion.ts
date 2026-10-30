@@ -25,4 +25,10 @@ export const CONFIG = {
     /** Margen (ms) antes del vencimiento real para forzar el cierre. */
     margenExpiracionMs: 0,
   },
+  /**
+   * Zona horaria del negocio (Lima, sin horario de verano). La API envía la
+   * auditoría en UTC y aquí se convierte para mostrarla; las fechas y horas de
+   * negocio llegan ya en esta zona y se muestran tal cual.
+   */
+  zonaHoraria: '-0500',
 } as const;

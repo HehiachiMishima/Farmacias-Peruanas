@@ -1,14 +1,14 @@
 package oracle.bitacora.response;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.bitacora.model.DataArea;
 
 /** Salida publica de area. */
 public record AreaResponse(
         Long id,
         String area,
-        LocalDateTime creadoEn,
-        LocalDateTime actualizadoEn,
+        Instant creadoEn,
+        Instant actualizadoEn,
         Long creadoPor,
         Long actualizadoPor) {
 

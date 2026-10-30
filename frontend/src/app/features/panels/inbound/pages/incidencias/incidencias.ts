@@ -15,6 +15,7 @@ import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
 import { exportarCsv } from '../../../../../core/utils/csv.util';
 import { valorTexto } from '../../../../../core/utils/evento.util';
+import { CONFIG } from '../../../../../core/config/configuracion';
 import { hoy } from '../../../../../core/utils/fecha.util';
 import {
   IncidenciaInbound,
@@ -204,9 +205,11 @@ export class InboundIncidencias {
             i.tipoIncidencia ?? '—',
             i.skuProducto,
             i.nUnidades,
-            formatDate(i.creadoEn, 'dd/MM/yyyy HH:mm', this.locale),
+            formatDate(i.creadoEn, 'dd/MM/yyyy HH:mm', this.locale, CONFIG.zonaHoraria),
             this.directorio.etiqueta(i.creadoPor),
-            i.actualizadoEn ? formatDate(i.actualizadoEn, 'dd/MM/yyyy HH:mm', this.locale) : '—',
+            i.actualizadoEn
+              ? formatDate(i.actualizadoEn, 'dd/MM/yyyy HH:mm', this.locale, CONFIG.zonaHoraria)
+              : '—',
             this.directorio.etiqueta(i.actualizadoPor),
           ]);
           exportarCsv(`incidencias_inbound_${hoy()}.csv`, CABECERAS_EXPORT, filas);

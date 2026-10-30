@@ -159,7 +159,7 @@
             <th>Inicio</th>
             <th>Fin</th>
             <th>Solución</th>
-            <th>Creado</th>
+            <th>Creado en</th>
             <th>Creado por</th>
             <th>Actualizado</th>
             <th>Actualizado por</th>
@@ -182,7 +182,7 @@
               <td class="u-muted">{{ incidencia.responsable ?? '—' }}</td>
               <td class="u-mono">{{ hhmm(incidencia.horaInicio) }}</td>
               <td class="u-mono">{{ hhmm(incidencia.horaFin) }}</td>
-              <td class="u-mono">{{ hhmm(incidencia.tiempoSolucion) }}</td>
+              <td class="u-mono">{{ duracionHhmm(incidencia.tiempoSolucionSeg) }}</td>
               <td class="u-muted">{{ incidencia.creadoEn | date: 'dd/MM/yyyy' }}</td>
               <td class="u-muted">{{ incidencia.creadoPor | actorLabel }}</td>
               <td class="u-muted">{{ incidencia.actualizadoEn ? (incidencia.actualizadoEn | date: 'dd/MM/yyyy HH:mm') : '—' }}</td>
@@ -375,15 +375,15 @@
     </div>
 
     <div class="ui-field">
-      <label class="ui-label">Fecha (creado en) <span class="ui-required">*</span></label>
+      <label class="ui-label">Fecha <span class="ui-required">*</span></label>
       <input
         type="date"
         class="ui-input"
-        [class.ui-input--invalid]="campoInvalido('fechaCreacion')"
-        formControlName="fechaCreacion"
+        [class.ui-input--invalid]="campoInvalido('fecha')"
+        formControlName="fecha"
       />
-      <span class="hint">Se combina con la hora de inicio para registrar la creación.</span>
-      @if (campoInvalido('fechaCreacion')) { <span class="ui-error">La fecha es obligatoria.</span> }
+      <span class="hint">Se combina con la hora de inicio.</span>
+      @if (campoInvalido('fecha')) { <span class="ui-error">La fecha es obligatoria.</span> }
     </div>
   </form>
 
@@ -443,7 +443,7 @@
       </div>
       <div class="detalle__item">
         <span class="detalle__label">Tiempo de solución</span>
-        <span class="detalle__valor u-mono">{{ hhmm(incidencia.tiempoSolucion) }}</span>
+        <span class="detalle__valor u-mono">{{ duracionHhmm(incidencia.tiempoSolucionSeg) }}</span>
       </div>
       <div class="detalle__item">
         <span class="detalle__label">Creado</span>

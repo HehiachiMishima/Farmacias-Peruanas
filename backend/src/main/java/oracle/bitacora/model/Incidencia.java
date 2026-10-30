@@ -15,11 +15,12 @@ import lombok.Setter;
 
 /**
  * Registro de bitácora. Referencia los catálogos por id (FK RESTRICT) y
- * guarda la hora de inicio/fin y el tiempo de solución calculado.
+ * guarda las horas de negocio (sin conversión de zona) y el tiempo de
+ * solución calculado en segundos.
  *
- * creado_en se registra manualmente (fecha indicada por el usuario + hora de
- * inicio), por eso se sobreescribe la columna de Auditable para permitir su
- * actualización.
+ * creado_en es la única fecha del registro: fecha indicada por el usuario +
+ * hora de inicio, como instante UTC. Por eso se sobreescribe la columna de
+ * Auditable para permitir su actualización.
  */
 @Entity
 @Table(name = "incidencias")
@@ -60,6 +61,6 @@ public class Incidencia extends Auditable {
     @Column(name = "hora_fin", nullable = false)
     private LocalTime horaFin;
  
-    @Column(name = "tiempo_solucion")
-    private LocalTime tiempoSolucion;
+    @Column(name = "tiempo_solucion_seg")
+    private Integer tiempoSolucionSeg;
 }

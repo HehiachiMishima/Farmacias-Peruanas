@@ -6,7 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -46,7 +46,7 @@ public class HistorialBalanceo {
   private Long creadoPor;
 
   @Column(name = "creado_en", nullable = false)
-  private LocalDateTime creadoEn;
+  private Instant creadoEn;
 
   public boolean esMovimiento() {
     return ACCION_MOVER_RUTA.equals(tipoAccion);

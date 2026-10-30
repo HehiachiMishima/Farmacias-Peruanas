@@ -1,6 +1,6 @@
 package oracle.common.config;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import oracle.admin.model.Rol;
 import oracle.admin.model.Usuario;
 import oracle.admin.model.UsuarioRol;
@@ -83,7 +83,7 @@ public class SeedUsuarioAdmin implements ApplicationRunner {
             return;
         }
 
-        LocalDateTime ahora = LocalDateTime.now();
+        Instant ahora = Instant.now();
 
         Usuario nuevo = new Usuario();
         nuevo.setUsuario(usuario);

@@ -8,8 +8,6 @@ import oracle.common.support.ExportacionJson;
 import oracle.common.support.Paginacion;
 
 import jakarta.persistence.criteria.Predicate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +36,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import oracle.common.config.CacheRespuestas;
 import oracle.common.config.Transacciones;
+import oracle.common.config.ZonaNegocio;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import reactor.core.publisher.Mono;
@@ -58,6 +57,7 @@ public class IncidenciaInboundService {
   private final ObjectMapper json;
   private final AnaliticaInboundRepository analiticaRepo;
   private final EjecutorAnalitica ejecutor;
+  private final ZonaNegocio zonaNegocio;
 
   public IncidenciaInboundService(
       IncidenciaInboundRepository repo,
@@ -69,8 +69,10 @@ public class IncidenciaInboundService {
       Transacciones transacciones,
       ObjectMapper json,
       AnaliticaInboundRepository analiticaRepo,
-      EjecutorAnalitica ejecutor) {
+      EjecutorAnalitica ejecutor,
+      ZonaNegocio zonaNegocio) {
     this.analiticaRepo = analiticaRepo;
+    this.zonaNegocio = zonaNegocio;
     this.ejecutor = ejecutor;
     this.repo = repo;
     this.proveedorRepo = proveedorRepo;
@@ -222,14 +224,11 @@ public class IncidenciaInboundService {
       if (filtro.tipo() != null) {
         pred.add(cb.equal(root.get("idDataIncidenciaInbound"), filtro.tipo()));
       }
-      if (filtro.desde() != null && filtro.hasta() != null) {
-        LocalDateTime d = filtro.desde().atStartOfDay();
-        LocalDateTime h = filtro.hasta().atTime(LocalTime.MAX);
-        pred.add(cb.between(root.get("creadoEn"), d, h));
-      } else if (filtro.desde() != null) {
-        pred.add(cb.greaterThanOrEqualTo(root.get("creadoEn"), filtro.desde().atStartOfDay()));
-      } else if (filtro.hasta() != null) {
-        pred.add(cb.lessThanOrEqualTo(root.get("creadoEn"), filtro.hasta().atTime(LocalTime.MAX)));
+      if (filtro.desde() != null) {
+        pred.add(cb.greaterThanOrEqualTo(root.get("creadoEn"), zonaNegocio.inicioDelDia(filtro.desde())));
+      }
+      if (filtro.hasta() != null) {
+        pred.add(cb.lessThan(root.get("creadoEn"), zonaNegocio.inicioDelDia(filtro.hasta().plusDays(1))));
       }
       if (filtro.texto() != null && !filtro.texto().isBlank()) {
         String t = "%" + filtro.texto().trim().toLowerCase() + "%";

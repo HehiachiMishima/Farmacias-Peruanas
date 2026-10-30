@@ -1,5 +1,6 @@
 package oracle.inbound.repository;
 
+import oracle.common.config.ZonaNegocio;
 import oracle.common.support.CondicionSql;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,9 +29,11 @@ public class EstadisticaInboundRepository {
             new GrupoEstadisticaInbound(rs.getString("etiqueta"), rs.getLong("count"));
 
     private final JdbcTemplate jdbc;
+    private final ZonaNegocio zona;
 
-    public EstadisticaInboundRepository(JdbcTemplate jdbc) {
+    public EstadisticaInboundRepository(JdbcTemplate jdbc, ZonaNegocio zona) {
         this.jdbc = jdbc;
+        this.zona = zona;
     }
 
     /** (total de incidencias, unidades acumuladas) para el filtro. */
@@ -67,7 +70,7 @@ public class EstadisticaInboundRepository {
         CondicionSql condicion = condicion(filtro);
         String sql = "SELECT i.id_data_proveedor AS id_proveedor, "
                 + "COALESCE(t.proveedor, '—') AS proveedor, "
-                + "DATE_FORMAT(i.creado_en, '%Y-%m') AS mes, "
+                + "DATE_FORMAT(i.creado_en + INTERVAL " + zona.desfaseSegundos() + " SECOND, '%Y-%m') AS mes, "
                 + "COUNT(*) AS count "
                 + "FROM incidencias_inbound i "
                 + "LEFT JOIN data_proveedor t ON t.id = i.id_data_proveedor "
@@ -104,6 +107,6 @@ public class EstadisticaInboundRepository {
     }
 
     private CondicionSql condicion(FiltroIncidenciaInbound filtro) {
-        return CondicionInbound.de(filtro);
+        return CondicionInbound.de(filtro, zona);
     }
 }

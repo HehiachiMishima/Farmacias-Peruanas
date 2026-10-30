@@ -1,10 +1,10 @@
 package oracle.inbound.response;
-import java.time.LocalDateTime;
+import java.time.Instant;
 public record DataProveedorResponse(
     Long id,
     String proveedor,
-    LocalDateTime creadoEn,
-    LocalDateTime actualizadoEn,
+    Instant creadoEn,
+    Instant actualizadoEn,
     Long creadoPor,
     Long actualizadoPor
 ) {}

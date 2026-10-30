@@ -1,10 +1,10 @@
 package oracle.inbound.response;
-import java.time.LocalDateTime;
+import java.time.Instant;
 public record DataIncidenciaInboundResponse(
     Long id,
     String incidenciaInbound,
-    LocalDateTime creadoEn,
-    LocalDateTime actualizadoEn,
+    Instant creadoEn,
+    Instant actualizadoEn,
     Long creadoPor,
     Long actualizadoPor
 ) {}

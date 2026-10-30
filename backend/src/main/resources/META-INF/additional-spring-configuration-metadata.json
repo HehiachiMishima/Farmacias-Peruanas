@@ -98,5 +98,10 @@
     "name": "app.security.permission-cache.max-size",
     "type": "java.lang.String",
     "description": "A description for 'app.security.permission-cache.max-size'"
+  },
+  {
+    "name": "app.zona-horaria",
+    "type": "java.lang.String",
+    "description": "A description for 'app.zona-horaria'"
   }
 ]}
