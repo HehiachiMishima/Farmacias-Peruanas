@@ -1,4 +1,4 @@
--- Active: 1791152181635@@127.0.0.1@3306@farmacias_peruanas
+-- Active: 1791863596251@@mysql-hehiachi-mishima-servidor-local.g.aivencloud.com@25590@farmacias_peruanas
 -- ============================================================
 -- INSTALACIÓN COMPLETA: Atlas · Farmacias Peruanas
 -- ============================================================
@@ -538,7 +538,6 @@ CREATE TABLE IF NOT EXISTS data_area (
 -- ============================================================
 -- data_responsable
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS data_responsable (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'Identificador único.',
     id_data_area BIGINT NOT NULL COMMENT 'FK al área a la que pertenece el responsable.',
@@ -559,7 +558,6 @@ CREATE TABLE IF NOT EXISTS data_responsable (
 -- ============================================================
 -- data_incidencia
 -- ============================================================
-
 CREATE TABLE IF NOT EXISTS data_incidencia (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'Identificador único.',
     id_data_sistema BIGINT NOT NULL COMMENT 'FK al sistema.',
@@ -576,7 +574,6 @@ CREATE TABLE IF NOT EXISTS data_incidencia (
     INDEX idx_data_incidencia_actualizado_en (actualizado_en, id),
     FULLTEXT INDEX ft_data_incidencia_incidencia (incidencia)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Catálogo de incidencias por sistema.';
-
 -- ============================================================
 -- Incidencias con FKs a los catálogos
 -- ============================================================
