@@ -72,6 +72,27 @@
   border-top: 1px solid var(--border);
 }
 
+/* El cuadro de chutes puede tener muchas filas: se desplaza en vertical para no
+   empujar el detalle fuera de pantalla, con encabezado y totales siempre visibles. */
+.dash-tabla-wrap--scroll {
+  max-height: 420px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  .dash-tabla thead {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--surface);
+  }
+
+  .dash-tabla tfoot td {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+  }
+}
+
 .cuadro__tabla {
   thead tr:first-child th {
     border-bottom: 0;

@@ -52,15 +52,6 @@
     <ui-icon name="refresh" [size]="16" />
     Actualizar
   </button>
-  <button
-    type="button"
-    class="ui-btn ui-btn--secondary"
-    (click)="rutasAbierto.set(true)"
-    [disabled]="!dashboard() || !estaBalanceado()"
-  >
-    <ui-icon name="layers" [size]="16" />
-    Rutas por chute
-  </button>
 </section>
 
 <ui-filtros-activos
@@ -201,7 +192,8 @@
             <ui-icon name="paquete" [size]="18" /> Carga por chute: antes vs. después
           </h2>
           <p class="dash-card__sub">
-            Cómo cambió la carga de cada chute al mover rutas. Elige la métrica a comparar.
+            Cómo cambió la carga de cada chute al mover rutas. Elige la métrica y filtra un solo
+            chute para ver sus rutas antes y después.
           </p>
         </div>
         <div class="segmento" role="tablist" aria-label="Métrica de carga">
@@ -234,7 +226,7 @@
         }
       </div>
 
-      <div class="dash-tabla-wrap cuadro">
+      <div class="dash-tabla-wrap cuadro dash-tabla-wrap--scroll">
         <table class="dash-tabla cuadro__tabla">
           <thead>
             <tr>
@@ -289,6 +281,29 @@
         </table>
       </div>
     </article>
+
+    @if (chuteDetalle(); as detalle) {
+      <article class="dash-card">
+        <header class="dash-card__head">
+          <div class="dash-card__titulos">
+            <h2 class="dash-card__titulo">
+              <ui-icon name="layers" [size]="18" /> Rutas de {{ detalle.chute }}: antes vs. después
+            </h2>
+            <p class="dash-card__sub">
+              Las rutas que tenía al cargar el Excel y las que tiene tras el balanceo.
+            </p>
+          </div>
+        </header>
+        <div class="dash-card__body">
+          <app-simulacion-detalle-chute
+            [registroId]="seleccionado()"
+            [chuteId]="detalle.id"
+            [chute]="detalle"
+            [clusters]="datos.clusters"
+          />
+        </div>
+      </article>
+    }
 
     <article class="dash-card" [class.dash-card--cargando]="cargando()">
       <header class="dash-card__head">
@@ -365,11 +380,3 @@
     </article>
   </div>
 }
-
-<app-simulacion-rutas-chute
-  [abierto]="rutasAbierto()"
-  [registroId]="seleccionado()"
-  [chutes]="chutesVisibles()"
-  [clusters]="dashboard()?.clusters ?? []"
-  (cerrar)="rutasAbierto.set(false)"
-/>

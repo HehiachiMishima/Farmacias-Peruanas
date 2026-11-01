@@ -1,10 +1,10 @@
 @use 'breakpoints' as bp;
 
-/* Cabecera: selector de chute con flechas y su ficha (clusters y estado). */
+/* Cabecera del chute: su ficha (clusters y estado del tiempo). */
 .rc-cabecera {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-3) var(--space-5);
   margin-bottom: var(--space-5);
@@ -13,43 +13,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-  }
-}
-
-.rc-selector {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-2);
-  flex: 1 1 380px;
-  max-width: 560px;
-
-  &__campo {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    flex: 1;
-    min-width: 0;
-  }
-
-  &__paso {
-    flex: none;
-    width: 40px;
-    height: 40px;
-    border: 1px solid var(--border);
-
-    &--anterior ui-icon {
-      transform: rotate(180deg);
-    }
-  }
-
-  &__posicion {
-    flex: none;
-    align-self: center;
-    margin-top: var(--space-5);
-    font-size: var(--fs-xs);
-    color: var(--text-3);
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -384,7 +347,7 @@
 }
 
 .rc-tabla-wrap {
-  max-height: min(52vh, 560px);
+  max-height: 420px;
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);

@@ -6,7 +6,6 @@ import {
   effect,
   inject,
   input,
-  output,
   signal,
   untracked,
 } from '@angular/core';
@@ -16,7 +15,6 @@ import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { Pagina } from '../../../../../../core/models';
 import { EmptyState } from '../../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../../shared/ui/icon/icon';
-import { Modal } from '../../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../../shared/ui/paginador/paginador';
 import { SelectBuscable } from '../../../../../../shared/ui/select-buscable/select-buscable';
 import {
@@ -77,56 +75,42 @@ class LadoRutas {
 }
 
 /**
- * Modal ejecutivo de un chute: sus rutas al cargar el Excel frente a las que
- * tiene tras el balanceo, con búsqueda y filtros comunes a ambos lados.
+ * Detalle del chute elegido en el cuadro del dashboard: sus rutas al cargar el
+ * Excel frente a las que tiene tras el balanceo. Vive dentro de la página (sin
+ * modal); el chute se cambia desde el cuadro, con el selector o con las flechas.
  */
 @Component({
-  selector: 'app-simulacion-rutas-chute',
+  selector: 'app-simulacion-detalle-chute',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Modal, Icon, EmptyState, Paginador, SelectBuscable],
-  templateUrl: './rutas-chute.html',
-  styleUrl: './rutas-chute.scss',
+  imports: [Icon, EmptyState, Paginador, SelectBuscable],
+  templateUrl: './detalle-chute.html',
+  styleUrl: './detalle-chute.scss',
 })
-export class SimulacionRutasChute {
+export class SimulacionDetalleChute {
   private readonly api = inject(SimulacionApi);
   private readonly destroyRef = inject(DestroyRef);
 
-  readonly abierto = input(false);
   readonly registroId = input<number | null>(null);
-  readonly chutes = input<ChuteComparativoSimulacion[]>([]);
+  /** Chute elegido en el filtro del dashboard. */
+  readonly chuteId = input<number | null>(null);
+  /** Datos comparativos del chute elegido; `null` si no hay ninguno. */
+  readonly chute = input<ChuteComparativoSimulacion | null>(null);
   readonly clusters = input<ClusterComparativoSimulacion[]>([]);
-  readonly cerrar = output<void>();
 
   readonly formatearNumero = formatearNumero;
   readonly formatearHoras = formatearHoras;
 
-  readonly chuteId = signal<number | null>(null);
   readonly texto = signal('');
   readonly tipo = signal<TipoFiltro>('');
   readonly clusterId = signal<number | null>(null);
   readonly soloCambios = signal(false);
   private readonly busqueda$ = new Subject<string>();
+  /** Último chute cargado: evita repetir la consulta si el input no cambió. */
+  private cargado: number | null = null;
 
   readonly antes = new LadoRutas('ANTES');
   readonly despues = new LadoRutas('DESPUES');
   readonly lados = [this.antes, this.despues];
-
-  readonly ordenados = computed(() =>
-    this.chutes()
-      .slice()
-      .sort((a, b) => compararNombre(a.chute, b.chute)),
-  );
-
-  readonly opcionesChute = computed(() =>
-    this.ordenados().map((chute) => ({
-      id: chute.id,
-      etiqueta:
-        chute.clusters.length > 0 ? `${chute.chute} · ${chute.clusters.join(', ')}` : chute.chute,
-    })),
-  );
-
-  readonly chute = computed(() => this.ordenados().find((c) => c.id === this.chuteId()) ?? null);
-  readonly indice = computed(() => this.ordenados().findIndex((c) => c.id === this.chuteId()));
 
   /** Solo los clusters que el chute atiende antes o después. */
   readonly opcionesCluster = computed(() => {
@@ -198,11 +182,10 @@ export class SimulacionRutasChute {
   });
 
   constructor() {
-    // Al abrir: chute con más cambios (o el primero), filtros limpios y ambos lados.
+    // Cada chute elegido en el dashboard limpia los filtros y recarga ambos lados.
     effect(() => {
-      if (this.abierto()) {
-        untracked(() => this.iniciar());
-      }
+      const id = this.chuteId();
+      untracked(() => this.activar(id));
     });
     this.busqueda$.pipe(debounceTime(300), takeUntilDestroyed()).subscribe((texto) => {
       if (texto.trim() === this.texto().trim()) {
@@ -213,34 +196,21 @@ export class SimulacionRutasChute {
     });
   }
 
-  private iniciar(): void {
-    const chutes = this.ordenados();
-    const conCambios = chutes.reduce<ChuteComparativoSimulacion | null>((mejor, chute) => {
-      const cambios = Number(chute.rutasSalieron) + Number(chute.rutasLlegaron);
-      const mejores = mejor ? Number(mejor.rutasSalieron) + Number(mejor.rutasLlegaron) : 0;
-      return cambios > mejores ? chute : mejor;
-    }, null);
-    this.chuteId.set((conCambios ?? chutes[0])?.id ?? null);
-    this.reiniciarFiltros();
-    this.recargar();
-  }
-
-  seleccionarChute(id: number | null): void {
-    if (id === null || id === this.chuteId()) {
+  private activar(id: number | null): void {
+    if (id === this.cargado) {
       return;
     }
-    this.chuteId.set(id);
+    this.cargado = id;
     // Los clusters dependen del chute: un filtro de cluster ajeno vaciaría la vista.
     this.clusterId.set(null);
-    this.recargar();
-  }
-
-  /** Recorre los chutes en orden natural con las flechas. */
-  moverChute(paso: number): void {
-    const siguiente = this.ordenados()[this.indice() + paso];
-    if (siguiente) {
-      this.seleccionarChute(siguiente.id);
+    this.reiniciarFiltros();
+    if (id === null) {
+      for (const lado of this.lados) {
+        lado.reiniciar();
+      }
+      return;
     }
+    this.recargar();
   }
 
   buscar(texto: string): void {

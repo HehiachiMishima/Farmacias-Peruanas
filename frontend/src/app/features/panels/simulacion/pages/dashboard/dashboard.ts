@@ -31,9 +31,9 @@ import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtr
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 import { SelectMultiple } from '../../../../../shared/ui/select-multiple/select-multiple';
 import { etiquetaRegistro, formatearHoras, formatearNumero } from '../../simulacion-formato';
-import { SimulacionRutasChute } from './rutas-chute/rutas-chute';
+import { SimulacionDetalleChute } from './detalle-chute/detalle-chute';
 
-type Metrica = 'bultos' | 'unidades' | 'lineas' | 'cod';
+type Metrica = 'rutas' | 'bultos' | 'unidades' | 'lineas' | 'cod';
 
 /** Métricas de carga por chute: qué campos comparar y cómo se llaman. */
 const METRICAS: ReadonlyArray<{
@@ -42,6 +42,12 @@ const METRICAS: ReadonlyArray<{
   antes: (c: ChuteComparativoSimulacion) => number;
   despues: (c: ChuteComparativoSimulacion) => number;
 }> = [
+  {
+    id: 'rutas',
+    nombre: 'Rutas',
+    antes: (c) => c.rutasOriginal,
+    despues: (c) => c.rutasBalanceado,
+  },
   {
     id: 'bultos',
     nombre: 'Bultos',
@@ -81,7 +87,7 @@ const METRICAS: ReadonlyArray<{
     SelectMultiple,
     PanelFiltros,
     FiltrosActivos,
-    SimulacionRutasChute,
+    SimulacionDetalleChute,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
@@ -110,9 +116,7 @@ export class SimulacionDashboard {
   /** Descarta respuestas viejas si el usuario cambia de registro rápido. */
   private solicitud = 0;
 
-  readonly metrica = signal<Metrica>('bultos');
-  /** Modal «Rutas por chute»: el detalle vive en su propio componente. */
-  readonly rutasAbierto = signal(false);
+  readonly metrica = signal<Metrica>('rutas');
 
   // ---------------- Filtros del panel (múltiples) ----------------
   readonly filtrosAbierto = signal(false);
@@ -143,6 +147,24 @@ export class SimulacionDashboard {
         (filtroClusters.length === 0 ||
           chute.clusters.some((cluster) => filtroClusters.includes(cluster))),
     );
+  });
+
+  /**
+   * Chute del detalle de rutas: lo elige el filtro de chutes. Solo se abre
+   * cuando el filtro deja un único chute, para no imponerse a los filtros.
+   */
+  readonly chuteSeleccionado = computed<number | null>(() => {
+    const filtro = this.filtroChutes();
+    if (filtro.length !== 1) {
+      return null;
+    }
+    return this.chutesVisibles().find((chute) => chute.chute === filtro[0])?.id ?? null;
+  });
+
+  /** Chute elegido, solo si sigue visible con los filtros actuales. */
+  readonly chuteDetalle = computed(() => {
+    const id = this.chuteSeleccionado();
+    return id === null ? null : (this.chutesVisibles().find((chute) => chute.id === id) ?? null);
   });
 
   readonly clustersVisibles = computed(() => {
