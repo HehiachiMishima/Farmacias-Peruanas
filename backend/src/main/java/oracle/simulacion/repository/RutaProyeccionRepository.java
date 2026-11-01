@@ -102,9 +102,9 @@ public interface RutaProyeccionRepository
   int restaurarChutes(@Param("archivoId") Long archivoId);
 
   /**
-   * Totales de un lado del chute en una sola consulta: el modal muestra los
-   * del conjunto filtrado, no solo de la página. Con antes = true cuenta las
-   * rutas que el chute tenía al cargar el Excel; si no, las que tiene hoy.
+   * Totales de un lado de los chutes elegidos en una sola consulta: el detalle
+   * muestra los del conjunto filtrado, no solo de la página. Con antes = true
+   * cuenta las rutas que tenían al cargar el Excel; si no, las que tienen hoy.
    */
   @Query(
       value =
@@ -122,7 +122,7 @@ public interface RutaProyeccionRepository
            WHERE archivo_id = :archivoId
              AND (:texto IS NULL OR codigo_ruta LIKE :texto)
              AND (:tipo IS NULL OR tipo = :tipo)
-             AND (CASE WHEN :antes THEN chute_original_id ELSE chute_id END) = :chuteId
+             AND (CASE WHEN :antes THEN chute_original_id ELSE chute_id END) IN (:chuteIds)
              AND (:clusterId IS NULL OR cluster_id = :clusterId)
              AND (:soloCambios = FALSE OR chute_id <> chute_original_id)
           """,
@@ -131,7 +131,7 @@ public interface RutaProyeccionRepository
       @Param("archivoId") Long archivoId,
       @Param("texto") String texto,
       @Param("tipo") String tipo,
-      @Param("chuteId") Long chuteId,
+      @Param("chuteIds") List<Long> chuteIds,
       @Param("antes") boolean antes,
       @Param("clusterId") Long clusterId,
       @Param("soloCambios") boolean soloCambios);

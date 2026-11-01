@@ -21,6 +21,7 @@ import {
   ChuteComparativoSimulacion,
   ClusterComparativoSimulacion,
   LadoChute,
+  MovimientoChuteSimulacion,
   ResumenRutasSimulacion,
   RutaSimulacion,
 } from '../../../data/simulacion.model';
@@ -28,6 +29,13 @@ import { SimulacionApi } from '../../../data/simulacion.api';
 import { compararNombre, formatearHoras, formatearNumero } from '../../../simulacion-formato';
 
 type TipoFiltro = '' | 'B2C' | 'B2B';
+
+interface Movimiento {
+  texto: string;
+  tipo: 'quedo' | 'interna' | 'sale' | 'llega';
+  /** Salió para separar CL1 de CL2. */
+  separa?: boolean;
+}
 
 interface Indicador {
   etiqueta: string;
@@ -75,9 +83,10 @@ class LadoRutas {
 }
 
 /**
- * Detalle del chute elegido en el cuadro del dashboard: sus rutas al cargar el
- * Excel frente a las que tiene tras el balanceo. Vive dentro de la página (sin
- * modal); el chute se cambia desde el cuadro, con el selector o con las flechas.
+ * Detalle de los chutes elegidos en el filtro del dashboard: sus rutas al
+ * cargar el Excel frente a las que tienen tras el balanceo. Vive dentro de la
+ * página (sin modal). Las rutas se listan agrupadas por cluster: CL1 y CL2 no
+ * pueden compartir chute, así que cada cluster se lee por separado.
  */
 @Component({
   selector: 'app-simulacion-detalle-chute',
@@ -91,11 +100,11 @@ export class SimulacionDetalleChute {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly registroId = input<number | null>(null);
-  /** Chute elegido en el filtro del dashboard. */
-  readonly chuteId = input<number | null>(null);
-  /** Datos comparativos del chute elegido; `null` si no hay ninguno. */
-  readonly chute = input<ChuteComparativoSimulacion | null>(null);
+  /** Chutes elegidos en el filtro del dashboard (y visibles con sus filtros). */
+  readonly chutes = input<ChuteComparativoSimulacion[]>([]);
   readonly clusters = input<ClusterComparativoSimulacion[]>([]);
+  /** Movimientos de rutas entre chutes del registro (para el flujo del conjunto). */
+  readonly movimientos = input<MovimientoChuteSimulacion[]>([]);
 
   readonly formatearNumero = formatearNumero;
   readonly formatearHoras = formatearHoras;
@@ -105,18 +114,25 @@ export class SimulacionDetalleChute {
   readonly clusterId = signal<number | null>(null);
   readonly soloCambios = signal(false);
   private readonly busqueda$ = new Subject<string>();
-  /** Último chute cargado: evita repetir la consulta si el input no cambió. */
-  private cargado: number | null = null;
+  /** Últimos chutes cargados: evita repetir la consulta si la selección no cambió. */
+  private cargado = '';
 
   readonly antes = new LadoRutas('ANTES');
   readonly despues = new LadoRutas('DESPUES');
   readonly lados = [this.antes, this.despues];
 
-  /** Solo los clusters que el chute atiende antes o después. */
+  readonly ids = computed(() => this.chutes().map((chute) => chute.id));
+  private readonly elegidos = computed(() => new Set(this.ids()));
+  private readonly porId = computed(
+    () => new Map(this.chutes().map((chute) => [chute.id, chute] as const)),
+  );
+  readonly varios = computed(() => this.chutes().length > 1);
+
+  /** Solo los clusters que los chutes elegidos atienden antes o después. */
   readonly opcionesCluster = computed(() => {
-    const nombres = this.chute()?.clusters ?? [];
+    const nombres = new Set(this.chutes().flatMap((chute) => chute.clusters));
     return this.clusters()
-      .filter((cluster) => nombres.includes(cluster.cluster))
+      .filter((cluster) => nombres.has(cluster.cluster))
       .sort((a, b) => compararNombre(a.cluster, b.cluster))
       .map((cluster) => ({ id: cluster.id, etiqueta: cluster.cluster }));
   });
@@ -130,47 +146,89 @@ export class SimulacionDetalleChute {
   );
 
   /**
-   * Flujo de rutas del chute: las que se quedaron, las que salieron y las que
-   * llegaron. Las barras comparten escala para que antes y después se lean juntas.
+   * Flujo de rutas del conjunto elegido: las que se quedaron en su chute, las
+   * que cambiaron entre chutes elegidos, las que salieron del conjunto y las que
+   * llegaron de fuera. Antes − salieron + llegaron = después.
    */
   readonly flujo = computed(() => {
-    const chute = this.chute();
-    if (!chute) {
+    const chutes = this.chutes();
+    if (chutes.length === 0) {
       return null;
     }
-    const antes = Number(chute.rutasOriginal);
-    const despues = Number(chute.rutasBalanceado);
-    const salieron = Number(chute.rutasSalieron);
-    const llegaron = Number(chute.rutasLlegaron);
-    const quedaron = Math.max(0, antes - salieron);
+    const elegidos = this.elegidos();
+    const antes = chutes.reduce((total, chute) => total + Number(chute.rutasOriginal), 0);
+    const despues = chutes.reduce((total, chute) => total + Number(chute.rutasBalanceado), 0);
+    let salieron = 0;
+    let internas = 0;
+    let llegaron = 0;
+    for (const movimiento of this.movimientos()) {
+      const desde = elegidos.has(movimiento.origenId);
+      const hacia = elegidos.has(movimiento.destinoId);
+      const rutas = Number(movimiento.rutas);
+      if (desde && hacia) {
+        internas += rutas;
+      } else if (desde) {
+        salieron += rutas;
+      } else if (hacia) {
+        llegaron += rutas;
+      }
+    }
+    const quedaron = Math.max(0, antes - salieron - internas);
     const escala = Math.max(1, antes, despues);
     return {
       antes,
       despues,
       salieron,
+      internas,
       llegaron,
       quedaron,
       pctQuedaron: (quedaron / escala) * 100,
+      pctInternas: (internas / escala) * 100,
       pctSalieron: (salieron / escala) * 100,
       pctLlegaron: (llegaron / escala) * 100,
     };
   });
 
-  /** Indicadores del chute en pares antes → después, con su variación. */
+  /**
+   * Indicadores del conjunto en pares antes → después. Rutas, bultos y
+   * operarios se suman; el cierre es el del chute más lento, que es el que
+   * define cuándo termina el grupo.
+   */
   readonly indicadores = computed<Indicador[]>(() => {
-    const chute = this.chute();
-    if (!chute) {
+    const chutes = this.chutes();
+    if (chutes.length === 0) {
       return [];
     }
-    const tiempo = Number(chute.tiempoBalanceado) - Number(chute.tiempoOriginal);
+    const suma = (valor: (chute: ChuteComparativoSimulacion) => number) =>
+      chutes.reduce((total, chute) => total + Number(valor(chute)), 0);
+    const maximo = (valor: (chute: ChuteComparativoSimulacion) => number) =>
+      Math.max(...chutes.map((chute) => Number(valor(chute))));
+    const cierreAntes = maximo((c) => c.tiempoOriginal);
+    const cierreDespues = maximo((c) => c.tiempoBalanceado);
+    const tiempo = cierreDespues - cierreAntes;
     return [
-      par('Rutas', chute.rutasOriginal, chute.rutasBalanceado, 0),
-      par('Bultos', chute.bultosOriginal, chute.bultosBalanceado, 2),
-      par('Operarios', chute.operariosOriginal, chute.operariosBalanceado, 0),
+      par(
+        'Rutas',
+        suma((c) => c.rutasOriginal),
+        suma((c) => c.rutasBalanceado),
+        0,
+      ),
+      par(
+        'Bultos',
+        suma((c) => c.bultosOriginal),
+        suma((c) => c.bultosBalanceado),
+        2,
+      ),
+      par(
+        'Operarios',
+        suma((c) => c.operariosOriginal),
+        suma((c) => c.operariosBalanceado),
+        0,
+      ),
       {
-        etiqueta: 'Tiempo de cierre',
-        antes: formatearHoras(chute.tiempoOriginal),
-        despues: formatearHoras(chute.tiempoBalanceado),
+        etiqueta: chutes.length > 1 ? 'Cierre (chute más lento)' : 'Tiempo de cierre',
+        antes: formatearHoras(cierreAntes),
+        despues: formatearHoras(cierreDespues),
         variacion:
           Math.abs(tiempo) < 0.005
             ? '='
@@ -181,11 +239,14 @@ export class SimulacionDetalleChute {
     ];
   });
 
+  /** Chutes que siguen juntando CL1 y CL2 tras el balanceo (no debería pasar). */
+  readonly mezclados = computed(() => this.chutes().filter((chute) => chute.mezclaBalanceada));
+
   constructor() {
-    // Cada chute elegido en el dashboard limpia los filtros y recarga ambos lados.
+    // Cada selección de chutes limpia los filtros y recarga ambos lados.
     effect(() => {
-      const id = this.chuteId();
-      untracked(() => this.activar(id));
+      const clave = this.ids().join(',');
+      untracked(() => this.activar(clave));
     });
     this.busqueda$.pipe(debounceTime(300), takeUntilDestroyed()).subscribe((texto) => {
       if (texto.trim() === this.texto().trim()) {
@@ -196,15 +257,14 @@ export class SimulacionDetalleChute {
     });
   }
 
-  private activar(id: number | null): void {
-    if (id === this.cargado) {
+  private activar(clave: string): void {
+    if (clave === this.cargado) {
       return;
     }
-    this.cargado = id;
-    // Los clusters dependen del chute: un filtro de cluster ajeno vaciaría la vista.
-    this.clusterId.set(null);
+    this.cargado = clave;
+    // Los clusters dependen de los chutes: un filtro de cluster ajeno vaciaría la vista.
     this.reiniciarFiltros();
-    if (id === null) {
+    if (clave === '') {
       for (const lado of this.lados) {
         lado.reiniciar();
       }
@@ -264,8 +324,8 @@ export class SimulacionDetalleChute {
 
   cargar(lado: LadoRutas, pagina: number): void {
     const id = this.registroId();
-    const chuteId = this.chuteId();
-    if (!id || chuteId === null) {
+    const chuteIds = this.ids();
+    if (!id || chuteIds.length === 0) {
       return;
     }
     lado.pagina.set(pagina);
@@ -278,7 +338,7 @@ export class SimulacionDetalleChute {
         tamano: lado.porPagina(),
         texto: this.texto().trim(),
         tipo: this.tipo(),
-        chuteId,
+        chuteIds,
         lado: lado.lado,
         clusterId: this.clusterId(),
         soloCambios: this.soloCambios(),
@@ -304,5 +364,40 @@ export class SimulacionDetalleChute {
           }
         },
       });
+  }
+
+  /** La fila abre un grupo nuevo de cluster (las rutas llegan ordenadas por cluster). */
+  iniciaGrupo(rutas: RutaSimulacion[], indice: number): boolean {
+    return indice === 0 || rutas[indice - 1].clusterId !== rutas[indice].clusterId;
+  }
+
+  /** Movimiento de la ruta visto desde un lado del conjunto elegido. */
+  movimiento(lado: LadoChute, ruta: RutaSimulacion): Movimiento {
+    if (ruta.chuteId === ruta.chuteOriginalId) {
+      return { texto: lado === 'ANTES' ? 'Se quedó' : 'Ya estaba', tipo: 'quedo' };
+    }
+    const elegidos = this.elegidos();
+    if (lado === 'ANTES') {
+      return elegidos.has(ruta.chuteId)
+        ? { texto: `Pasó a ${ruta.chute}`, tipo: 'interna' }
+        : { texto: `Salió a ${ruta.chute}`, tipo: 'sale', separa: this.separaMezcla(ruta) };
+    }
+    return elegidos.has(ruta.chuteOriginalId)
+      ? { texto: `Vino de ${ruta.chuteOriginal}`, tipo: 'interna' }
+      : { texto: `Llegó de ${ruta.chuteOriginal}`, tipo: 'llega' };
+  }
+
+  /**
+   * La ruta salió de un chute que juntaba CL1 y CL2 y su cluster ya no está
+   * allí: es la separación que obliga la regla, no un ajuste de tiempos.
+   */
+  private separaMezcla(ruta: RutaSimulacion): boolean {
+    const origen = this.porId().get(ruta.chuteOriginalId);
+    return (
+      !!origen &&
+      origen.mezclaOriginal &&
+      !origen.mezclaBalanceada &&
+      !origen.clustersBalanceado.includes(ruta.cluster)
+    );
   }
 }

@@ -25,4 +25,10 @@ public record ChuteComparativoResponse(
     int codOriginal,
     int codBalanceado,
     /** Clusters que el chute atiende antes o después del balanceo (para filtrar por cluster). */
-    List<String> clusters) {}
+    List<String> clusters,
+    /** Clusters del chute al cargar el Excel y tras el balanceo, por separado. */
+    List<String> clustersOriginal,
+    List<String> clustersBalanceado,
+    /** El chute junta CL1 y CL2 (no permitido) al cargar el Excel / tras el balanceo. */
+    boolean mezclaOriginal,
+    boolean mezclaBalanceada) {}

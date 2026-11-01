@@ -1,15 +1,28 @@
-@if (!chute()) {
+@if (chutes().length === 0) {
   <ui-empty
     icono="layers"
-    titulo="Sin chute elegido"
-    mensaje="Elige un solo chute en el filtro Chutes del dashboard para ver sus rutas antes y después."
+    titulo="Sin chutes elegidos"
+    mensaje="Elige uno o más chutes en el filtro Chutes del dashboard para ver sus rutas antes y después."
   />
 } @else {
-  <header class="rc-cabecera">
-    @if (chute(); as c) {
-      <div class="rc-cabecera__meta">
-        @for (cluster of c.clusters; track cluster) {
-          <span class="ui-badge ui-badge--neutral">{{ cluster }}</span>
+  <ul class="rc-fichas" aria-label="Clusters de cada chute antes y después">
+    @for (c of chutes(); track c.id) {
+      <li class="rc-ficha" [class.rc-ficha--alerta]="c.mezclaBalanceada">
+        <strong class="rc-ficha__chute">{{ c.chute }}</strong>
+        <span class="rc-ficha__clusters" title="Clusters al cargar el Excel">
+          {{ c.clustersOriginal.length > 0 ? c.clustersOriginal.join(' · ') : 'Sin rutas' }}
+        </span>
+        <ui-icon name="flecha" [size]="13" />
+        <span
+          class="rc-ficha__clusters rc-ficha__clusters--despues"
+          title="Clusters tras el balanceo"
+        >
+          {{ c.clustersBalanceado.length > 0 ? c.clustersBalanceado.join(' · ') : 'Sin rutas' }}
+        </span>
+        @if (c.mezclaBalanceada) {
+          <span class="ui-badge ui-badge--danger">CL1 y CL2 juntos</span>
+        } @else if (c.mezclaOriginal) {
+          <span class="ui-badge ui-badge--success">CL1 y CL2 separados</span>
         }
         <span
           class="ui-badge"
@@ -25,250 +38,281 @@
                 : 'Tiempo sin cambios'
           }}
         </span>
-      </div>
+      </li>
     }
-  </header>
+  </ul>
+  @if (mezclados().length > 0) {
+    <p class="rc-aviso" role="alert">
+      <ui-icon name="alerta" [size]="15" />
+      CL1 y CL2 no pueden compartir chute y siguen juntos en
+      {{
+        mezclados()
+          .map((c) => c.chute)
+          .join(', ')
+      }}: no había otro chute libre para separarlos. Mueve sus rutas desde Configuración.
+    </p>
+  }
 
-  @if (chute(); as c) {
-    <section class="rc-resumen" aria-label="Resumen del chute">
-      <div class="rc-indicadores">
-        @for (ind of indicadores(); track ind.etiqueta) {
-          <article class="rc-indicador">
-            <span class="rc-indicador__etiqueta">{{ ind.etiqueta }}</span>
-            <div class="rc-indicador__valores">
-              <span class="rc-indicador__antes" title="Antes del balanceo">{{ ind.antes }}</span>
-              <ui-icon name="flecha" [size]="14" />
-              <span class="rc-indicador__despues" title="Después del balanceo">{{
-                ind.despues
-              }}</span>
-            </div>
-            <span class="rc-delta" [class]="'rc-delta--' + ind.tono">{{ ind.variacion }}</span>
-          </article>
-        }
-      </div>
-
-      @if (flujo(); as f) {
-        <article class="rc-flujo" aria-label="Flujo de rutas del chute">
-          <h3 class="rc-flujo__titulo">Flujo de rutas</h3>
-          <div class="rc-flujo__fila">
-            <span class="rc-flujo__lado">Antes</span>
-            <div class="rc-flujo__barra">
-              <span
-                class="rc-flujo__tramo rc-flujo__tramo--quedan"
-                [style.width.%]="f.pctQuedaron"
-              ></span>
-              <span
-                class="rc-flujo__tramo rc-flujo__tramo--salen"
-                [style.width.%]="f.pctSalieron"
-              ></span>
-            </div>
-            <strong class="rc-flujo__total">{{ formatearNumero(f.antes) }}</strong>
+  <section class="rc-resumen" aria-label="Resumen de los chutes elegidos">
+    <div class="rc-indicadores">
+      @for (ind of indicadores(); track ind.etiqueta) {
+        <article class="rc-indicador">
+          <span class="rc-indicador__etiqueta">{{ ind.etiqueta }}</span>
+          <div class="rc-indicador__valores">
+            <span class="rc-indicador__antes" title="Antes del balanceo">{{ ind.antes }}</span>
+            <ui-icon name="flecha" [size]="14" />
+            <span class="rc-indicador__despues" title="Después del balanceo">{{
+              ind.despues
+            }}</span>
           </div>
-          <div class="rc-flujo__fila">
-            <span class="rc-flujo__lado">Después</span>
-            <div class="rc-flujo__barra">
-              <span
-                class="rc-flujo__tramo rc-flujo__tramo--quedan"
-                [style.width.%]="f.pctQuedaron"
-              ></span>
-              <span
-                class="rc-flujo__tramo rc-flujo__tramo--llegan"
-                [style.width.%]="f.pctLlegaron"
-              ></span>
-            </div>
-            <strong class="rc-flujo__total">{{ formatearNumero(f.despues) }}</strong>
-          </div>
-          <ul class="rc-flujo__leyenda">
-            <li>
-              <i class="rc-flujo__sw rc-flujo__sw--quedan"></i>Se quedaron
-              {{ formatearNumero(f.quedaron) }}
-            </li>
-            <li>
-              <i class="rc-flujo__sw rc-flujo__sw--salen"></i>Salieron
-              {{ formatearNumero(f.salieron) }}
-            </li>
-            <li>
-              <i class="rc-flujo__sw rc-flujo__sw--llegan"></i>Llegaron
-              {{ formatearNumero(f.llegaron) }}
-            </li>
-          </ul>
+          <span class="rc-delta" [class]="'rc-delta--' + ind.tono">{{ ind.variacion }}</span>
         </article>
       }
-    </section>
-
-    <div class="rc-filtros">
-      <div class="rc-filtros__campo rc-filtros__campo--busqueda">
-        <label class="ui-label" for="rc-buscar">Buscar ruta</label>
-        <div class="rc-filtros__input">
-          <ui-icon name="search" [size]="16" />
-          <input
-            id="rc-buscar"
-            type="search"
-            class="ui-input"
-            placeholder="Código de ruta…"
-            autocomplete="off"
-            [value]="texto()"
-            (input)="buscar($any($event.target).value)"
-          />
-        </div>
-      </div>
-      <div class="rc-filtros__campo">
-        <label class="ui-label" for="rc-tipo">Tipo</label>
-        <select
-          id="rc-tipo"
-          class="ui-input"
-          [value]="tipo()"
-          (change)="setTipo($any($event.target).value)"
-        >
-          <option value="">Todos</option>
-          <option value="B2C">B2C</option>
-          <option value="B2B">B2B</option>
-        </select>
-      </div>
-      <div class="rc-filtros__campo">
-        <label class="ui-label" for="rc-cluster">Cluster</label>
-        <ui-select-buscable
-          campoId="rc-cluster"
-          [opciones]="opcionesCluster()"
-          [valor]="clusterId()"
-          placeholder="Todos los clusters"
-          (valorCambia)="setCluster($event)"
-        />
-      </div>
-      <label class="rc-filtros__check">
-        <input
-          type="checkbox"
-          [checked]="soloCambios()"
-          (change)="setSoloCambios($any($event.target).checked)"
-        />
-        Solo rutas que cambiaron
-      </label>
-      @if (tieneFiltros()) {
-        <button
-          type="button"
-          class="ui-btn ui-btn--ghost ui-btn--sm rc-filtros__limpiar"
-          (click)="limpiarFiltros()"
-        >
-          <ui-icon name="refresh" [size]="15" />
-          Limpiar
-        </button>
-      }
     </div>
 
-    <div class="rc-lados">
-      @for (lado of lados; track lado.lado) {
-        <section
-          class="rc-lado"
-          [class.rc-lado--despues]="lado.lado === 'DESPUES'"
-          [attr.aria-label]="
-            lado.lado === 'ANTES' ? 'Rutas antes del balanceo' : 'Rutas después del balanceo'
-          "
-        >
-          <header class="rc-lado__head">
-            <div>
-              <h3 class="rc-lado__titulo">
-                {{ lado.lado === 'ANTES' ? 'Antes del balanceo' : 'Después del balanceo' }}
-              </h3>
-              <p class="rc-lado__sub">
-                {{ lado.lado === 'ANTES' ? 'Al cargar el Excel' : 'Tras balancear' }}
-                @if (lado.resumen(); as r) {
-                  · {{ formatearNumero(r.rutas) }} rutas ({{ formatearNumero(r.rutasB2c) }} B2C ·
-                  {{ formatearNumero(r.rutasB2b) }} B2B) · {{ formatearNumero(r.bultos, 2) }} bultos
-                }
-              </p>
-            </div>
-            @if (lado.resumen(); as r) {
-              <span class="rc-cambios" [class.rc-cambios--activo]="r.cambios > 0">
-                {{ formatearNumero(r.cambios) }}
-                {{ lado.lado === 'ANTES' ? 'salieron' : 'llegaron' }}
-              </span>
-            }
-          </header>
+    @if (flujo(); as f) {
+      <article class="rc-flujo" aria-label="Flujo de rutas de los chutes elegidos">
+        <h3 class="rc-flujo__titulo">Flujo de rutas</h3>
+        <div class="rc-flujo__fila">
+          <span class="rc-flujo__lado">Antes</span>
+          <div class="rc-flujo__barra">
+            <span
+              class="rc-flujo__tramo rc-flujo__tramo--quedan"
+              [style.width.%]="f.pctQuedaron"
+            ></span>
+            <span
+              class="rc-flujo__tramo rc-flujo__tramo--internas"
+              [style.width.%]="f.pctInternas"
+            ></span>
+            <span
+              class="rc-flujo__tramo rc-flujo__tramo--salen"
+              [style.width.%]="f.pctSalieron"
+            ></span>
+          </div>
+          <strong class="rc-flujo__total">{{ formatearNumero(f.antes) }}</strong>
+        </div>
+        <div class="rc-flujo__fila">
+          <span class="rc-flujo__lado">Después</span>
+          <div class="rc-flujo__barra">
+            <span
+              class="rc-flujo__tramo rc-flujo__tramo--quedan"
+              [style.width.%]="f.pctQuedaron"
+            ></span>
+            <span
+              class="rc-flujo__tramo rc-flujo__tramo--internas"
+              [style.width.%]="f.pctInternas"
+            ></span>
+            <span
+              class="rc-flujo__tramo rc-flujo__tramo--llegan"
+              [style.width.%]="f.pctLlegaron"
+            ></span>
+          </div>
+          <strong class="rc-flujo__total">{{ formatearNumero(f.despues) }}</strong>
+        </div>
+        <ul class="rc-flujo__leyenda">
+          <li>
+            <i class="rc-flujo__sw rc-flujo__sw--quedan"></i>Se quedaron
+            {{ formatearNumero(f.quedaron) }}
+          </li>
+          @if (varios()) {
+            <li>
+              <i class="rc-flujo__sw rc-flujo__sw--internas"></i>Entre los elegidos
+              {{ formatearNumero(f.internas) }}
+            </li>
+          }
+          <li>
+            <i class="rc-flujo__sw rc-flujo__sw--salen"></i>Salieron
+            {{ formatearNumero(f.salieron) }}
+          </li>
+          <li>
+            <i class="rc-flujo__sw rc-flujo__sw--llegan"></i>Llegaron
+            {{ formatearNumero(f.llegaron) }}
+          </li>
+        </ul>
+      </article>
+    }
+  </section>
 
-          @if (lado.cargando() && !lado.datos()) {
-            <div class="loading"><span class="ui-spinner"></span> Cargando rutas…</div>
-          } @else if (lado.error()) {
-            <ui-empty icono="alerta" titulo="No se pudieron cargar" [mensaje]="lado.error()!">
-              <button
-                type="button"
-                class="ui-btn ui-btn--secondary ui-btn--sm"
-                (click)="cargar(lado, lado.pagina())"
-              >
-                <ui-icon name="refresh" [size]="16" /> Reintentar
-              </button>
-            </ui-empty>
-          } @else if (lado.datos(); as pagina) {
-            @if (pagina.contenido.length === 0) {
-              <ui-empty
-                icono="search"
-                titulo="Sin rutas"
-                [mensaje]="
-                  tieneFiltros()
-                    ? 'Ninguna ruta coincide con la búsqueda o los filtros.'
-                    : lado.lado === 'ANTES'
-                      ? 'El chute no tenía rutas al cargar el Excel.'
-                      : 'El chute quedó sin rutas tras el balanceo.'
-                "
-              />
-            } @else {
-              <div
-                class="ui-table-wrap rc-tabla-wrap"
-                [class.rc-tabla-wrap--cargando]="lado.cargando()"
-              >
-                <table class="ui-table rc-tabla">
-                  <thead>
-                    <tr>
-                      <th>Ruta</th>
-                      <th>Tipo</th>
-                      <th>Cluster</th>
-                      <th class="num">Bultos</th>
-                      <th>Movimiento</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (ruta of pagina.contenido; track ruta.id) {
-                      <tr [class.rc-tabla__fila--cambio]="ruta.chuteId !== ruta.chuteOriginalId">
-                        <td class="u-mono">{{ ruta.codigoRuta }}</td>
-                        <td>
-                          <span
-                            class="ui-badge"
-                            [class.ui-badge--info]="ruta.tipo === 'B2B'"
-                            [class.ui-badge--neutral]="ruta.tipo !== 'B2B'"
-                          >
-                            {{ ruta.tipo }}
-                          </span>
-                        </td>
-                        <td>{{ ruta.cluster }}</td>
-                        <td class="num">{{ formatearNumero(ruta.totalBultos, 2) }}</td>
-                        <td>
-                          @if (ruta.chuteId === ruta.chuteOriginalId) {
-                            <span class="rc-mov">
-                              {{ lado.lado === 'ANTES' ? 'Se quedó' : 'Ya estaba' }}
-                            </span>
-                          } @else if (lado.lado === 'ANTES') {
-                            <span class="rc-mov rc-mov--sale">Salió a {{ ruta.chute }}</span>
-                          } @else {
-                            <span class="rc-mov rc-mov--llega"
-                              >Llegó de {{ ruta.chuteOriginal }}</span
-                            >
-                          }
-                        </td>
+  <div class="rc-filtros">
+    <div class="rc-filtros__campo rc-filtros__campo--busqueda">
+      <label class="ui-label" for="rc-buscar">Buscar ruta</label>
+      <div class="rc-filtros__input">
+        <ui-icon name="search" [size]="16" />
+        <input
+          id="rc-buscar"
+          type="search"
+          class="ui-input"
+          placeholder="Código de ruta…"
+          autocomplete="off"
+          [value]="texto()"
+          (input)="buscar($any($event.target).value)"
+        />
+      </div>
+    </div>
+    <div class="rc-filtros__campo">
+      <label class="ui-label" for="rc-tipo">Tipo</label>
+      <select
+        id="rc-tipo"
+        class="ui-input"
+        [value]="tipo()"
+        (change)="setTipo($any($event.target).value)"
+      >
+        <option value="">Todos</option>
+        <option value="B2C">B2C</option>
+        <option value="B2B">B2B</option>
+      </select>
+    </div>
+    <div class="rc-filtros__campo">
+      <label class="ui-label" for="rc-cluster">Cluster</label>
+      <ui-select-buscable
+        campoId="rc-cluster"
+        [opciones]="opcionesCluster()"
+        [valor]="clusterId()"
+        placeholder="Todos los clusters"
+        (valorCambia)="setCluster($event)"
+      />
+    </div>
+    <label class="rc-filtros__check">
+      <input
+        type="checkbox"
+        [checked]="soloCambios()"
+        (change)="setSoloCambios($any($event.target).checked)"
+      />
+      Solo rutas que cambiaron
+    </label>
+    @if (tieneFiltros()) {
+      <button
+        type="button"
+        class="ui-btn ui-btn--ghost ui-btn--sm rc-filtros__limpiar"
+        (click)="limpiarFiltros()"
+      >
+        <ui-icon name="refresh" [size]="15" />
+        Limpiar
+      </button>
+    }
+  </div>
+
+  <div class="rc-lados">
+    @for (lado of lados; track lado.lado) {
+      <section
+        class="rc-lado"
+        [class.rc-lado--despues]="lado.lado === 'DESPUES'"
+        [attr.aria-label]="
+          lado.lado === 'ANTES' ? 'Rutas antes del balanceo' : 'Rutas después del balanceo'
+        "
+      >
+        <header class="rc-lado__head">
+          <div>
+            <h3 class="rc-lado__titulo">
+              {{ lado.lado === 'ANTES' ? 'Antes del balanceo' : 'Después del balanceo' }}
+            </h3>
+            <p class="rc-lado__sub">
+              {{ lado.lado === 'ANTES' ? 'Al cargar el Excel' : 'Tras balancear' }}
+              @if (lado.resumen(); as r) {
+                · {{ formatearNumero(r.rutas) }} rutas ({{ formatearNumero(r.rutasB2c) }} B2C ·
+                {{ formatearNumero(r.rutasB2b) }} B2B) · {{ formatearNumero(r.bultos, 2) }} bultos
+              }
+            </p>
+          </div>
+          @if (lado.resumen(); as r) {
+            <span class="rc-cambios" [class.rc-cambios--activo]="r.cambios > 0">
+              {{ formatearNumero(r.cambios) }} cambiaron de chute
+            </span>
+          }
+        </header>
+
+        @if (lado.cargando() && !lado.datos()) {
+          <div class="loading"><span class="ui-spinner"></span> Cargando rutas…</div>
+        } @else if (lado.error()) {
+          <ui-empty icono="alerta" titulo="No se pudieron cargar" [mensaje]="lado.error()!">
+            <button
+              type="button"
+              class="ui-btn ui-btn--secondary ui-btn--sm"
+              (click)="cargar(lado, lado.pagina())"
+            >
+              <ui-icon name="refresh" [size]="16" /> Reintentar
+            </button>
+          </ui-empty>
+        } @else if (lado.datos(); as pagina) {
+          @if (pagina.contenido.length === 0) {
+            <ui-empty
+              icono="search"
+              titulo="Sin rutas"
+              [mensaje]="
+                tieneFiltros()
+                  ? 'Ninguna ruta coincide con la búsqueda o los filtros.'
+                  : lado.lado === 'ANTES'
+                    ? 'No había rutas en estos chutes al cargar el Excel.'
+                    : 'Estos chutes quedaron sin rutas tras el balanceo.'
+              "
+            />
+          } @else {
+            <div
+              class="ui-table-wrap rc-tabla-wrap"
+              [class.rc-tabla-wrap--cargando]="lado.cargando()"
+            >
+              <table class="ui-table rc-tabla">
+                <thead>
+                  <tr>
+                    <th>Ruta</th>
+                    <th>Tipo</th>
+                    <th>Cluster</th>
+                    @if (varios()) {
+                      <th>Chute</th>
+                    }
+                    <th class="num">Bultos</th>
+                    <th>Movimiento</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (ruta of pagina.contenido; track ruta.id; let i = $index) {
+                    @if (iniciaGrupo(pagina.contenido, i)) {
+                      <tr class="rc-tabla__grupo">
+                        <th [attr.colspan]="varios() ? 6 : 5" scope="rowgroup">
+                          {{ ruta.cluster }}
+                        </th>
                       </tr>
                     }
-                  </tbody>
-                </table>
-              </div>
-              <ui-paginador
-                [pagina]="lado.pagina()"
-                [total]="pagina.total"
-                [porPagina]="lado.porPagina()"
-                (paginaCambia)="cambiarPagina(lado, $event)"
-                (porPaginaCambia)="cambiarPorPagina(lado, $event)"
-              />
-            }
+                    @let mov = movimiento(lado.lado, ruta);
+                    <tr [class.rc-tabla__fila--cambio]="mov.tipo !== 'quedo'">
+                      <td class="u-mono">{{ ruta.codigoRuta }}</td>
+                      <td>
+                        <span
+                          class="ui-badge"
+                          [class.ui-badge--info]="ruta.tipo === 'B2B'"
+                          [class.ui-badge--neutral]="ruta.tipo !== 'B2B'"
+                        >
+                          {{ ruta.tipo }}
+                        </span>
+                      </td>
+                      <td>{{ ruta.cluster }}</td>
+                      @if (varios()) {
+                        <td class="rc-tabla__chute">
+                          {{ lado.lado === 'ANTES' ? ruta.chuteOriginal : ruta.chute }}
+                        </td>
+                      }
+                      <td class="num">{{ formatearNumero(ruta.totalBultos, 2) }}</td>
+                      <td>
+                        <span class="rc-mov" [class]="'rc-mov--' + mov.tipo">{{ mov.texto }}</span>
+                        @if (mov.separa) {
+                          <span class="rc-separa">Separa CL1/CL2</span>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <ui-paginador
+              [pagina]="lado.pagina()"
+              [total]="pagina.total"
+              [porPagina]="lado.porPagina()"
+              (paginaCambia)="cambiarPagina(lado, $event)"
+              (porPaginaCambia)="cambiarPorPagina(lado, $event)"
+            />
           }
-        </section>
-      }
-    </div>
-  }
+        }
+      </section>
+    }
+  </div>
 }

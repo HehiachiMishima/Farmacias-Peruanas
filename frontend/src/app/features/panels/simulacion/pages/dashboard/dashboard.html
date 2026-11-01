@@ -192,8 +192,8 @@
             <ui-icon name="paquete" [size]="18" /> Carga por chute: antes vs. después
           </h2>
           <p class="dash-card__sub">
-            Cómo cambió la carga de cada chute al mover rutas. Elige la métrica y filtra un solo
-            chute para ver sus rutas antes y después.
+            Cómo cambió la carga de cada chute al mover rutas. Elige la métrica y filtra uno o más
+            chutes para ver sus rutas antes y después.
           </p>
         </div>
         <div class="segmento" role="tablist" aria-label="Métrica de carga">
@@ -282,27 +282,41 @@
       </div>
     </article>
 
-    @if (chuteDetalle(); as detalle) {
+    @if (chutesDetalle().length > 0) {
       <article class="dash-card">
         <header class="dash-card__head">
           <div class="dash-card__titulos">
             <h2 class="dash-card__titulo">
-              <ui-icon name="layers" [size]="18" /> Rutas de {{ detalle.chute }}: antes vs. después
+              <ui-icon name="layers" [size]="18" /> Rutas de {{ tituloDetalle() }}: antes vs.
+              después
             </h2>
             <p class="dash-card__sub">
-              Las rutas que tenía al cargar el Excel y las que tiene tras el balanceo.
+              Las rutas que tenían al cargar el Excel y las que tienen tras el balanceo, agrupadas
+              por cluster.
             </p>
           </div>
         </header>
         <div class="dash-card__body">
+          @if (chutesOcultos().length > 0) {
+            <p class="filtro-nota">
+              <ui-icon name="info" [size]="14" />
+              {{ chutesOcultos().join(', ') }} no atiende(n) los clusters filtrados; no se
+              incluye(n).
+            </p>
+          }
           <app-simulacion-detalle-chute
             [registroId]="seleccionado()"
-            [chuteId]="detalle.id"
-            [chute]="detalle"
+            [chutes]="chutesDetalle()"
             [clusters]="datos.clusters"
+            [movimientos]="datos.movimientos"
           />
         </div>
       </article>
+    } @else if (chutesOcultos().length > 0) {
+      <p class="filtro-nota">
+        <ui-icon name="info" [size]="14" />
+        Los chutes elegidos no atienden los clusters filtrados: quita un filtro para ver sus rutas.
+      </p>
     }
 
     <article class="dash-card" [class.dash-card--cargando]="cargando()">

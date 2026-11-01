@@ -150,21 +150,29 @@ export class SimulacionDashboard {
   });
 
   /**
-   * Chute del detalle de rutas: lo elige el filtro de chutes. Solo se abre
-   * cuando el filtro deja un único chute, para no imponerse a los filtros.
+   * Chutes del detalle de rutas: los que elige el filtro de chutes (uno o
+   * más), solo si siguen visibles con el filtro de clusters. Sin chutes
+   * elegidos no hay detalle, para no imponerse a los filtros.
    */
-  readonly chuteSeleccionado = computed<number | null>(() => {
-    const filtro = this.filtroChutes();
-    if (filtro.length !== 1) {
-      return null;
-    }
-    return this.chutesVisibles().find((chute) => chute.chute === filtro[0])?.id ?? null;
+  readonly chutesDetalle = computed(() =>
+    this.filtroChutes().length === 0 ? [] : this.chutesVisibles(),
+  );
+
+  /** Chutes elegidos que el filtro de clusters deja fuera del detalle. */
+  readonly chutesOcultos = computed(() => {
+    const visibles = new Set(this.chutesDetalle().map((chute) => chute.chute));
+    return this.filtroChutes().filter((chute) => !visibles.has(chute));
   });
 
-  /** Chute elegido, solo si sigue visible con los filtros actuales. */
-  readonly chuteDetalle = computed(() => {
-    const id = this.chuteSeleccionado();
-    return id === null ? null : (this.chutesVisibles().find((chute) => chute.id === id) ?? null);
+  /** «CHUTE 1», «CHUTE 1 y CHUTE 2», «CHUTE 1, CHUTE 2 y CHUTE 3» o «5 chutes». */
+  readonly tituloDetalle = computed(() => {
+    const nombres = this.chutesDetalle().map((chute) => chute.chute);
+    if (nombres.length > 3) {
+      return `${formatearNumero(nombres.length)} chutes`;
+    }
+    return nombres.length > 1
+      ? `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`
+      : (nombres[0] ?? '');
   });
 
   readonly clustersVisibles = computed(() => {

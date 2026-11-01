@@ -68,6 +68,7 @@ import oracle.simulacion.response.ClusterParametroResponse;
 import oracle.simulacion.response.ConfiguracionSimulacionResponse;
 import oracle.simulacion.response.DashboardSimulacionResponse;
 import oracle.simulacion.response.HistorialSimulacionResponse;
+import oracle.simulacion.response.MovimientoChuteResponse;
 import oracle.simulacion.response.ResumenRutasDashboardResponse;
 import oracle.simulacion.response.RutaSimulacionResponse;
 import oracle.simulacion.response.RutasDashboardResponse;
@@ -191,9 +192,10 @@ public class SimulacionConfiguracionService {
   }
 
   /**
-   * Un lado del modal «Rutas por chute»: las rutas que el chute tenía al
-   * cargar el Excel (ANTES) o las que tiene hoy (DESPUES), con los totales del
-   * conjunto filtrado (no solo de la página), ordenadas por código.
+   * Un lado del detalle de rutas del dashboard: las rutas que los chutes
+   * elegidos tenían al cargar el Excel (ANTES) o las que tienen hoy (DESPUES),
+   * con los totales del conjunto filtrado (no solo de la página). Se ordenan
+   * por cluster y código para que las rutas de cada cluster salgan agrupadas.
    */
   public Mono<ApiResponse<RutasDashboardResponse>> rutasDashboard(
       Long archivoId,
@@ -201,14 +203,14 @@ public class SimulacionConfiguracionService {
       int tamano,
       String texto,
       TipoRuta tipoRuta,
-      Long chuteId,
+      List<Long> chuteIds,
       LadoChute lado,
       Long clusterId,
       boolean soloCambios) {
     int p = Math.max(pagina, 1) - 1;
     int t = Math.min(Math.max(tamano, 1), MAX_TAMANO_PAGINA);
     PageRequest pageable =
-        PageRequest.of(p, t, Sort.by("codigoRuta").ascending().and(Sort.by("id").ascending()));
+        PageRequest.of(p, t, Sort.by("clusterId", "codigoRuta", "id").ascending());
     String termino = Filtros.normalizar(texto);
     String patron = termino == null ? null : escaparLike(termino) + "%";
     boolean antes = lado == LadoChute.ANTES;
@@ -222,7 +224,7 @@ public class SimulacionConfiguracionService {
           if (tipoRuta != null) {
             condiciones.add(cb.equal(root.get("tipo"), tipoRuta));
           }
-          condiciones.add(cb.equal(root.get(antes ? "chuteOriginalId" : "chuteId"), chuteId));
+          condiciones.add(root.get(antes ? "chuteOriginalId" : "chuteId").in(chuteIds));
           if (clusterId != null) {
             condiciones.add(cb.equal(root.get("clusterId"), clusterId));
           }
@@ -243,7 +245,7 @@ public class SimulacionConfiguracionService {
                   archivoId,
                   patron,
                   tipoRuta == null ? null : tipoRuta.name(),
-                  chuteId,
+                  chuteIds,
                   antes,
                   clusterId,
                   soloCambios);
@@ -1035,10 +1037,13 @@ public class SimulacionConfiguracionService {
 
     Map<Long, Integer> salieron = new HashMap<>();
     Map<Long, Integer> llegaron = new HashMap<>();
+    List<MovimientoChuteResponse> movimientos = new ArrayList<>();
     for (MovimientoRutas movimiento : rutaRepo.movimientosPorArchivo(archivoId)) {
       int rutas = Math.toIntExact(movimiento.getRutas());
       salieron.merge(movimiento.getOrigen(), rutas, Integer::sum);
       llegaron.merge(movimiento.getDestino(), rutas, Integer::sum);
+      movimientos.add(
+          new MovimientoChuteResponse(movimiento.getOrigen(), movimiento.getDestino(), rutas));
     }
 
     Map<Long, Integer> operariosActuales = operarios(ctx);
@@ -1092,6 +1097,9 @@ public class SimulacionConfiguracionService {
             }
           });
     }
+    Map<Long, Set<Long>> clustersOriginales = clustersPorChute(cargaOriginal);
+    Map<Long, Set<Long>> clustersActuales = clustersPorChute(cargaActual);
+    Map<Long, Integer> numeros = numerosCluster(ctx.clusters());
 
     Set<Long> chuteIds = new LinkedHashSet<>(actual.porChute().keySet());
     chuteIds.addAll(original.porChute().keySet());
@@ -1132,7 +1140,11 @@ public class SimulacionConfiguracionService {
                       despues.lineas(),
                       antes.codEntero(),
                       despues.codEntero(),
-                      List.copyOf(clustersPorChute.getOrDefault(chuteId, Set.of())));
+                      List.copyOf(clustersPorChute.getOrDefault(chuteId, Set.of())),
+                      nombresCluster(clustersOriginales.get(chuteId), ctx),
+                      nombresCluster(clustersActuales.get(chuteId), ctx),
+                      mezclaIncompatible(clustersOriginales.get(chuteId), numeros),
+                      mezclaIncompatible(clustersActuales.get(chuteId), numeros));
                 })
             .toList();
 
@@ -1155,7 +1167,8 @@ public class SimulacionConfiguracionService {
             .filter((entrada) -> entrada.getValue().rutas() > 0)
             .map(Map.Entry::getKey)
             .toList();
-    return new DashboardSimulacionResponse(kpis, clusters, chutes, mezclas(ocupados, ctx));
+    return new DashboardSimulacionResponse(
+        kpis, clusters, chutes, mezclas(ocupados, ctx), movimientos);
   }
 
   /**
@@ -1172,14 +1185,7 @@ public class SimulacionConfiguracionService {
                 .computeIfAbsent(par.chuteId(), (id) -> new LinkedHashSet<>())
                 .add(par.clusterId()));
     return clustersPorChute.entrySet().stream()
-        .filter(
-            (entrada) ->
-                entrada.getValue().stream()
-                        .map(numeros::get)
-                        .filter((numero) -> numero != null && CLUSTERS_INCOMPATIBLES.contains(numero))
-                        .distinct()
-                        .count()
-                    > 1)
+        .filter((entrada) -> mezclaIncompatible(entrada.getValue(), numeros))
         .sorted(
             Comparator.comparing(
                 (Map.Entry<Long, Set<Long>> entrada) -> ctx.nombreChute(entrada.getKey()),
@@ -1194,6 +1200,37 @@ public class SimulacionConfiguracionService {
                         .sorted(ORDEN_NATURAL)
                         .toList()))
         .toList();
+  }
+
+  /** Clusters con rutas en cada chute para una distribución de carga. */
+  private static Map<Long, Set<Long>> clustersPorChute(Map<Par, Estadistica> carga) {
+    Map<Long, Set<Long>> resultado = new HashMap<>();
+    carga.forEach(
+        (par, valor) -> {
+          if (valor.rutas() > 0) {
+            resultado.computeIfAbsent(par.chuteId(), (id) -> new HashSet<>()).add(par.clusterId());
+          }
+        });
+    return resultado;
+  }
+
+  private static List<String> nombresCluster(Set<Long> clusters, Contexto ctx) {
+    return clusters == null
+        ? List.of()
+        : clusters.stream().map(ctx::nombreCluster).sorted(ORDEN_NATURAL).toList();
+  }
+
+  /** True si entre los clusters hay más de uno de {@link #CLUSTERS_INCOMPATIBLES} (CL1 con CL2). */
+  private static boolean mezclaIncompatible(Collection<Long> clusters, Map<Long, Integer> numeros) {
+    if (clusters == null) {
+      return false;
+    }
+    return clusters.stream()
+            .map(numeros::get)
+            .filter((numero) -> numero != null && CLUSTERS_INCOMPATIBLES.contains(numero))
+            .distinct()
+            .count()
+        > 1;
   }
 
   /**

@@ -2,6 +2,7 @@ package oracle.simulacion.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import java.util.List;
 import oracle.common.exception.ApiError;
 import oracle.common.response.ApiResponse;
@@ -9,6 +10,7 @@ import oracle.common.response.PaginaResponse;
 import oracle.simulacion.model.TipoRuta;
 import oracle.simulacion.request.ConfiguracionActualizarRequest;
 import oracle.simulacion.request.LadoChute;
+import oracle.simulacion.request.Limites;
 import oracle.simulacion.request.MoverRutaRequest;
 import oracle.simulacion.request.RegistroActualizarRequest;
 import oracle.simulacion.response.ArchivoSimulacionResponse;
@@ -189,11 +191,11 @@ public class SimulacionController {
       @RequestParam(defaultValue = "25") int tamano,
       @RequestParam(required = false) String texto,
       @RequestParam(required = false) TipoRuta tipo,
-      @RequestParam Long chuteId,
+      @RequestParam @Size(min = 1, max = Limites.MAX_CHUTES_DETALLE) List<Long> chuteIds,
       @RequestParam(defaultValue = "DESPUES") LadoChute lado,
       @RequestParam(required = false) Long clusterId,
       @RequestParam(defaultValue = "false") boolean soloCambios) {
     return configuracionService.rutasDashboard(
-        id, pagina, tamano, texto, tipo, chuteId, lado, clusterId, soloCambios);
+        id, pagina, tamano, texto, tipo, chuteIds, lado, clusterId, soloCambios);
   }
 }

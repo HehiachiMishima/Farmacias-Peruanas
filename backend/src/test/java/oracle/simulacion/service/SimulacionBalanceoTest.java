@@ -1,6 +1,7 @@
 package oracle.simulacion.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,9 +29,11 @@ import oracle.simulacion.model.RutaProyeccion;
 import oracle.simulacion.model.SimulacionConfig;
 import oracle.simulacion.model.TipoRuta;
 import oracle.simulacion.repository.ArchivoExcelRepository;
+import oracle.simulacion.repository.CargaRutas;
 import oracle.simulacion.repository.ChuteRepository;
 import oracle.simulacion.repository.ClusterRepository;
 import oracle.simulacion.repository.HistorialBalanceoRepository;
+import oracle.simulacion.repository.MovimientoRutas;
 import oracle.simulacion.repository.ParametroChuteRepository;
 import oracle.simulacion.repository.ParametroClusterRepository;
 import oracle.simulacion.repository.RutaProyeccionRepository;
@@ -38,6 +41,8 @@ import oracle.simulacion.repository.SimulacionConfigRepository;
 import oracle.simulacion.request.LadoChute;
 import oracle.simulacion.request.Limites;
 import oracle.simulacion.response.BalanceoResponse;
+import oracle.simulacion.response.ChuteComparativoResponse;
+import oracle.simulacion.response.DashboardSimulacionResponse;
 import oracle.simulacion.response.RutasDashboardResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -238,12 +243,13 @@ class SimulacionBalanceoTest {
 
     RutasDashboardResponse resultado =
         servicio
-            .rutasDashboard(10L, 1, 25, "30_", TipoRuta.B2B, 1L, LadoChute.ANTES, null, false)
+            .rutasDashboard(
+                10L, 1, 25, "30_", TipoRuta.B2B, List.of(1L, 2L), LadoChute.ANTES, null, false)
             .block()
             .datos();
 
     // "_" es comodín de LIKE: se escapa para buscar el texto literal.
-    verify(rutaRepo).resumenFiltrado(10L, "30\\_%", "B2B", 1L, true, null, false);
+    verify(rutaRepo).resumenFiltrado(10L, "30\\_%", "B2B", List.of(1L, 2L), true, null, false);
     assertEquals(0, resultado.resumen().rutas());
     assertEquals(1, resultado.rutas().contenido().size());
     assertEquals("B2B", resultado.rutas().contenido().get(0).tipo());
@@ -463,6 +469,90 @@ class SimulacionBalanceoTest {
 
     assertEquals(Limites.MAX_OPERARIOS - 2, resultado.operariosAgregados());
     assertEquals(Limites.MAX_OPERARIOS, parametroChute.getOperarios());
+  }
+
+  @Test
+  void dashboardSeparaLosClustersDeCadaChuteAntesYDespues() {
+    ArchivoExcel archivo = archivo();
+    archivo.setEstado(ArchivoExcel.ESTADO_BALANCEADO);
+    when(archivoRepo.findById(10L)).thenReturn(Optional.of(archivo));
+    when(configRepo.findById(10L)).thenReturn(Optional.of(configuracion("100", null)));
+    when(parametroClusterRepo.findByIdArchivoId(10L))
+        .thenReturn(List.of(limite(1L, "10"), limite(2L, "10")));
+    when(parametroChuteRepo.findByIdArchivoId(10L))
+        .thenReturn(List.of(operarios(1L, 1), operarios(2L, 1)));
+    when(clusterRepo.findAllById(any()))
+        .thenReturn(List.of(cluster(1L, "CL1"), cluster(2L, "CL2")));
+    when(chuteRepo.findAllById(any()))
+        .thenReturn(List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
+    when(historialRepo.findByArchivoIdOrderByIdAsc(10L)).thenReturn(List.of());
+    // Al cargar, CHUTE 1 juntaba CL1 y CL2; el balanceo llevó la ruta de CL2 a CHUTE 2.
+    when(rutaRepo.cargaOriginalPorArchivo(10L))
+        .thenReturn(List.of(carga(1L, 1L, 3, "300"), carga(2L, 1L, 1, "50")));
+    when(rutaRepo.cargaPorArchivo(10L))
+        .thenReturn(List.of(carga(1L, 1L, 3, "300"), carga(2L, 2L, 1, "50")));
+    when(rutaRepo.movimientosPorArchivo(10L)).thenReturn(List.of(movimiento(1L, 2L, 1)));
+
+    DashboardSimulacionResponse dashboard = servicio.dashboard(10L).block().datos();
+
+    ChuteComparativoResponse chute1 = dashboard.chutes().get(0);
+    assertEquals(List.of("CL1", "CL2"), chute1.clustersOriginal());
+    assertEquals(List.of("CL1"), chute1.clustersBalanceado());
+    assertTrue(chute1.mezclaOriginal());
+    assertFalse(chute1.mezclaBalanceada());
+    assertEquals(1, chute1.rutasSalieron());
+    assertFalse(dashboard.chutes().get(1).mezclaBalanceada());
+    assertTrue(dashboard.mezclas().isEmpty());
+    assertEquals(1, dashboard.movimientos().size());
+    assertEquals(2L, dashboard.movimientos().get(0).destinoId());
+  }
+
+  private static CargaRutas carga(Long clusterId, Long chuteId, long rutas, String bultos) {
+    return new CargaRutas() {
+      public Long getClusterId() {
+        return clusterId;
+      }
+
+      public Long getChuteId() {
+        return chuteId;
+      }
+
+      public Long getRutas() {
+        return rutas;
+      }
+
+      public BigDecimal getBultos() {
+        return new BigDecimal(bultos);
+      }
+
+      public BigDecimal getUnidades() {
+        return BigDecimal.ZERO;
+      }
+
+      public BigDecimal getLineas() {
+        return BigDecimal.ZERO;
+      }
+
+      public BigDecimal getCod() {
+        return BigDecimal.ZERO;
+      }
+    };
+  }
+
+  private static MovimientoRutas movimiento(Long origen, Long destino, long rutas) {
+    return new MovimientoRutas() {
+      public Long getOrigen() {
+        return origen;
+      }
+
+      public Long getDestino() {
+        return destino;
+      }
+
+      public Long getRutas() {
+        return rutas;
+      }
+    };
   }
 
   private void prepararRegistro(

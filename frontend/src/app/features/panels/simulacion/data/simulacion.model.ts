@@ -178,6 +178,19 @@ export interface ChuteComparativoSimulacion {
   codBalanceado: number;
   /** Clusters que el chute atiende antes o después del balanceo. */
   clusters: string[];
+  /** Clusters del chute al cargar el Excel y tras el balanceo, por separado. */
+  clustersOriginal: string[];
+  clustersBalanceado: string[];
+  /** El chute junta CL1 y CL2 (no permitido) al cargar el Excel / tras el balanceo. */
+  mezclaOriginal: boolean;
+  mezclaBalanceada: boolean;
+}
+
+/** Rutas que pasaron de un chute a otro (por chute original y actual). */
+export interface MovimientoChuteSimulacion {
+  origenId: number;
+  destinoId: number;
+  rutas: number;
 }
 
 export interface DashboardSimulacion {
@@ -186,6 +199,8 @@ export interface DashboardSimulacion {
   chutes: ChuteComparativoSimulacion[];
   /** Chutes que hoy mezclan CL1 y CL2: el balanceo los separa. */
   mezclas: ChuteMezcladoSimulacion[];
+  /** Movimientos de rutas entre chutes: flujo de cualquier grupo de chutes. */
+  movimientos: MovimientoChuteSimulacion[];
 }
 
 export interface ChuteMezcladoSimulacion {
@@ -212,8 +227,9 @@ export interface RutasDashboardFiltros {
   tamano: number;
   texto: string;
   tipo: '' | 'B2C' | 'B2B';
-  chuteId: number;
-  /** ANTES: rutas que el chute tenía al cargar el Excel; DESPUES: las que tiene hoy. */
+  /** Chutes elegidos (1 a 50). */
+  chuteIds: number[];
+  /** ANTES: rutas que los chutes tenían al cargar el Excel; DESPUES: las que tienen hoy. */
   lado: LadoChute;
   clusterId: number | null;
   /** Solo las rutas que cambiaron de chute. */

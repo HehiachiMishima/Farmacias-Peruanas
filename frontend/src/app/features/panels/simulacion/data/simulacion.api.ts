@@ -108,7 +108,7 @@ export class SimulacionApi {
       tamano: filtros.tamano,
       texto: filtros.texto,
       tipo: filtros.tipo,
-      chuteId: filtros.chuteId,
+      chuteIds: filtros.chuteIds.join(','),
       lado: filtros.lado,
       clusterId: filtros.clusterId,
       soloCambios: filtros.soloCambios,

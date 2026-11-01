@@ -13,6 +13,8 @@ public final class Limites {
   public static final String MAX_VELOCIDAD = "100000.00";
   /** Clusters o chutes por petición. */
   public static final int MAX_PARAMETROS = 2_000;
+  /** Chutes que se pueden consultar a la vez en el detalle de rutas del dashboard. */
+  public static final int MAX_CHUTES_DETALLE = 50;
 
   private Limites() {}
 }

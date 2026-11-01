@@ -7,4 +7,6 @@ public record DashboardSimulacionResponse(
     List<ClusterComparativoResponse> clusters,
     List<ChuteComparativoResponse> chutes,
     /** Chutes que hoy mezclan CL1 y CL2 (advertencia, no bloquea la carga). */
-    List<ChuteMezcladoResponse> mezclas) {}
+    List<ChuteMezcladoResponse> mezclas,
+    /** Rutas movidas por (chute original, chute actual): flujo de cualquier grupo de chutes. */
+    List<MovimientoChuteResponse> movimientos) {}
