@@ -2,6 +2,7 @@ package oracle.simulacion.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -125,9 +126,103 @@ class SimulacionBalanceoTest {
 
     assertEquals(1, resultado.rutasMovidas());
     assertEquals(0, resultado.operariosAgregados());
+    assertEquals(0, resultado.operariosMovidos());
     assertEquals(2L, rutaGrande.getChuteId());
     assertEquals(1L, rutaPequena.getChuteId());
     assertEquals(ArchivoExcel.ESTADO_BALANCEADO, archivo.getEstado());
+  }
+
+  @Test
+  void reasignaUnOperarioConHolguraAntesDeAgregar() {
+    ArchivoExcel archivo = new ArchivoExcel();
+    archivo.setId(10L);
+    archivo.setEstado(ArchivoExcel.ESTADO_PROYECCION);
+
+    SimulacionConfig config = new SimulacionConfig();
+    config.setArchivoId(10L);
+    config.setVelocidadBase(new BigDecimal("100"));
+
+    Cluster cluster = new Cluster();
+    cluster.setId(1L);
+    cluster.setNombre("CL1");
+    Chute chute1 = new Chute();
+    chute1.setId(1L);
+    chute1.setNombre("CHUTE 1");
+    Chute chute2 = new Chute();
+    chute2.setId(2L);
+    chute2.setNombre("CHUTE 2");
+
+    ParametroCluster parametroCluster = new ParametroCluster();
+    parametroCluster.setId(new ParametroClusterId(10L, 1L));
+    parametroCluster.setLimiteHoras(new BigDecimal("1.00"));
+
+    ParametroChute parametroChute1 = new ParametroChute();
+    parametroChute1.setId(new ParametroChuteId(10L, 1L));
+    parametroChute1.setOperarios(2);
+    ParametroChute parametroChute2 = new ParametroChute();
+    parametroChute2.setId(new ParametroChuteId(10L, 2L));
+    parametroChute2.setOperarios(3);
+
+    RutaProyeccion cuello = ruta(1L, 1L, 1L, "3030", "300");
+    RutaProyeccion rapida = ruta(2L, 1L, 2L, "3031", "200");
+
+    when(archivoRepo.bloquear(10L)).thenReturn(Optional.of(archivo));
+    when(configRepo.findById(10L)).thenReturn(Optional.of(config));
+    when(parametroClusterRepo.findByIdArchivoId(10L)).thenReturn(List.of(parametroCluster));
+    when(parametroChuteRepo.findByIdArchivoId(10L))
+        .thenReturn(List.of(parametroChute1, parametroChute2));
+    when(rutaRepo.findByArchivoIdOrderByIdAsc(10L)).thenReturn(List.of(cuello, rapida));
+    when(clusterRepo.findAllById(any())).thenReturn(List.of(cluster));
+    when(chuteRepo.findAllById(any())).thenReturn(List.of(chute1, chute2));
+    when(historialRepo.saveAll(any())).thenReturn(List.of());
+    when(archivoRepo.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+    BalanceoResponse resultado = servicio.balancear(10L).block().datos();
+
+    assertEquals(0, resultado.rutasMovidas());
+    assertEquals(1, resultado.operariosMovidos());
+    assertEquals(0, resultado.operariosAgregados());
+    assertEquals(3, parametroChute1.getOperarios());
+    assertEquals(2, parametroChute2.getOperarios());
+    assertEquals(1L, cuello.getChuteId());
+    assertEquals(2L, rapida.getChuteId());
+  }
+
+  @Test
+  void respetaElTopeGlobalDeOperarios() {
+    ArchivoExcel archivo = new ArchivoExcel();
+    archivo.setId(10L);
+    archivo.setEstado(ArchivoExcel.ESTADO_PROYECCION);
+
+    SimulacionConfig config = new SimulacionConfig();
+    config.setArchivoId(10L);
+    config.setVelocidadBase(new BigDecimal("1"));
+    config.setOperariosMaximos(2);
+
+    ParametroCluster parametroCluster = new ParametroCluster();
+    parametroCluster.setId(new ParametroClusterId(10L, 1L));
+    parametroCluster.setLimiteHoras(new BigDecimal("0.01"));
+
+    ParametroChute parametroChute = new ParametroChute();
+    parametroChute.setId(new ParametroChuteId(10L, 1L));
+    parametroChute.setOperarios(2);
+
+    when(archivoRepo.bloquear(10L)).thenReturn(Optional.of(archivo));
+    when(configRepo.findById(10L)).thenReturn(Optional.of(config));
+    when(parametroClusterRepo.findByIdArchivoId(10L)).thenReturn(List.of(parametroCluster));
+    when(parametroChuteRepo.findByIdArchivoId(10L)).thenReturn(List.of(parametroChute));
+    when(rutaRepo.findByArchivoIdOrderByIdAsc(10L))
+        .thenReturn(List.of(ruta(1L, 1L, 1L, "3030", "100000")));
+    when(clusterRepo.findAllById(any())).thenReturn(List.of());
+    when(chuteRepo.findAllById(any())).thenReturn(List.of());
+    when(archivoRepo.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+    BalanceoResponse resultado = servicio.balancear(10L).block().datos();
+
+    assertEquals(0, resultado.operariosAgregados());
+    assertEquals(0, resultado.operariosMovidos());
+    assertEquals(2, parametroChute.getOperarios());
+    assertTrue(resultado.mensaje().contains("máximo de 2"));
   }
 
   @Test

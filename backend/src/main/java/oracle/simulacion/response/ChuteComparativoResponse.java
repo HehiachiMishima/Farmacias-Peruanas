@@ -4,9 +4,12 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public record ChuteComparativoResponse(
+    Long id,
     String chute,
     int operariosOriginal,
     int operariosBalanceado,
+    int rutasOriginal,
+    int rutasBalanceado,
     BigDecimal tiempoOriginal,
     BigDecimal tiempoBalanceado,
     String estado,

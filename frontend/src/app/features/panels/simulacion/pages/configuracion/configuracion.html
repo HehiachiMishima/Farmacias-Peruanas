@@ -16,7 +16,19 @@
       Ver dashboard
     </button>
   }
+  <button type="button" class="ui-btn ui-btn--secondary" (click)="abrirExplicacion()">
+    <ui-icon name="info" [size]="18" />
+    ¿Cómo balancea?
+  </button>
 </header>
+
+<input
+  #inputArchivo
+  type="file"
+  accept=".xlsx,.xls,.csv"
+  hidden
+  (change)="seleccionarArchivo($event)"
+/>
 
 <section class="config-panel">
   <div class="config-panel__fila">
@@ -30,6 +42,16 @@
         placeholder="Elegir registro…"
         (valorCambia)="seleccionarDesdeSelector($event)"
       />
+      <button
+        *hasPermiso="permisos.CREAR_REGISTRO_SIMULACION"
+        type="button"
+        class="ui-btn ui-btn--secondary ui-btn--sm config-panel__subir"
+        [disabled]="cargandoOpciones() || ocupado()"
+        (click)="abrirSelectorArchivo()"
+      >
+        <ui-icon name="almacen" [size]="16" />
+        Cargar Excel
+      </button>
     </div>
     <div class="config-panel__velocidad">
       <label class="ui-label" for="config-velocidad">Velocidad base (bultos/h por operario)</label>
@@ -44,6 +66,23 @@
         [disabled]="!config() || !puedeModificar() || ocupado()"
         (change)="setVelocidad($event)"
       />
+    </div>
+    <div class="config-panel__maximo">
+      <label class="ui-label" for="config-maximo">Máximo de operarios disponibles</label>
+      <input
+        id="config-maximo"
+        type="number"
+        class="ui-input"
+        min="1"
+        step="1"
+        inputmode="numeric"
+        [value]="operariosMaximos()"
+        [disabled]="!config() || !puedeModificar() || ocupado()"
+        (change)="setOperariosMaximos($event)"
+      />
+      <span class="config-panel__ayuda" [class.config-panel__ayuda--alerta]="excedeMaximo()">
+        {{ formatearNumero(operariosAsignados()) }} asignados
+      </span>
     </div>
     <div class="config-panel__acciones">
       <button
@@ -111,6 +150,13 @@
       <p class="config-aviso">
         <ui-icon name="alerta" [size]="15" />
         Define al menos un límite de horas por cluster para poder ejecutar el balanceo.
+      </p>
+    }
+    @if (excedeMaximo()) {
+      <p class="config-aviso">
+        <ui-icon name="alerta" [size]="15" />
+        Los chutes suman {{ formatearNumero(operariosAsignados()) }} operarios y el máximo es
+        {{ formatearNumero(operariosMaximos()) }}. Sube el máximo o reduce operarios para guardar.
       </p>
     }
   }
@@ -350,6 +396,7 @@
                 <th class="num">Operarios</th>
                 <th>Cluster</th>
                 <th>Ruta</th>
+                <th>Tipo</th>
                 <th class="num">Bultos</th>
                 <th class="num">Unidades</th>
                 <th class="num">Líneas</th>
@@ -386,6 +433,15 @@
                     </span>
                   </td>
                   <td class="u-mono">{{ ruta.codigoRuta }}</td>
+                  <td>
+                    <span
+                      class="ui-badge"
+                      [class.ui-badge--info]="ruta.tipo === 'B2B'"
+                      [class.ui-badge--neutral]="ruta.tipo !== 'B2B'"
+                    >
+                      {{ ruta.tipo }}
+                    </span>
+                  </td>
                   <td class="num">{{ formatearNumero(ruta.totalBultos, 2) }}</td>
                   <td class="num">{{ formatearNumero(ruta.totalUnidades, 2) }}</td>
                   <td class="num">{{ formatearNumero(ruta.totalLineas, 2) }}</td>
@@ -405,7 +461,7 @@
                 </tr>
               } @empty {
                 <tr>
-                  <td colspan="10" class="u-muted">Ninguna ruta coincide con los filtros.</td>
+                  <td colspan="11" class="u-muted">Ninguna ruta coincide con los filtros.</td>
                 </tr>
               }
             </tbody>
@@ -427,7 +483,7 @@
   [abierto]="historialAbierto()"
   ancho="lg"
   titulo="Cambios del balanceo"
-  subtitulo="Últimos movimientos de rutas y operarios añadidos sobre el registro."
+  subtitulo="Últimos movimientos de rutas, operarios reasignados y añadidos sobre el registro."
   (cerrar)="historialAbierto.set(false)"
 >
   @if (historialCargando()) {
@@ -436,7 +492,7 @@
     <ui-empty
       icono="info"
       titulo="Sin cambios registrados"
-      mensaje="Todavía no se han movido rutas ni añadido operarios."
+      mensaje="Todavía no se han movido rutas ni reasignado o añadido operarios."
     />
   } @else {
     <div class="ui-table-wrap">
@@ -454,6 +510,13 @@
               @if (cambio.tipoAccion === 'MOVER_RUTA') {
                 <td><span class="ui-badge ui-badge--warning">Ruta movida</span></td>
                 <td class="u-mono">{{ cambio.ruta ?? '—' }}</td>
+                <td>
+                  De <strong>{{ cambio.chuteOrigen }}</strong> a
+                  <strong>{{ cambio.chuteDestino }}</strong>
+                </td>
+              } @else if (cambio.tipoAccion === 'MOVER_OPERARIO') {
+                <td><span class="ui-badge ui-badge--info">Operario reasignado</span></td>
+                <td class="u-muted">—</td>
                 <td>
                   De <strong>{{ cambio.chuteOrigen }}</strong> a
                   <strong>{{ cambio.chuteDestino }}</strong>
@@ -552,6 +615,201 @@
         <span class="ui-spinner config-spinner"></span>
       }
       Restablecer
+    </button>
+  </div>
+</ui-modal>
+
+<ui-modal
+  [abierto]="subirAbierto()"
+  titulo="Cargar Excel de proyección"
+  subtitulo="El archivo se procesa y agrupa por ruta y tipo (B2C/B2B)."
+  (cerrar)="cerrarCarga()"
+>
+  @if (archivoSeleccionado(); as archivo) {
+    <div class="archivo-chip">
+      <span class="archivo-chip__icono"><ui-icon name="almacen" [size]="20" /></span>
+      <div class="archivo-chip__datos">
+        <span class="archivo-chip__nombre">{{ archivo.name }}</span>
+        <span class="archivo-chip__meta"
+          >{{ tamanoArchivo(archivo) }} · se validará al registrar</span
+        >
+      </div>
+      <span class="ui-badge ui-badge--info">Excel</span>
+    </div>
+  }
+
+  <div class="grid-form">
+    <div class="ui-field">
+      <label class="ui-label" for="config-subir-nombre"
+        >Nombre del registro <span class="ui-required">*</span></label
+      >
+      <input
+        id="config-subir-nombre"
+        class="ui-input"
+        [class.ui-input--invalid]="campoInvalido('nombreRegistro')"
+        [formControl]="formulario.controls.nombreRegistro"
+        placeholder="Ej: Proyección enero"
+      />
+      @if (campoInvalido('nombreRegistro')) {
+        <span class="ui-error">Escribe un nombre de hasta 150 caracteres.</span>
+      }
+    </div>
+    <div class="ui-field">
+      <label class="ui-label" for="config-subir-etiqueta">Etiqueta</label>
+      <input
+        id="config-subir-etiqueta"
+        class="ui-input"
+        [formControl]="formulario.controls.etiqueta"
+        maxlength="50"
+        placeholder="Ej: URGENTE"
+      />
+      <span class="hint">Opcional. Se muestra como distintivo en el listado.</span>
+    </div>
+  </div>
+
+  <div class="ui-field">
+    <span class="ui-label" id="config-color-registro">Color del registro</span>
+    <div class="color-picker" role="group" aria-labelledby="config-color-registro">
+      @for (color of paleta; track color.hex) {
+        <button
+          type="button"
+          class="color-dot"
+          [class.color-dot--activo]="formulario.controls.colorHex.value === color.hex"
+          [style.background]="color.hex"
+          [title]="color.nombre"
+          [attr.aria-label]="color.nombre"
+          [attr.aria-pressed]="formulario.controls.colorHex.value === color.hex"
+          (click)="fijarColor(color.hex)"
+        ></button>
+      }
+    </div>
+  </div>
+
+  <p class="hint">
+    Columnas requeridas: COD., RUTA, CLUSTER, CHUTE, TIPO (B2C o B2B) y BULTOS PROMEDIO. También se
+    aceptan CSV.
+  </p>
+
+  <div modal-footer class="modal-foot">
+    <button
+      type="button"
+      class="ui-btn ui-btn--ghost"
+      [disabled]="subiendo()"
+      (click)="cerrarCarga()"
+    >
+      Cancelar
+    </button>
+    <button
+      type="button"
+      class="ui-btn ui-btn--primary"
+      (click)="confirmarCarga()"
+      [disabled]="subiendo()"
+    >
+      @if (subiendo()) {
+        <span class="ui-spinner config-spinner"></span>
+      }
+      Registrar
+    </button>
+  </div>
+</ui-modal>
+
+<ui-modal
+  [abierto]="explicacionAbierta()"
+  ancho="lg"
+  titulo="¿Cómo balancea el sistema?"
+  subtitulo="El objetivo es que ningún cluster supere su límite moviendo rutas, reasignando operarios o añadiendo solo si hay cupo."
+  (cerrar)="explicacionAbierta.set(false)"
+>
+  <div class="guia">
+    <section class="guia__bloque">
+      <h3 class="guia__titulo"><ui-icon name="reloj" [size]="16" /> 1. Tiempo de cada chute</h3>
+      <p class="guia__texto">
+        Cada chute tarda lo que suman los bultos de sus rutas dividido entre la velocidad base y sus
+        operarios:
+      </p>
+      <p class="guia__formula">
+        <code>tiempo del chute = bultos del chute / (velocidad base × operarios)</code>
+      </p>
+      <p class="guia__texto">
+        Si subes los operarios de un chute, su tiempo baja en la misma proporción. Con velocidad
+        base 100 y 1 operario, 1.000 bultos tardan 10 h; con 2 operarios, 5 h.
+      </p>
+    </section>
+
+    <section class="guia__bloque">
+      <h3 class="guia__titulo">
+        <ui-icon name="area" [size]="16" /> 2. Tiempo de cierre del cluster
+      </h3>
+      <p class="guia__texto">
+        Un cluster termina cuando termina su chute más lento, no cuando termina el promedio:
+      </p>
+      <p class="guia__formula"><code>tiempo del cluster = máx(tiempo de sus chutes)</code></p>
+      <p class="guia__texto">
+        Por eso el balanceo ataca siempre el chute más lento del cluster más atrasado. Un cluster
+        cumple si su tiempo de cierre es menor o igual a su límite (con 0,01 h de tolerancia).
+      </p>
+    </section>
+
+    <section class="guia__bloque">
+      <h3 class="guia__titulo"><ui-icon name="flecha" [size]="16" /> 3. El ciclo de ajuste</h3>
+      <ol class="guia__lista">
+        <li>
+          Busca el cluster con mayor <strong>déficit</strong> (tiempo de cierre − límite). Si ningún
+          cluster supera su límite, termina.
+        </li>
+        <li>
+          Identifica el <strong>chute cuello de botella</strong>: el más lento de ese cluster.
+        </li>
+        <li>
+          Toma la <strong>ruta más grande</strong> (más bultos) del cuello y evalúa moverla al chute
+          más rápido disponible, sin importar el cluster.
+        </li>
+        <li>
+          La mueve solo si el destino, aun recibiendo esa ruta, sigue quedando por debajo del tiempo
+          actual del cuello. Así el problema no se traslada a otro chute.
+        </li>
+        <li>
+          Si no existe una ruta que mejore la situación, busca un
+          <strong>operario con holgura</strong>
+          en otro chute y lo reasigna al cuello de botella. Solo cede quien puede hacerlo sin que su
+          cluster empeore.
+        </li>
+        <li>
+          Si nadie puede ceder un operario, añade <strong>1 operario</strong> al cuello de botella,
+          únicamente si todavía hay cupo dentro del máximo disponible del registro.
+        </li>
+        <li>Repite el ciclo hasta que todos los clusters cumplan o hasta agotar los ajustes.</li>
+      </ol>
+      <p class="guia__texto">
+        El proceso tiene tres topes de seguridad: 1.000 iteraciones por ejecución, 50 operarios por
+        chute y el máximo de operarios disponibles que definas para el registro. Al agotar el máximo
+        global el balanceo se detiene y avisa que subas el tope o revises los límites.
+      </p>
+    </section>
+
+    <section class="guia__bloque">
+      <h3 class="guia__titulo"><ui-icon name="info" [size]="16" /> 4. Qué cambia y qué no</h3>
+      <ul class="guia__lista">
+        <li>Mover una ruta cambia su chute, nunca su cluster ni su tipo (B2C/B2B).</li>
+        <li>
+          El chute original queda congelado al cargar el Excel: por eso el dashboard puede comparar
+          <strong>antes vs. después</strong> aunque el historial se borre.
+        </li>
+        <li>
+          «Restablecer» devuelve todas las rutas a su chute original y deshace las reasignaciones y
+          operarios añadidos por el balanceo.
+        </li>
+        <li>
+          Los ajustes manuales (mover una ruta o cambiar operarios) también se reflejan en el
+          comparativo.
+        </li>
+      </ul>
+    </section>
+  </div>
+
+  <div modal-footer class="modal-foot">
+    <button type="button" class="ui-btn ui-btn--primary" (click)="explicacionAbierta.set(false)">
+      Entendido
     </button>
   </div>
 </ui-modal>

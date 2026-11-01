@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import javax.xml.parsers.ParserConfigurationException;
 import oracle.common.exception.ConflictoException;
+import oracle.simulacion.model.TipoRuta;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.openxml4j.exceptions.OpenXML4JException;
 import org.apache.poi.openxml4j.opc.OPCPackage;
@@ -60,12 +61,15 @@ import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
 
 /**
- * Interpreta el Excel de proyección y agrupa sus filas por RUTA.
+ * Interpreta el Excel de proyección y agrupa sus filas por RUTA y TIPO.
  *
  * <p>Columnas esperadas (sin distinguir mayúsculas ni tildes): COD./COD, RUTA, CLUSTER, CHUTE,
- * BULTOS PROMEDIO/BULTOS y, opcionalmente, UNIDADES PROMEDIO/UNIDADES y LINEAS PROMEDIO/LINEAS. La
- * cabecera se busca en las primeras {@value #FILAS_BUSCAR_CABECERA} filas (puede haber un título
- * encima).
+ * TIPO (B2C/B2B), BULTOS PROMEDIO/BULTOS y, opcionalmente, UNIDADES PROMEDIO/UNIDADES y LINEAS
+ * PROMEDIO/LINEAS. La cabecera se busca en las primeras {@value #FILAS_BUSCAR_CABECERA} filas
+ * (puede haber un título encima).
+ *
+ * <p>La misma ruta puede aparecer con tipos distintos (una ruta B2C y la misma ruta B2B), pero no
+ * puede repetirse dos veces con el mismo tipo ni cambiar de cluster/chute dentro del mismo tipo.
  *
  * <p>Memoria y CPU acotadas: los .xlsx se leen en streaming (SAX) y la hoja y sharedStrings.xml
  * tienen un tope de bytes descomprimidos; el CSV se lee con un búfer propio sin marcas. Por fila
@@ -99,7 +103,7 @@ public final class SimulacionExcel {
    */
   private static final long MAX_ENTRADA_ZIP = 128L * 1024 * 1024;
 
-  private static final String[] COLUMNAS_OBLIGATORIAS = {"RUTA", "CLUSTER", "CHUTE", "BULTOS"};
+  private static final String[] COLUMNAS_OBLIGATORIAS = {"RUTA", "CLUSTER", "CHUTE", "TIPO", "BULTOS"};
   private static final Pattern MARCAS = Pattern.compile("\\p{M}+");
   private static final Pattern ESPACIOS = Pattern.compile("[\\s\\u00A0\\u2007\\u202F\\uFEFF]+");
   private static final Charset WINDOWS_1252 = Charset.forName("windows-1252");
@@ -125,6 +129,7 @@ public final class SimulacionExcel {
       String codigoRuta,
       String cluster,
       String chute,
+      TipoRuta tipo,
       BigDecimal bultos,
       BigDecimal unidades,
       BigDecimal lineas,
@@ -691,6 +696,7 @@ public final class SimulacionExcel {
     private int iRuta = -1;
     private int iCluster = -1;
     private int iChute = -1;
+    private int iTipo = -1;
     private int iBultos = -1;
     private int iUnidades = -1;
     private int iLineas = -1;
@@ -749,6 +755,7 @@ public final class SimulacionExcel {
       iRuta = columnas.get("RUTA");
       iCluster = columnas.get("CLUSTER");
       iChute = columnas.get("CHUTE");
+      iTipo = columnas.get("TIPO");
       iBultos = columnas.get("BULTOS");
       iUnidades = columnas.getOrDefault("UNIDADES", -1);
       iLineas = columnas.getOrDefault("LINEAS", -1);
@@ -765,8 +772,8 @@ public final class SimulacionExcel {
         }
       }
       return ArchivoInvalidoException.contenido(
-          "No se encontró la cabecera (RUTA, CLUSTER, CHUTE, BULTOS) en las primeras "
-              + FILAS_BUSCAR_CABECERA + " filas.");
+          "No se encontró la cabecera (" + String.join(", ", COLUMNAS_OBLIGATORIAS)
+              + ") en las primeras " + FILAS_BUSCAR_CABECERA + " filas.");
     }
 
     private void acumular(int numero, Fila fila) {
@@ -784,6 +791,12 @@ public final class SimulacionExcel {
         throw ArchivoInvalidoException.contenido(
             "La fila " + numero + " no tiene " + (cluster.isEmpty() ? "CLUSTER" : "CHUTE") + ".");
       }
+      String tipoTexto = texto(fila, iTipo);
+      TipoRuta tipo = TipoRuta.desdeTexto(tipoTexto);
+      if (tipo == null) {
+        throw ArchivoInvalidoException.contenido(
+            "La fila " + numero + " tiene TIPO '" + tipoTexto + "'; solo se admite B2C o B2B.");
+      }
       exigirLongitud(ruta, "RUTA", numero);
       exigirLongitud(cluster, "CLUSTER", numero);
       exigirLongitud(chute, "CHUTE", numero);
@@ -791,10 +804,10 @@ public final class SimulacionExcel {
       long lineas = centimos(fila, iLineas, numero, "LINEAS");
       String cod = texto(fila, iCod);
 
-      String claveRuta = clave(ruta);
+      String claveRuta = clave(ruta) + '\u0000' + tipo.name();
       Acumulado acumulado = porRuta.get(claveRuta);
       if (acumulado == null) {
-        acumulado = new Acumulado(ruta, cluster, chute);
+        acumulado = new Acumulado(ruta, cluster, chute, tipo);
         porRuta.put(claveRuta, acumulado);
       } else {
         acumulado.exigirMismo(cluster, chute, numero);
@@ -839,6 +852,7 @@ public final class SimulacionExcel {
     private final String ruta;
     private final String cluster;
     private final String chute;
+    private final TipoRuta tipo;
     private final String claveCluster;
     private final String claveChute;
     private long bultos;
@@ -849,10 +863,11 @@ public final class SimulacionExcel {
     private Set<String> cods;
     private int filas;
 
-    Acumulado(String ruta, String cluster, String chute) {
+    Acumulado(String ruta, String cluster, String chute, TipoRuta tipo) {
       this.ruta = ruta;
       this.cluster = cluster;
       this.chute = chute;
+      this.tipo = tipo;
       this.claveCluster = clave(cluster);
       this.claveChute = clave(chute);
     }
@@ -868,8 +883,9 @@ public final class SimulacionExcel {
 
     private ArchivoInvalidoException distinto(String columna, String esperado, String recibido, int fila) {
       return ArchivoInvalidoException.contenido(
-          "Fila " + fila + ": la ruta " + ruta + " ya tenía " + columna + " " + esperado
-              + " y aparece con " + recibido + ". Una ruta debe tener un único " + columna + ".");
+          "Fila " + fila + ": la ruta " + ruta + " (" + tipo + ") ya tenía " + columna + " "
+              + esperado + " y aparece con " + recibido + ". Una ruta debe tener un único "
+              + columna + " por tipo.");
     }
 
     void sumar(long b, long u, long l, String cod, int numero) {
@@ -897,6 +913,7 @@ public final class SimulacionExcel {
           ruta,
           cluster,
           chute,
+          tipo,
           BigDecimal.valueOf(bultos, 2),
           BigDecimal.valueOf(unidades, 2),
           BigDecimal.valueOf(lineas, 2),
@@ -1146,6 +1163,7 @@ public final class SimulacionExcel {
         case "RUTA" -> columnas.putIfAbsent("RUTA", i);
         case "CLUSTER" -> columnas.putIfAbsent("CLUSTER", i);
         case "CHUTE" -> columnas.putIfAbsent("CHUTE", i);
+        case "TIPO" -> columnas.putIfAbsent("TIPO", i);
         case "BULTOS", "BULTOS PROMEDIO" -> columnas.putIfAbsent("BULTOS", i);
         case "UNIDADES", "UNIDADES PROMEDIO" -> columnas.putIfAbsent("UNIDADES", i);
         case "LINEAS", "LINEAS PROMEDIO" -> columnas.putIfAbsent("LINEAS", i);

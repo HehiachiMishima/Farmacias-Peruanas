@@ -8,13 +8,16 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize } from 'rxjs';
+import { finalize, Subject, debounceTime } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
+import { Pagina } from '../../../../../core/models';
 import {
   ArchivoSimulacion,
   ChuteComparativoSimulacion,
   DashboardSimulacion,
+  ResumenRutasSimulacion,
+  RutaSimulacion,
 } from '../../data/simulacion.model';
 import { SimulacionApi } from '../../data/simulacion.api';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
@@ -26,6 +29,8 @@ import { porcentaje } from '../../../../../shared/ui/charts/formato';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
+import { Modal } from '../../../../../shared/ui/modal/modal';
+import { Paginador } from '../../../../../shared/ui/paginador/paginador';
 import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
@@ -76,10 +81,12 @@ const METRICAS: ReadonlyArray<{
     ComparativoChart,
     EmptyState,
     Icon,
+    Modal,
     SelectBuscable,
     SelectMultiple,
     PanelFiltros,
     FiltrosActivos,
+    Paginador,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
@@ -109,6 +116,44 @@ export class SimulacionDashboard {
   private solicitud = 0;
 
   readonly metrica = signal<Metrica>('bultos');
+  readonly rutasAbierto = signal(false);
+
+  // ---------------- Modal ejecutivo «Rutas por chute» ----------------
+  readonly resumenRutas = signal<ResumenRutasSimulacion | null>(null);
+  readonly rutasPagina = signal<Pagina<RutaSimulacion> | null>(null);
+  readonly cargandoRutas = signal(false);
+  readonly errorRutas = signal<string | null>(null);
+  readonly filtroRutaTexto = signal('');
+  readonly filtroRutaTipo = signal<'' | 'B2C' | 'B2B'>('');
+  readonly filtroRutaChute = signal<number | null>(null);
+  readonly filtroRutaCluster = signal<number | null>(null);
+  readonly paginaRutas = signal(1);
+  readonly porPaginaRutas = signal(25);
+  private readonly busquedaRuta$ = new Subject<string>();
+  /** Descarta respuestas viejas cuando se escribe o filtra rápido. */
+  private solicitudRutas = 0;
+
+  readonly opcionesRutaChute = computed(() =>
+    (this.dashboard()?.chutes ?? [])
+      .slice()
+      .sort((a, b) => a.chute.localeCompare(b.chute, 'es', { numeric: true }))
+      .map((chute) => ({ id: chute.id, etiqueta: chute.chute })),
+  );
+
+  readonly opcionesRutaCluster = computed(() =>
+    (this.dashboard()?.clusters ?? [])
+      .slice()
+      .sort((a, b) => a.cluster.localeCompare(b.cluster, 'es', { numeric: true }))
+      .map((cluster) => ({ id: cluster.id, etiqueta: cluster.cluster })),
+  );
+
+  readonly tieneFiltrosRutas = computed(
+    () =>
+      this.filtroRutaTexto().trim().length > 0 ||
+      this.filtroRutaTipo() !== '' ||
+      this.filtroRutaChute() !== null ||
+      this.filtroRutaCluster() !== null,
+  );
 
   // ---------------- Filtros del panel (múltiples) ----------------
   readonly filtrosAbierto = signal(false);
@@ -237,7 +282,7 @@ export class SimulacionDashboard {
         valor: `${formatearNumero(kpis.rutasMovidas)} rutas`,
         icono: 'flecha',
         color: 'var(--violet)',
-        detalle: `${formatearNumero(kpis.operariosAgregados)} operario(s) añadido(s)`,
+        detalle: `${formatearNumero(kpis.operariosMovidos)} operario(s) reasignado(s) · ${formatearNumero(kpis.operariosAgregados)} añadido(s)`,
       },
     ];
   });
@@ -271,7 +316,146 @@ export class SimulacionDashboard {
     }));
   });
 
+  /** Rutas asignadas a los chutes visibles antes y después del balanceo. */
+  readonly totalesRutas = computed(() => {
+    const chutes = this.chutesVisibles();
+    return {
+      antes: chutes.reduce((total, chute) => total + Number(chute.rutasOriginal), 0),
+      despues: chutes.reduce((total, chute) => total + Number(chute.rutasBalanceado), 0),
+    };
+  });
+
+  /** Operarios de los chutes visibles antes y después del balanceo. */
+  readonly totalesOperarios = computed(() => {
+    const chutes = this.chutesVisibles();
+    return {
+      antes: chutes.reduce((total, chute) => total + Number(chute.operariosOriginal), 0),
+      despues: chutes.reduce((total, chute) => total + Number(chute.operariosBalanceado), 0),
+    };
+  });
+
+  abrirRutas(): void {
+    this.reiniciarFiltrosRutas();
+    // Se limpia el resultado anterior para no mostrar rutas de otro registro
+    // mientras llega la primera página.
+    this.resumenRutas.set(null);
+    this.rutasPagina.set(null);
+    this.errorRutas.set(null);
+    this.rutasAbierto.set(true);
+    this.cargarRutasDesde(1);
+  }
+
+  setFiltroRutaTipo(valor: string): void {
+    this.filtroRutaTipo.set(valor === 'B2C' || valor === 'B2B' ? valor : '');
+    this.cargarRutasDesde(1);
+  }
+
+  setFiltroRutaChute(valor: number | null): void {
+    this.filtroRutaChute.set(valor);
+    this.cargarRutasDesde(1);
+  }
+
+  setFiltroRutaCluster(valor: number | null): void {
+    this.filtroRutaCluster.set(valor);
+    this.cargarRutasDesde(1);
+  }
+
+  buscarRuta(texto: string): void {
+    this.busquedaRuta$.next(texto);
+  }
+
+  limpiarFiltrosRutas(): void {
+    this.reiniciarFiltrosRutas();
+    this.cargarRutasDesde(1);
+  }
+
+  private reiniciarFiltrosRutas(): void {
+    this.busquedaRuta$.next('');
+    this.filtroRutaTexto.set('');
+    this.filtroRutaTipo.set('');
+    this.filtroRutaChute.set(null);
+    this.filtroRutaCluster.set(null);
+  }
+
+  cambiarPaginaRutas(pagina: number): void {
+    this.cargarRutasDesde(pagina);
+  }
+
+  cambiarPorPaginaRutas(valor: number): void {
+    this.porPaginaRutas.set(valor);
+    this.cargarRutasDesde(1);
+  }
+
+  cargarRutasDesde(pagina: number): void {
+    this.paginaRutas.set(pagina);
+    const id = this.seleccionado();
+    if (!id) {
+      return;
+    }
+    const solicitud = ++this.solicitudRutas;
+    this.cargandoRutas.set(true);
+    this.errorRutas.set(null);
+    this.api
+      .rutasDashboard(id, {
+        pagina,
+        tamano: this.porPaginaRutas(),
+        texto: this.filtroRutaTexto().trim(),
+        tipo: this.filtroRutaTipo(),
+        chuteId: this.filtroRutaChute(),
+        clusterId: this.filtroRutaCluster(),
+      })
+      .pipe(
+        finalize(() => {
+          if (solicitud === this.solicitudRutas) {
+            this.cargandoRutas.set(false);
+          }
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (respuesta) => {
+          if (solicitud === this.solicitudRutas) {
+            this.resumenRutas.set(respuesta.resumen);
+            this.rutasPagina.set(respuesta.rutas);
+          }
+        },
+        error: (err: unknown) => {
+          if (solicitud === this.solicitudRutas) {
+            this.errorRutas.set(mensajeDeError(err));
+          }
+        },
+      });
+  }
+
+  /** Etiqueta de la tabla: 25 de 1.240 rutas. */
+  readonly rangoRutas = computed(() => {
+    const pagina = this.rutasPagina();
+    if (!pagina || pagina.total === 0) {
+      return 'Sin rutas';
+    }
+    const desde = (pagina.pagina - 1) * pagina.tamano + 1;
+    const hasta = Math.min(pagina.total, pagina.pagina * pagina.tamano);
+    return `${formatearNumero(desde)}–${formatearNumero(hasta)} de ${formatearNumero(pagina.total)}`;
+  });
+
+  /** Texto del cambio de rutas: "+3 rutas", "-2 rutas" o "Sin cambios". */
+  etiquetaVariacion(variacion: number): string {
+    if (variacion === 0) {
+      return 'Sin cambios';
+    }
+    return variacion > 0
+      ? `+${formatearNumero(variacion)} rutas`
+      : `${formatearNumero(variacion)} rutas`;
+  }
+
   constructor() {
+    this.busquedaRuta$.pipe(debounceTime(300), takeUntilDestroyed()).subscribe((texto) => {
+      if (texto.trim() === this.filtroRutaTexto().trim()) {
+        return;
+      }
+      this.filtroRutaTexto.set(texto);
+      this.cargarRutasDesde(1);
+    });
     this.cargarOpciones();
   }
 

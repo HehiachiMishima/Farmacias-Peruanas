@@ -1,3 +1,5 @@
+import { Pagina } from '../../../../core/models';
+
 export interface ArchivoSimulacion {
   id: number;
   nombreRegistro: string;
@@ -37,6 +39,8 @@ export interface RutaSimulacion {
   clusterId: number;
   cluster: string;
   codigoRuta: string;
+  /** Tipo de operación de la ruta: B2C o B2B. */
+  tipo: 'B2C' | 'B2B' | string;
   totalBultos: number;
   totalUnidades: number;
   totalLineas: number;
@@ -58,6 +62,8 @@ export interface CargaSimulacion {
 export interface ConfiguracionSimulacion {
   archivo: ArchivoSimulacion;
   velocidadBase: number;
+  /** Tope global de operarios disponibles para todo el registro. */
+  operariosMaximos: number;
   clusters: ClusterParametroSimulacion[];
   chutes: ChuteParametroSimulacion[];
   carga: CargaSimulacion[];
@@ -89,13 +95,14 @@ export interface ChuteOperariosRequest {
 
 export interface ConfiguracionSimulacionRequest {
   velocidadBase: number;
+  operariosMaximos: number;
   clusters: ClusterLimiteRequest[];
   chutes: ChuteOperariosRequest[];
 }
 
 export interface HistorialSimulacion {
   id: number;
-  tipoAccion: 'MOVER_RUTA' | 'AÑADIR_OPERARIO' | string;
+  tipoAccion: 'MOVER_RUTA' | 'AÑADIR_OPERARIO' | 'MOVER_OPERARIO' | string;
   rutaId: number | null;
   ruta: string | null;
   chuteOrigen: string | null;
@@ -108,6 +115,8 @@ export interface HistorialSimulacion {
 export interface BalanceoSimulacion {
   rutasMovidas: number;
   operariosAgregados: number;
+  /** Operarios que pasaron de un chute con holgura a un cuello de botella. */
+  operariosMovidos: number;
   mensaje: string;
 }
 
@@ -118,6 +127,7 @@ export interface SimulacionKpis {
   tiempoAhorrado: number;
   rutasMovidas: number;
   operariosAgregados: number;
+  operariosMovidos: number;
   bultos: number;
   unidades: number;
   lineas: number;
@@ -125,6 +135,7 @@ export interface SimulacionKpis {
 }
 
 export interface ClusterComparativoSimulacion {
+  id: number;
   cluster: string;
   tiempoOriginal: number;
   tiempoBalanceado: number;
@@ -139,9 +150,13 @@ export interface ClusterComparativoSimulacion {
 }
 
 export interface ChuteComparativoSimulacion {
+  id: number;
   chute: string;
   operariosOriginal: number;
   operariosBalanceado: number;
+  /** Cantidad de rutas asignadas al chute antes y después del balanceo. */
+  rutasOriginal: number;
+  rutasBalanceado: number;
   tiempoOriginal: number;
   tiempoBalanceado: number;
   estado: 'MEJORO' | 'AUMENTO' | 'IGUAL' | string;
@@ -161,4 +176,30 @@ export interface DashboardSimulacion {
   kpis: SimulacionKpis;
   clusters: ClusterComparativoSimulacion[];
   chutes: ChuteComparativoSimulacion[];
+}
+
+/** Totales de las rutas que cumplen los filtros del modal «Rutas por chute». */
+export interface ResumenRutasSimulacion {
+  rutas: number;
+  rutasB2c: number;
+  rutasB2b: number;
+  bultos: number;
+  unidades: number;
+  lineas: number;
+  cod: number;
+}
+
+export interface RutasDashboardFiltros {
+  pagina: number;
+  tamano: number;
+  texto: string;
+  tipo: '' | 'B2C' | 'B2B';
+  chuteId: number | null;
+  clusterId: number | null;
+}
+
+/** Detalle ejecutivo del modal: totales del conjunto filtrado y la página pedida. */
+export interface RutasDashboardSimulacion {
+  resumen: ResumenRutasSimulacion;
+  rutas: Pagina<RutaSimulacion>;
 }

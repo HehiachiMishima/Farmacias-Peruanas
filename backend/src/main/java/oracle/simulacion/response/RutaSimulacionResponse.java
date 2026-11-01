@@ -9,6 +9,7 @@ public record RutaSimulacionResponse(
     Long clusterId,
     String cluster,
     String codigoRuta,
+    String tipo,
     BigDecimal totalBultos,
     BigDecimal totalUnidades,
     BigDecimal totalLineas,

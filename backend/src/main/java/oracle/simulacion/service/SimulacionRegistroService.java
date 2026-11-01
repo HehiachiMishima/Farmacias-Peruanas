@@ -55,7 +55,7 @@ public class SimulacionRegistroService {
 
   private static final int MAX_TAMANO_PAGINA = 100;
   private static final BigDecimal VELOCIDAD_INICIAL = new BigDecimal("100.00");
-  private static final int OPERARIOS_INICIALES = 2;
+  private static final int OPERARIOS_INICIALES = 1;
   private static final String COLOR_INICIAL = "#1d63ed";
   /**
    * Cargas que se procesan a la vez por instancia. En Render free (0,1 vCPU, 512 MB) dos cargas
@@ -369,7 +369,7 @@ public class SimulacionRegistroService {
     Map<String, Long> chutes =
         lotes.asegurarChutes(rutas.stream().map(SimulacionExcel.FilaRuta::chute).toList());
 
-    lotes.insertarConfig(archivoId, VELOCIDAD_INICIAL, actor);
+    lotes.insertarConfig(archivoId, VELOCIDAD_INICIAL, chutes.size(), actor);
     lotes.insertarParametrosCluster(archivoId, clusters.values());
     lotes.insertarParametrosChute(archivoId, chutes.values(), OPERARIOS_INICIALES);
     lotes.insertarRutas(archivoId, rutas, clusters, chutes);

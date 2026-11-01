@@ -2,6 +2,8 @@ package oracle.simulacion.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -27,11 +29,19 @@ public class RutaProyeccion {
   @Column(name = "chute_id", nullable = false)
   private Long chuteId;
 
+  /** Chute al que pertenecía la ruta al cargar el Excel (no lo altera el balanceo). */
+  @Column(name = "chute_original_id", nullable = false)
+  private Long chuteOriginalId;
+
   @Column(name = "cluster_id", nullable = false)
   private Long clusterId;
 
   @Column(name = "codigo_ruta", length = 50, nullable = false)
   private String codigoRuta;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "tipo", length = 10, nullable = false)
+  private TipoRuta tipo;
 
   @Column(name = "total_bultos", precision = 12, scale = 2, nullable = false)
   private BigDecimal totalBultos;

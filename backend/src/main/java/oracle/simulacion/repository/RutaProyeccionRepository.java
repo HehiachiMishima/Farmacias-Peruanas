@@ -6,6 +6,7 @@ import java.util.Optional;
 import oracle.simulacion.model.RutaProyeccion;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,6 +17,16 @@ public interface RutaProyeccionRepository
   List<RutaProyeccion> findByArchivoIdOrderByIdAsc(Long archivoId);
 
   Optional<RutaProyeccion> findByIdAndArchivoId(Long id, Long archivoId);
+
+  /** Clusters con rutas en un chute: valida que un movimiento no mezcle CL1 y CL2. */
+  @Query("""
+      SELECT DISTINCT r.clusterId
+        FROM RutaProyeccion r
+       WHERE r.archivoId = :archivoId
+         AND r.chuteId = :chuteId
+      """)
+  List<Long> clustersEnChute(
+      @Param("archivoId") Long archivoId, @Param("chuteId") Long chuteId);
 
   @Query("""
       SELECT r.archivoId AS archivoId,
@@ -49,4 +60,61 @@ public interface RutaProyeccionRepository
        GROUP BY r.clusterId, r.chuteId
       """)
   List<CargaRutas> cargaPorArchivo(@Param("archivoId") Long archivoId);
+
+  /**
+   * Carga original por (cluster, chute original). El chute original se congela al cargar el Excel,
+   * así que el comparativo "antes" no depende de que el historial siga existiendo.
+   */
+  @Query("""
+      SELECT r.clusterId AS clusterId,
+             r.chuteOriginalId AS chuteId,
+             COUNT(r) AS rutas,
+             COALESCE(SUM(r.totalBultos), 0) AS bultos,
+             COALESCE(SUM(r.totalUnidades), 0) AS unidades,
+             COALESCE(SUM(r.totalLineas), 0) AS lineas,
+             COALESCE(SUM(r.conteoCod), 0) AS cod
+        FROM RutaProyeccion r
+       WHERE r.archivoId = :archivoId
+       GROUP BY r.clusterId, r.chuteOriginalId
+      """)
+  List<CargaRutas> cargaOriginalPorArchivo(@Param("archivoId") Long archivoId);
+
+  /** Devuelve todas las rutas del archivo a su chute original sin recorrerlas una a una. */
+  @Modifying
+  @Query("""
+      UPDATE RutaProyeccion r
+         SET r.chuteId = r.chuteOriginalId
+       WHERE r.archivoId = :archivoId
+         AND r.chuteId <> r.chuteOriginalId
+      """)
+  int restaurarChutes(@Param("archivoId") Long archivoId);
+
+  /**
+   * Totales de las rutas filtradas del dashboard en una sola consulta: el
+   * modal muestra los KPIs del conjunto completo, no solo de la página.
+   */
+  @Query(
+      value =
+          """
+          SELECT COUNT(*) AS rutas,
+                 COALESCE(SUM(CASE WHEN tipo = 'B2C' THEN 1 ELSE 0 END), 0) AS rutasB2c,
+                 COALESCE(SUM(CASE WHEN tipo = 'B2B' THEN 1 ELSE 0 END), 0) AS rutasB2b,
+                 COALESCE(SUM(total_bultos), 0) AS bultos,
+                 COALESCE(SUM(total_unidades), 0) AS unidades,
+                 COALESCE(SUM(total_lineas), 0) AS lineas,
+                 COALESCE(SUM(conteo_cod), 0) AS cod
+            FROM rutas_proyeccion
+           WHERE archivo_id = :archivoId
+             AND (:texto IS NULL OR codigo_ruta LIKE :texto)
+             AND (:tipo IS NULL OR tipo = :tipo)
+             AND (:chuteId IS NULL OR chute_id = :chuteId)
+             AND (:clusterId IS NULL OR cluster_id = :clusterId)
+          """,
+      nativeQuery = true)
+  ResumenRutasFiltro resumenFiltrado(
+      @Param("archivoId") Long archivoId,
+      @Param("texto") String texto,
+      @Param("tipo") String tipo,
+      @Param("chuteId") Long chuteId,
+      @Param("clusterId") Long clusterId);
 }

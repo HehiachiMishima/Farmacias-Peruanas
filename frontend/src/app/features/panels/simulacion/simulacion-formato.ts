@@ -2,7 +2,7 @@ import { ArchivoSimulacion } from './data/simulacion.model';
 
 /** Valores iniciales del backend al registrar un archivo. */
 export const VELOCIDAD_INICIAL = 100;
-export const OPERARIOS_INICIALES = 2;
+export const OPERARIOS_INICIALES = 1;
 
 export interface ColorRegistro {
   nombre: string;

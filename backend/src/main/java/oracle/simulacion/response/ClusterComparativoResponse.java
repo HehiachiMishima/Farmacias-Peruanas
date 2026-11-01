@@ -3,6 +3,7 @@ package oracle.simulacion.response;
 import java.math.BigDecimal;
 
 public record ClusterComparativoResponse(
+    Long id,
     String cluster,
     BigDecimal tiempoOriginal,
     BigDecimal tiempoBalanceado,

@@ -15,6 +15,7 @@ import oracle.simulacion.response.ConfiguracionSimulacionResponse;
 import oracle.simulacion.response.DashboardSimulacionResponse;
 import oracle.simulacion.response.HistorialSimulacionResponse;
 import oracle.simulacion.response.RutaSimulacionResponse;
+import oracle.simulacion.response.RutasDashboardResponse;
 import oracle.simulacion.service.SimulacionConfiguracionService;
 import oracle.simulacion.service.SimulacionExcel;
 import oracle.simulacion.service.SimulacionRegistroService;
@@ -176,5 +177,18 @@ public class SimulacionController {
   @PreAuthorize("hasAuthority('VER_DASHBOARD_SIMULACION')")
   public Mono<ApiResponse<DashboardSimulacionResponse>> dashboard(@PathVariable Long id) {
     return configuracionService.dashboard(id);
+  }
+
+  @GetMapping("/registros/{id}/dashboard/rutas")
+  @PreAuthorize("hasAuthority('VER_DASHBOARD_SIMULACION')")
+  public Mono<ApiResponse<RutasDashboardResponse>> rutasDashboard(
+      @PathVariable Long id,
+      @RequestParam(defaultValue = "1") int pagina,
+      @RequestParam(defaultValue = "25") int tamano,
+      @RequestParam(required = false) String texto,
+      @RequestParam(required = false) String tipo,
+      @RequestParam(required = false) Long chuteId,
+      @RequestParam(required = false) Long clusterId) {
+    return configuracionService.rutasDashboard(id, pagina, tamano, texto, tipo, chuteId, clusterId);
   }
 }

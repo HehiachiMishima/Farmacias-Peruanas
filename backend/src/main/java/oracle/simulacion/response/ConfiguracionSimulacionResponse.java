@@ -11,6 +11,7 @@ import java.util.List;
 public record ConfiguracionSimulacionResponse(
     ArchivoSimulacionResponse archivo,
     BigDecimal velocidadBase,
+    Integer operariosMaximos,
     List<ClusterParametroResponse> clusters,
     List<ChuteParametroResponse> chutes,
     List<CargaSimulacionResponse> carga) {}

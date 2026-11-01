@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
+import oracle.simulacion.model.TipoRuta;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import oracle.common.exception.ConflictoException;
@@ -21,15 +22,22 @@ class SimulacionExcelTest {
         ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
       Sheet hoja = libro.createSheet("Proyección");
       String[] cabecera = {
-        "COD.", "RUTA", "CLUSTER", "CHUTE", "BULTOS PROMEDIO", "UNIDADES PROMEDIO", "LÍNEAS PROMEDIO"
+        "COD.",
+        "RUTA",
+        "CLUSTER",
+        "CHUTE",
+        "BULTOS PROMEDIO",
+        "UNIDADES PROMEDIO",
+        "LÍNEAS PROMEDIO",
+        "TIPO"
       };
       Row filaCabecera = hoja.createRow(0);
       for (int i = 0; i < cabecera.length; i++) {
         filaCabecera.createCell(i).setCellValue(cabecera[i]);
       }
-      escribirFila(hoja, 1, "1", "3030", "CL1", "CHUTE 1", 10, 100, 20);
-      escribirFila(hoja, 2, "2", "3030", "CL1", "CHUTE 1", 5, 50, 10);
-      escribirFila(hoja, 3, "3", "3012", "CL2", "CHUTE 2", 8, 80, 16);
+      escribirFila(hoja, 1, "1", "3030", "CL1", "CHUTE 1", 10, 100, 20, "B2C");
+      escribirFila(hoja, 2, "2", "3030", "CL1", "CHUTE 1", 5, 50, 10, "B2C");
+      escribirFila(hoja, 3, "3", "3012", "CL2", "CHUTE 2", 8, 80, 16, "B2B");
       libro.write(salida);
       contenido = salida.toByteArray();
     }
@@ -55,14 +63,52 @@ class SimulacionExcelTest {
     assertEquals("150.00", ruta3030.unidades().toPlainString());
     assertEquals("30.00", ruta3030.lineas().toPlainString());
     assertEquals(2, ruta3030.conteoCod());
+    assertEquals(TipoRuta.B2C, ruta3030.tipo());
+
+    SimulacionExcel.FilaRuta ruta3012 =
+        analisis.rutas().stream()
+            .filter((ruta) -> ruta.codigoRuta().equals("3012"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals(TipoRuta.B2B, ruta3012.tipo());
+  }
+
+  @Test
+  void permiteLaMismaRutaConTiposDistintos() {
+    String csv =
+        "RUTA,CLUSTER,CHUTE,TIPO,BULTOS\n"
+            + "3030,CL1,CHUTE 1,B2C,12\n"
+            + "3030,CL1,CHUTE 1,B2B,8\n";
+
+    SimulacionExcel.Analisis analisis = SimulacionExcel.analizar(csv(csv));
+
+    assertEquals(2, analisis.rutas().size());
+    assertEquals("20.00", analisis.totalBultos().toPlainString());
+    assertTrue(
+        analisis.rutas().stream().anyMatch((ruta) -> ruta.tipo() == TipoRuta.B2C),
+        "Debe conservar la ruta B2C");
+    assertTrue(
+        analisis.rutas().stream().anyMatch((ruta) -> ruta.tipo() == TipoRuta.B2B),
+        "Debe conservar la ruta B2B");
+  }
+
+  @Test
+  void rechazaUnTipoDistintoDeB2CYB2B() {
+    String csv = "RUTA,CLUSTER,CHUTE,TIPO,BULTOS\n3030,CL1,CHUTE 1,B2X,5\n";
+
+    ConflictoException error =
+        assertThrows(ConflictoException.class, () -> SimulacionExcel.analizar(csv(csv)));
+
+    assertTrue(error.getMessage().contains("TIPO"), error.getMessage());
+    assertTrue(error.getMessage().contains("B2C"), error.getMessage());
   }
 
   @Test
   void aceptaCsvConEncabezadosSinTildes() {
     String csv =
-        "COD,RUTA,CLUSTER,CHUTE,BULTOS,UNIDADES,LINEAS\n"
-            + "1,3030,CL1,CHUTE 1,12,120,24\n"
-            + "2,3031,CL1,CHUTE 1,8,80,16\n";
+        "COD,RUTA,CLUSTER,CHUTE,TIPO,BULTOS,UNIDADES,LINEAS\n"
+            + "1,3030,CL1,CHUTE 1,B2C,12,120,24\n"
+            + "2,3031,CL1,CHUTE 1,B2B,8,80,16\n";
     MockMultipartFile archivo =
         new MockMultipartFile("archivo", "proyeccion.csv", "text/csv", csv.getBytes());
 
@@ -75,8 +121,8 @@ class SimulacionExcelTest {
   @Test
   void aceptaCsvExportadoPorExcelConBom() {
     String csv =
-        "\uFEFFRUTA,CLUSTER,CHUTE,BULTOS\n"
-            + "3030,CL1,CHUTE 1,12\n";
+        "\uFEFFRUTA,CLUSTER,CHUTE,TIPO,BULTOS\n"
+            + "3030,CL1,CHUTE 1,B2C,12\n";
     MockMultipartFile archivo =
         new MockMultipartFile("archivo", "proyeccion.csv", "text/csv", csv.getBytes());
 
@@ -93,7 +139,7 @@ class SimulacionExcelTest {
         ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
       Sheet hoja = libro.createSheet("Proyección");
       Row cabecera = hoja.createRow(0);
-      String[] columnas = {"COD.", "RUTA", "CLUSTER", "CHUTE", "BULTOS PROMEDIO"};
+      String[] columnas = {"COD.", "RUTA", "CLUSTER", "CHUTE", "TIPO", "BULTOS PROMEDIO"};
       for (int i = 0; i < columnas.length; i++) {
         cabecera.createCell(i).setCellValue(columnas[i]);
       }
@@ -102,9 +148,10 @@ class SimulacionExcelTest {
       fila.createCell(1).setCellValue("3030");
       fila.createCell(2).setCellValue("CL1");
       fila.createCell(3).setCellValue("CHUTE 1");
+      fila.createCell(4).setCellValue("B2C");
       var estilo = libro.createCellStyle();
       estilo.setDataFormat(libro.createDataFormat().getFormat("#,##0"));
-      var bultos = fila.createCell(4);
+      var bultos = fila.createCell(5);
       bultos.setCellValue(1500);
       bultos.setCellStyle(estilo);
       libro.write(salida);
@@ -126,7 +173,10 @@ class SimulacionExcelTest {
 
   @Test
   void interpretaMilesConComaEnCsvConPuntoYComa() {
-    String csv = "RUTA;CLUSTER;CHUTE;BULTOS\n3030;CL1;CHUTE 1;1,500\n3031;CL1;CHUTE 1;\"12,5\"\n";
+    String csv =
+        "RUTA;CLUSTER;CHUTE;TIPO;BULTOS\n"
+            + "3030;CL1;CHUTE 1;B2C;1,500\n"
+            + "3031;CL1;CHUTE 1;B2B;\"12,5\"\n";
 
     SimulacionExcel.Analisis analisis = SimulacionExcel.analizar(csv(csv));
 
@@ -136,7 +186,7 @@ class SimulacionExcelTest {
 
   @Test
   void rechazaValoresNoNumericosIndicandoLaFila() {
-    String csv = "RUTA,CLUSTER,CHUTE,BULTOS\n3030,CL1,CHUTE 1,doce\n";
+    String csv = "RUTA,CLUSTER,CHUTE,TIPO,BULTOS\n3030,CL1,CHUTE 1,B2C,doce\n";
 
     ConflictoException error =
         assertThrows(ConflictoException.class, () -> SimulacionExcel.analizar(csv(csv)));
@@ -146,7 +196,10 @@ class SimulacionExcelTest {
 
   @Test
   void rechazaUnaRutaConDosClusters() {
-    String csv = "RUTA,CLUSTER,CHUTE,BULTOS\n3030,CL1,CHUTE 1,5\n3030,CL2,CHUTE 1,5\n";
+    String csv =
+        "RUTA,CLUSTER,CHUTE,TIPO,BULTOS\n"
+            + "3030,CL1,CHUTE 1,B2C,5\n"
+            + "3030,CL2,CHUTE 1,B2C,5\n";
 
     assertThrows(ConflictoException.class, () -> SimulacionExcel.analizar(csv(csv)));
   }
@@ -154,10 +207,10 @@ class SimulacionExcelTest {
   @Test
   void cuentaCodsDistintosYAceptaComillasConSaltoDeLinea() {
     String csv =
-        "COD,RUTA,CLUSTER,CHUTE,BULTOS\n"
-            + "A1,3030,\"CL\n1\",CHUTE 1,5\n"
-            + "A1,3030,\"CL\n1\",CHUTE 1,5\n"
-            + "A2,3030,\"CL\n1\",CHUTE 1,5\n";
+        "COD,RUTA,CLUSTER,CHUTE,TIPO,BULTOS\n"
+            + "A1,3030,\"CL\n1\",CHUTE 1,B2C,5\n"
+            + "A1,3030,\"CL\n1\",CHUTE 1,B2C,5\n"
+            + "A2,3030,\"CL\n1\",CHUTE 1,B2C,5\n";
 
     SimulacionExcel.Analisis analisis = SimulacionExcel.analizar(csv(csv));
 
@@ -173,7 +226,7 @@ class SimulacionExcelTest {
         ByteArrayOutputStream salida = new ByteArrayOutputStream()) {
       Sheet hoja = libro.createSheet("Proyección");
       Row cabecera = hoja.createRow(0);
-      String[] columnas = {"RUTA", "CLUSTER", "CHUTE", "BULTOS"};
+      String[] columnas = {"RUTA", "CLUSTER", "CHUTE", "TIPO", "BULTOS"};
       for (int i = 0; i < columnas.length; i++) {
         cabecera.createCell(i).setCellValue(columnas[i]);
       }
@@ -181,7 +234,8 @@ class SimulacionExcelTest {
       fila.createCell(0).setCellValue("3030");
       fila.createCell(1).setCellValue("CL1");
       fila.createCell(2).setCellValue("CHUTE 1");
-      fila.createCell(3).setCellValue(7);
+      fila.createCell(3).setCellValue("B2C");
+      fila.createCell(4).setCellValue(7);
       fila.createCell(16_383).setCellValue("XFD");
       libro.write(salida);
       contenido = salida.toByteArray();
@@ -221,7 +275,8 @@ class SimulacionExcelTest {
       String chute,
       double bultos,
       double unidades,
-      double lineas) {
+      double lineas,
+      String tipo) {
     Row fila = hoja.createRow(indice);
     fila.createCell(0).setCellValue(cod);
     fila.createCell(1).setCellValue(ruta);
@@ -230,5 +285,6 @@ class SimulacionExcelTest {
     fila.createCell(4).setCellValue(bultos);
     fila.createCell(5).setCellValue(unidades);
     fila.createCell(6).setCellValue(lineas);
+    fila.createCell(7).setCellValue(tipo);
   }
 }

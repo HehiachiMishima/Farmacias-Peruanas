@@ -5,6 +5,8 @@ public final class Limites {
 
   /** Operarios por chute: el balanceo tampoco supera este tope. */
   public static final int MAX_OPERARIOS = 50;
+  /** Operarios totales que se pueden declarar disponibles en un registro. */
+  public static final int MAX_OPERARIOS_TOTAL = 10_000;
   /** Límite de horas por cluster: un mes de operación continua. */
   public static final String MAX_HORAS = "744.00";
   /** Bultos por hora por operario. */

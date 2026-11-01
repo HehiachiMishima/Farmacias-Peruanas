@@ -2,12 +2,16 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   HostListener,
   computed,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Observable, Subject, debounceTime, finalize, of, switchMap } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
@@ -36,6 +40,7 @@ import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-
 import { SelectMultiple } from '../../../../../shared/ui/select-multiple/select-multiple';
 import {
   OPERARIOS_INICIALES,
+  PALETA_REGISTROS,
   VELOCIDAD_INICIAL,
   colorCluster,
   compararNombre,
@@ -45,10 +50,14 @@ import {
   horas,
 } from '../../simulacion-formato';
 
+const MAX_BYTES = 20 * 1024 * 1024;
+const FORMATOS = /\.(xlsx|xls|csv)$/i;
+
 @Component({
   selector: 'app-simulacion-configuracion',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    ReactiveFormsModule,
     HasPermiso,
     ColumnasRedimensionables,
     EmptyState,
@@ -70,8 +79,11 @@ export class SimulacionConfiguracion {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly sesion = inject(SesionStore);
+  private readonly fb = inject(FormBuilder);
+  private readonly inputArchivo = viewChild<ElementRef<HTMLInputElement>>('inputArchivo');
 
   readonly permisos = PERMISOS;
+  readonly paleta = PALETA_REGISTROS;
   readonly puedeModificar = computed(() =>
     this.sesion.permisos().includes(PERMISOS.MODIFICAR_CONFIGURACION_SIMULACION),
   );
@@ -90,9 +102,18 @@ export class SimulacionConfiguracion {
   private solicitud = 0;
 
   readonly velocidad = signal(VELOCIDAD_INICIAL);
+  readonly operariosMaximos = signal(OPERARIOS_INICIALES);
   readonly limites = signal<Record<number, number>>({});
   readonly operarios = signal<Record<number, number>>({});
   readonly dirty = signal(false);
+
+  /** Operarios que suman los chutes con los valores en edición. */
+  readonly operariosAsignados = computed(() =>
+    Object.values(this.operarios()).reduce((total, valor) => total + valor, 0),
+  );
+
+  /** El tope debe cubrir lo ya asignado; si no, no se puede guardar. */
+  readonly excedeMaximo = computed(() => this.operariosAsignados() > this.operariosMaximos());
 
   readonly filtroChute = signal<number[]>([]);
   readonly filtroCluster = signal<number[]>([]);
@@ -117,6 +138,17 @@ export class SimulacionConfiguracion {
   readonly historialCargando = signal(false);
 
   readonly restablecerAbierto = signal(false);
+
+  // ---------------- Carga de Excel desde configuración ----------------
+  readonly subirAbierto = signal(false);
+  readonly archivoSeleccionado = signal<File | null>(null);
+  readonly subiendo = signal(false);
+  readonly explicacionAbierta = signal(false);
+  readonly formulario = this.fb.nonNullable.group({
+    nombreRegistro: ['', [Validators.required, Validators.maxLength(150)]],
+    etiqueta: ['', [Validators.maxLength(50)]],
+    colorHex: [PALETA_REGISTROS[0].hex],
+  });
 
   readonly moverAbierto = signal(false);
   readonly rutaAMover = signal<RutaSimulacion | null>(null);
@@ -304,7 +336,7 @@ export class SimulacionConfiguracion {
     );
   }
 
-  cargarOpciones(): void {
+  cargarOpciones(preferirId?: number): void {
     this.cargandoOpciones.set(true);
     this.errorOpciones.set(null);
     this.api
@@ -329,6 +361,7 @@ export class SimulacionConfiguracion {
           const solicitado = Number(this.route.snapshot.queryParamMap.get('registro'));
           const actual = this.seleccionado();
           const elegido =
+            lista.find((registro) => registro.id === preferirId)?.id ??
             lista.find((registro) => registro.id === actual)?.id ??
             lista.find((registro) => registro.id === solicitado)?.id ??
             lista[0].id;
@@ -429,6 +462,7 @@ export class SimulacionConfiguracion {
   private aplicarConfiguracion(config: ConfiguracionSimulacion): void {
     this.config.set(config);
     this.velocidad.set(Number(config.velocidadBase));
+    this.operariosMaximos.set(Math.max(1, Number(config.operariosMaximos) || config.chutes.length));
     this.limites.set(
       Object.fromEntries(
         config.clusters.map((cluster) => [cluster.id, Number(cluster.limiteHoras)]),
@@ -456,6 +490,11 @@ export class SimulacionConfiguracion {
 
   getOperarios(chuteId: number): number {
     return this.operarios()[chuteId] ?? OPERARIOS_INICIALES;
+  }
+
+  campoInvalido(campo: 'nombreRegistro'): boolean {
+    const control = this.formulario.controls[campo];
+    return control.touched && control.invalid;
   }
 
   colorDeCluster(clusterId: number): string {
@@ -502,6 +541,15 @@ export class SimulacionConfiguracion {
     this.actualizarDirty();
   }
 
+  setOperariosMaximos(evento: Event): void {
+    const input = evento.target as HTMLInputElement;
+    const valor = Number.parseInt(input.value, 10);
+    const maximo = Number.isInteger(valor) && valor >= 1 ? valor : 1;
+    input.value = String(maximo);
+    this.operariosMaximos.set(maximo);
+    this.actualizarDirty();
+  }
+
   /**
    * Los cambios se marcan comparando con lo último cargado del servidor: editar
    * un valor y dejarlo igual no debe bloquear el cambio de registro ni la salida.
@@ -516,6 +564,7 @@ export class SimulacionConfiguracion {
     const operarios = this.operarios();
     const iguales =
       Number(config.velocidadBase) === this.velocidad() &&
+      Number(config.operariosMaximos) === this.operariosMaximos() &&
       config.clusters.every(
         (cluster) => Number(cluster.limiteHoras) === (limites[cluster.id] ?? 0),
       ) &&
@@ -587,6 +636,7 @@ export class SimulacionConfiguracion {
     }
     return {
       velocidadBase: this.velocidad(),
+      operariosMaximos: this.operariosMaximos(),
       clusters: config.clusters.map((cluster) => ({
         clusterId: cluster.id,
         limiteHoras: this.limites()[cluster.id] ?? 0,
@@ -598,10 +648,25 @@ export class SimulacionConfiguracion {
     };
   }
 
+  /** El tope global no puede quedar por debajo de los operarios ya asignados. */
+  private validarTope(): boolean {
+    if (!this.excedeMaximo()) {
+      return true;
+    }
+    this.notificaciones.advertencia(
+      'Operarios insuficientes',
+      `Hay ${this.operariosAsignados()} operarios asignados y el máximo es ${this.operariosMaximos()}. Sube el máximo o reduce operarios en los chutes.`,
+    );
+    return false;
+  }
+
   guardar(): void {
     const id = this.seleccionado();
     const peticion = this.peticion();
     if (!id || !peticion || this.ocupado()) {
+      return;
+    }
+    if (!this.validarTope()) {
       return;
     }
     this.guardando.set(true);
@@ -633,6 +698,9 @@ export class SimulacionConfiguracion {
         'Define los límites',
         'Ingresa al menos un límite de horas por cluster antes de balancear.',
       );
+      return;
+    }
+    if (!this.validarTope()) {
       return;
     }
     this.balanceando.set(true);
@@ -746,6 +814,117 @@ export class SimulacionConfiguracion {
     void this.router.navigate(['/simulacion/dashboard'], {
       queryParams: id ? { registro: id } : {},
     });
+  }
+
+  // ------------------------------------------------------------------
+  // Carga de Excel desde la configuración
+  // ------------------------------------------------------------------
+
+  abrirSelectorArchivo(): void {
+    if (this.ocupado()) {
+      return;
+    }
+    if (this.dirty()) {
+      this.notificaciones.advertencia(
+        'Cambios sin guardar',
+        'Guarda los parámetros antes de cargar otro Excel.',
+      );
+      return;
+    }
+    this.inputArchivo()?.nativeElement.click();
+  }
+
+  seleccionarArchivo(evento: Event): void {
+    const input = evento.target as HTMLInputElement;
+    const archivo = input.files?.[0];
+    input.value = '';
+    if (!archivo) {
+      return;
+    }
+    if (!FORMATOS.test(archivo.name)) {
+      this.notificaciones.advertencia('Formato no válido', 'Usa un archivo .xlsx, .xls o .csv.');
+      return;
+    }
+    if (archivo.size > MAX_BYTES) {
+      this.notificaciones.advertencia('Archivo muy grande', 'El máximo permitido es 20 MB.');
+      return;
+    }
+    this.archivoSeleccionado.set(archivo);
+    this.formulario.reset({
+      nombreRegistro: archivo.name.replace(FORMATOS, '').slice(0, 150),
+      etiqueta: '',
+      colorHex: PALETA_REGISTROS[0].hex,
+    });
+    this.subirAbierto.set(true);
+  }
+
+  tamanoArchivo(archivo: File): string {
+    return archivo.size < 1024 * 1024
+      ? `${Math.max(1, Math.round(archivo.size / 1024))} KB`
+      : `${(archivo.size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  cerrarCarga(): void {
+    this.subirAbierto.set(false);
+    this.archivoSeleccionado.set(null);
+  }
+
+  fijarColor(color: string): void {
+    this.formulario.controls.colorHex.setValue(color);
+  }
+
+  confirmarCarga(): void {
+    if (this.subiendo()) {
+      return;
+    }
+    const archivo = this.archivoSeleccionado();
+    if (!archivo) {
+      return;
+    }
+    if (this.formulario.invalid) {
+      this.formulario.markAllAsTouched();
+      return;
+    }
+    const valores = this.formulario.getRawValue();
+    const formulario = new FormData();
+    formulario.append('archivo', archivo, archivo.name);
+    formulario.append('nombreRegistro', valores.nombreRegistro.trim());
+    formulario.append('etiqueta', valores.etiqueta.trim());
+    formulario.append('colorHex', valores.colorHex);
+
+    this.subiendo.set(true);
+    this.api
+      .subir(formulario)
+      .pipe(
+        finalize(() => this.subiendo.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: (registro) => {
+          this.notificaciones.exito(
+            'Registro creado',
+            `${registro.rutas} rutas y ${registro.chutes} chutes cargados.`,
+          );
+          this.cerrarCarga();
+          this.cargarOpciones(registro.id);
+        },
+        error: (err: unknown) => {
+          // 503/504: la respuesta expiró pero el servidor pudo terminar de
+          // guardar. Se refresca la lista para no duplicar el registro.
+          if (err instanceof HttpErrorResponse && (err.status === 503 || err.status === 504)) {
+            this.notificaciones.info(
+              'Revisa la lista antes de reintentar',
+              'La carga tardó más de lo esperado y pudo haberse completado.',
+            );
+            this.cerrarCarga();
+            this.cargarOpciones();
+          }
+        },
+      });
+  }
+
+  abrirExplicacion(): void {
+    this.explicacionAbierta.set(true);
   }
 
   irARegistro(): void {

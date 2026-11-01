@@ -9,6 +9,8 @@ import {
   HistorialSimulacion,
   RegistroSimulacionActualizarRequest,
   RutaSimulacion,
+  RutasDashboardFiltros,
+  RutasDashboardSimulacion,
   RutasSimulacionFiltros,
 } from './simulacion.model';
 import { Pagina } from '../../../../core/models';
@@ -97,5 +99,17 @@ export class SimulacionApi {
 
   dashboard(id: number): Observable<DashboardSimulacion> {
     return this.api.get<DashboardSimulacion>(`/simulacion/registros/${id}/dashboard`);
+  }
+
+  /** Detalle paginado de rutas del dashboard con totales del conjunto filtrado. */
+  rutasDashboard(id: number, filtros: RutasDashboardFiltros): Observable<RutasDashboardSimulacion> {
+    return this.api.get<RutasDashboardSimulacion>(`/simulacion/registros/${id}/dashboard/rutas`, {
+      pagina: filtros.pagina,
+      tamano: filtros.tamano,
+      texto: filtros.texto,
+      tipo: filtros.tipo,
+      chuteId: filtros.chuteId,
+      clusterId: filtros.clusterId,
+    });
   }
 }

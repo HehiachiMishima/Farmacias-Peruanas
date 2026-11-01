@@ -22,4 +22,12 @@ public class SimulacionConfig extends Auditable {
 
   @Column(name = "velocidad_base", precision = 10, scale = 2, nullable = false)
   private BigDecimal velocidadBase;
+
+  /**
+   * Tope global de operarios disponibles para el registro. El balanceo no
+   * asigna más que este total; si falta, se mantiene el tope histórico por
+   * chute (50) sin límite global.
+   */
+  @Column(name = "operarios_maximos")
+  private Integer operariosMaximos;
 }

@@ -42,14 +42,17 @@ public class SimulacionLotesRepository {
     return asegurarCatalogo("chutes", nombres);
   }
 
-  public void insertarConfig(Long archivoId, BigDecimal velocidad, Long actor) {
+  public void insertarConfig(
+      Long archivoId, BigDecimal velocidad, int operariosMaximos, Long actor) {
     jdbc.update(
         """
-        INSERT INTO simulacion_config (archivo_id, velocidad_base, creado_por, actualizado_por)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO simulacion_config
+            (archivo_id, velocidad_base, operarios_maximos, creado_por, actualizado_por)
+        VALUES (?, ?, ?, ?, ?)
         """,
         archivoId,
         velocidad,
+        operariosMaximos,
         actor,
         actor);
   }
@@ -89,21 +92,25 @@ public class SimulacionLotesRepository {
     jdbc.batchUpdate(
         """
         INSERT INTO rutas_proyeccion
-            (archivo_id, chute_id, cluster_id, codigo_ruta, total_bultos, total_unidades,
-             total_lineas, conteo_cod)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (archivo_id, chute_id, chute_original_id, cluster_id, codigo_ruta, tipo,
+             total_bultos, total_unidades, total_lineas, conteo_cod)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         rutas,
         LOTE,
         (ps, ruta) -> {
+          long chuteId = idChute.computeIfAbsent(ruta.chute(), (n) -> id(chutes, "chute", n));
           ps.setLong(1, archivoId);
-          ps.setLong(2, idChute.computeIfAbsent(ruta.chute(), (n) -> id(chutes, "chute", n)));
-          ps.setLong(3, idCluster.computeIfAbsent(ruta.cluster(), (n) -> id(clusters, "cluster", n)));
-          ps.setString(4, SimulacionExcel.nombre(ruta.codigoRuta()));
-          ps.setBigDecimal(5, ruta.bultos());
-          ps.setBigDecimal(6, ruta.unidades());
-          ps.setBigDecimal(7, ruta.lineas());
-          ps.setInt(8, ruta.conteoCod());
+          ps.setLong(2, chuteId);
+          // El chute original se congela al cargar: el balanceo solo cambia chute_id.
+          ps.setLong(3, chuteId);
+          ps.setLong(4, idCluster.computeIfAbsent(ruta.cluster(), (n) -> id(clusters, "cluster", n)));
+          ps.setString(5, SimulacionExcel.nombre(ruta.codigoRuta()));
+          ps.setString(6, ruta.tipo().name());
+          ps.setBigDecimal(7, ruta.bultos());
+          ps.setBigDecimal(8, ruta.unidades());
+          ps.setBigDecimal(9, ruta.lineas());
+          ps.setInt(10, ruta.conteoCod());
         });
   }
 

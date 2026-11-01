@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import oracle.simulacion.model.TipoRuta;
 import oracle.simulacion.service.SimulacionExcel.FilaRuta;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -78,7 +79,15 @@ class SimulacionLotesRepositoryTest {
     when(jdbc.batchUpdate(startsWith("INSERT INTO rutas_proyeccion"), filas.capture(), eq(2_000), setter.capture()))
         .thenReturn(new int[0][]);
     FilaRuta ruta =
-        new FilaRuta("R  30", "Cl 1", "Chuté 1", new BigDecimal("1.00"), BigDecimal.ZERO, BigDecimal.ZERO, 3);
+        new FilaRuta(
+            "R  30",
+            "Cl 1",
+            "Chuté 1",
+            TipoRuta.B2C,
+            new BigDecimal("1.00"),
+            BigDecimal.ZERO,
+            BigDecimal.ZERO,
+            3);
 
     new SimulacionLotesRepository(jdbc)
         .insertarRutas(9L, List.of(ruta), Map.of("CL 1", 11L), Map.of("CHUTE 1", 22L));
@@ -87,12 +96,23 @@ class SimulacionLotesRepositoryTest {
     setter.getValue().setValues(ps, ruta);
     verify(ps).setLong(1, 9L);
     verify(ps).setLong(2, 22L);
-    verify(ps).setLong(3, 11L);
-    verify(ps).setString(4, "R 30");
-    verify(ps).setInt(8, 3);
+    verify(ps).setLong(3, 22L);
+    verify(ps).setLong(4, 11L);
+    verify(ps).setString(5, "R 30");
+    verify(ps).setString(6, "B2C");
+    verify(ps).setBigDecimal(7, new BigDecimal("1.00"));
+    verify(ps).setInt(10, 3);
 
     FilaRuta huerfana =
-        new FilaRuta("R1", "CL9", "Chuté 1", BigDecimal.ONE, BigDecimal.ZERO, BigDecimal.ZERO, 1);
+        new FilaRuta(
+            "R1",
+            "CL9",
+            "Chuté 1",
+            TipoRuta.B2B,
+            BigDecimal.ONE,
+            BigDecimal.ZERO,
+            BigDecimal.ZERO,
+            1);
     assertThrows(IllegalStateException.class, () -> setter.getValue().setValues(ps, huerfana));
   }
 

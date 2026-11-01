@@ -12,6 +12,7 @@ public record SimulacionKpisResponse(
     BigDecimal tiempoAhorrado,
     int rutasMovidas,
     int operariosAgregados,
+    int operariosMovidos,
     BigDecimal bultos,
     BigDecimal unidades,
     BigDecimal lineas,

@@ -19,6 +19,7 @@ public class HistorialBalanceo {
 
   public static final String ACCION_MOVER_RUTA = "MOVER_RUTA";
   public static final String ACCION_ANADIR_OPERARIO = "AÑADIR_OPERARIO";
+  public static final String ACCION_MOVER_OPERARIO = "MOVER_OPERARIO";
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -50,5 +51,9 @@ public class HistorialBalanceo {
 
   public boolean esMovimiento() {
     return ACCION_MOVER_RUTA.equals(tipoAccion);
+  }
+
+  public boolean esMovimientoOperario() {
+    return ACCION_MOVER_OPERARIO.equals(tipoAccion);
   }
 }
