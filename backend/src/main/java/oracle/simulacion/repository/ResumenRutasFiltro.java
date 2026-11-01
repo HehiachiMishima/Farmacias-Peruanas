@@ -11,6 +11,9 @@ public interface ResumenRutasFiltro {
 
   Long getRutasB2b();
 
+  /** Rutas que cambiaron de chute (salieron en ANTES, llegaron en DESPUES). */
+  Long getCambios();
+
   BigDecimal getBultos();
 
   BigDecimal getUnidades();

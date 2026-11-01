@@ -31,8 +31,8 @@
 />
 
 <section class="config-panel">
-  <div class="config-panel__fila">
-    <div class="config-panel__registro">
+  <div class="config-panel__campos">
+    <div class="config-panel__campo">
       <label class="ui-label" for="config-registro">Registro guardado</label>
       <ui-select-buscable
         campoId="config-registro"
@@ -42,19 +42,12 @@
         placeholder="Elegir registro…"
         (valorCambia)="seleccionarDesdeSelector($event)"
       />
-      <button
-        *hasPermiso="permisos.CREAR_REGISTRO_SIMULACION"
-        type="button"
-        class="ui-btn ui-btn--secondary ui-btn--sm config-panel__subir"
-        [disabled]="cargandoOpciones() || ocupado()"
-        (click)="abrirSelectorArchivo()"
-      >
-        <ui-icon name="almacen" [size]="16" />
-        Cargar Excel
-      </button>
+      <span class="config-panel__ayuda">
+        {{ formatearNumero(opcionesRegistro().length) }} registro(s) disponibles
+      </span>
     </div>
-    <div class="config-panel__velocidad">
-      <label class="ui-label" for="config-velocidad">Velocidad base (bultos/h por operario)</label>
+    <div class="config-panel__campo">
+      <label class="ui-label" for="config-velocidad">Velocidad base</label>
       <input
         id="config-velocidad"
         type="number"
@@ -66,9 +59,10 @@
         [disabled]="!config() || !puedeModificar() || ocupado()"
         (change)="setVelocidad($event)"
       />
+      <span class="config-panel__ayuda">Bultos por hora de cada operario</span>
     </div>
-    <div class="config-panel__maximo">
-      <label class="ui-label" for="config-maximo">Máximo de operarios disponibles</label>
+    <div class="config-panel__campo">
+      <label class="ui-label" for="config-maximo">Máximo de operarios</label>
       <input
         id="config-maximo"
         type="number"
@@ -81,10 +75,53 @@
         (change)="setOperariosMaximos($event)"
       />
       <span class="config-panel__ayuda" [class.config-panel__ayuda--alerta]="excedeMaximo()">
-        {{ formatearNumero(operariosAsignados()) }} asignados
+        {{ formatearNumero(operariosAsignados()) }} asignados en los chutes
       </span>
     </div>
+  </div>
+
+  <div class="config-panel__pie">
+    @if (config(); as cfg) {
+      <div class="config-info">
+        <span class="config-info__icono"><ui-icon name="paquete" [size]="18" /></span>
+        <div class="config-info__datos">
+          <span class="config-info__nombre" [title]="cfg.archivo.nombreRegistro">{{
+            cfg.archivo.nombreRegistro
+          }}</span>
+          <span class="config-info__meta">
+            {{ formatearNumero(cfg.archivo.rutas) }} rutas ·
+            {{ formatearNumero(cfg.archivo.chutes) }} chutes ·
+            {{ formatearNumero(cfg.archivo.bultos, 2) }} bultos
+          </span>
+        </div>
+        <span
+          class="ui-badge"
+          [class.ui-badge--success]="cfg.archivo.estado === 'BALANCEADO'"
+          [class.ui-badge--neutral]="cfg.archivo.estado !== 'BALANCEADO'"
+        >
+          {{ cfg.archivo.estado === 'BALANCEADO' ? 'Balanceado' : 'Proyección' }}
+        </span>
+        @if (dirty()) {
+          <span class="ui-badge ui-badge--warning">Cambios sin guardar</span>
+        }
+      </div>
+    } @else {
+      <div class="config-info config-info--vacio">
+        <span class="config-info__icono"><ui-icon name="paquete" [size]="18" /></span>
+        <span class="config-info__meta">Elige un registro o carga un Excel nuevo.</span>
+      </div>
+    }
     <div class="config-panel__acciones">
+      <button
+        *hasPermiso="permisos.CREAR_REGISTRO_SIMULACION"
+        type="button"
+        class="ui-btn ui-btn--secondary"
+        [disabled]="cargandoOpciones() || ocupado()"
+        (click)="abrirSelectorArchivo()"
+      >
+        <ui-icon name="almacen" [size]="16" />
+        Cargar Excel
+      </button>
       <button
         type="button"
         class="ui-btn ui-btn--secondary"
@@ -122,30 +159,7 @@
     </div>
   </div>
 
-  @if (config(); as cfg) {
-    <div class="config-info">
-      <span class="config-info__icono"><ui-icon name="paquete" [size]="18" /></span>
-      <div class="config-info__datos">
-        <span class="config-info__nombre" [title]="cfg.archivo.nombreRegistro">{{
-          cfg.archivo.nombreRegistro
-        }}</span>
-        <span class="config-info__meta">
-          {{ formatearNumero(cfg.archivo.rutas) }} rutas ·
-          {{ formatearNumero(cfg.archivo.chutes) }} chutes ·
-          {{ formatearNumero(cfg.archivo.bultos, 2) }} bultos
-        </span>
-      </div>
-      <span
-        class="ui-badge"
-        [class.ui-badge--success]="cfg.archivo.estado === 'BALANCEADO'"
-        [class.ui-badge--neutral]="cfg.archivo.estado !== 'BALANCEADO'"
-      >
-        {{ cfg.archivo.estado === 'BALANCEADO' ? 'Balanceado' : 'Proyección' }}
-      </span>
-      @if (dirty()) {
-        <span class="ui-badge ui-badge--warning">Cambios sin guardar</span>
-      }
-    </div>
+  @if (config()) {
     @if (!tieneLimites()) {
       <p class="config-aviso">
         <ui-icon name="alerta" [size]="15" />
@@ -157,6 +171,19 @@
         <ui-icon name="alerta" [size]="15" />
         Los chutes suman {{ formatearNumero(operariosAsignados()) }} operarios y el máximo es
         {{ formatearNumero(operariosMaximos()) }}. Sube el máximo o reduce operarios para guardar.
+      </p>
+    } @else if (sinCupo()) {
+      <p class="config-aviso config-aviso--info">
+        <ui-icon name="info" [size]="15" />
+        El máximo es igual a los operarios asignados: el balanceo solo podrá mover rutas y reasignar
+        operarios, no añadir. Sube el máximo si quieres que pueda sumar operarios.
+      </p>
+    }
+    @for (mezcla of config()?.mezclas ?? []; track mezcla.id) {
+      <p class="config-aviso">
+        <ui-icon name="alerta" [size]="15" />
+        {{ mezcla.chute }} mezcla {{ mezcla.clusters.join(' y ') }}: no pueden compartir chute. El
+        balanceo los separará.
       </p>
     }
   }
@@ -754,6 +781,11 @@
       <h3 class="guia__titulo"><ui-icon name="flecha" [size]="16" /> 3. El ciclo de ajuste</h3>
       <ol class="guia__lista">
         <li>
+          Primero separa <strong>CL1 y CL2</strong>: si comparten un chute, saca las rutas del
+          cluster con menos rutas allí y las lleva al chute compatible más rápido. Esta regla se
+          cumple aunque no mejore ningún tiempo.
+        </li>
+        <li>
           Busca el cluster con mayor <strong>déficit</strong> (tiempo de cierre − límite). Si ningún
           cluster supera su límite, termina.
         </li>
@@ -762,11 +794,12 @@
         </li>
         <li>
           Toma la <strong>ruta más grande</strong> (más bultos) del cuello y evalúa moverla al chute
-          más rápido disponible, sin importar el cluster.
+          más rápido disponible, de cualquier cluster salvo que junte CL1 con CL2.
         </li>
         <li>
           La mueve solo si el destino, aun recibiendo esa ruta, sigue quedando por debajo del tiempo
-          actual del cuello. Así el problema no se traslada a otro chute.
+          actual del cuello y no deja a otro cluster de ese chute fuera de su límite. Así el
+          problema no se traslada a otro chute.
         </li>
         <li>
           Si no existe una ruta que mejore la situación, busca un
@@ -800,8 +833,12 @@
           operarios añadidos por el balanceo.
         </li>
         <li>
-          Los ajustes manuales (mover una ruta o cambiar operarios) también se reflejan en el
-          comparativo.
+          Mover una ruta a mano también se refleja en el comparativo, y no se permite llevarla a un
+          chute donde juntaría CL1 con CL2.
+        </li>
+        <li>
+          Los operarios que guardas a mano pasan a ser la nueva base: el comparativo de operarios
+          solo muestra lo que cambió el balanceo.
         </li>
       </ul>
     </section>

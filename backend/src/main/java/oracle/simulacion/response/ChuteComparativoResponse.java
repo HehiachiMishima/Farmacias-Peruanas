@@ -10,6 +10,9 @@ public record ChuteComparativoResponse(
     int operariosBalanceado,
     int rutasOriginal,
     int rutasBalanceado,
+    /** Rutas que el balanceo sacó del chute y las que trajo de otros. */
+    int rutasSalieron,
+    int rutasLlegaron,
     BigDecimal tiempoOriginal,
     BigDecimal tiempoBalanceado,
     String estado,

@@ -44,14 +44,15 @@ import {
   VELOCIDAD_INICIAL,
   colorCluster,
   compararNombre,
+  datosCarga,
   etiquetaRegistro,
   formatearHoras,
   formatearNumero,
   horas,
+  nombreRegistroSugerido,
+  problemaArchivoExcel,
+  tamanoArchivo,
 } from '../../simulacion-formato';
-
-const MAX_BYTES = 20 * 1024 * 1024;
-const FORMATOS = /\.(xlsx|xls|csv)$/i;
 
 @Component({
   selector: 'app-simulacion-configuracion',
@@ -84,6 +85,7 @@ export class SimulacionConfiguracion {
 
   readonly permisos = PERMISOS;
   readonly paleta = PALETA_REGISTROS;
+  readonly tamanoArchivo = tamanoArchivo;
   readonly puedeModificar = computed(() =>
     this.sesion.permisos().includes(PERMISOS.MODIFICAR_CONFIGURACION_SIMULACION),
   );
@@ -114,6 +116,9 @@ export class SimulacionConfiguracion {
 
   /** El tope debe cubrir lo ya asignado; si no, no se puede guardar. */
   readonly excedeMaximo = computed(() => this.operariosAsignados() > this.operariosMaximos());
+
+  /** Con el tope justo, el balanceo no puede añadir operarios (solo mover rutas o reasignar). */
+  readonly sinCupo = computed(() => this.operariosAsignados() === this.operariosMaximos());
 
   readonly filtroChute = signal<number[]>([]);
   readonly filtroCluster = signal<number[]>([]);
@@ -841,27 +846,18 @@ export class SimulacionConfiguracion {
     if (!archivo) {
       return;
     }
-    if (!FORMATOS.test(archivo.name)) {
-      this.notificaciones.advertencia('Formato no válido', 'Usa un archivo .xlsx, .xls o .csv.');
-      return;
-    }
-    if (archivo.size > MAX_BYTES) {
-      this.notificaciones.advertencia('Archivo muy grande', 'El máximo permitido es 20 MB.');
+    const problema = problemaArchivoExcel(archivo);
+    if (problema) {
+      this.notificaciones.advertencia(problema.titulo, problema.mensaje);
       return;
     }
     this.archivoSeleccionado.set(archivo);
     this.formulario.reset({
-      nombreRegistro: archivo.name.replace(FORMATOS, '').slice(0, 150),
+      nombreRegistro: nombreRegistroSugerido(archivo),
       etiqueta: '',
       colorHex: PALETA_REGISTROS[0].hex,
     });
     this.subirAbierto.set(true);
-  }
-
-  tamanoArchivo(archivo: File): string {
-    return archivo.size < 1024 * 1024
-      ? `${Math.max(1, Math.round(archivo.size / 1024))} KB`
-      : `${(archivo.size / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   cerrarCarga(): void {
@@ -885,16 +881,9 @@ export class SimulacionConfiguracion {
       this.formulario.markAllAsTouched();
       return;
     }
-    const valores = this.formulario.getRawValue();
-    const formulario = new FormData();
-    formulario.append('archivo', archivo, archivo.name);
-    formulario.append('nombreRegistro', valores.nombreRegistro.trim());
-    formulario.append('etiqueta', valores.etiqueta.trim());
-    formulario.append('colorHex', valores.colorHex);
-
     this.subiendo.set(true);
     this.api
-      .subir(formulario)
+      .subir(datosCarga(archivo, this.formulario.getRawValue()))
       .pipe(
         finalize(() => this.subiendo.set(false)),
         takeUntilDestroyed(this.destroyRef),

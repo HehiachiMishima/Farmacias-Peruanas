@@ -6,7 +6,9 @@ import java.util.List;
 import oracle.common.exception.ApiError;
 import oracle.common.response.ApiResponse;
 import oracle.common.response.PaginaResponse;
+import oracle.simulacion.model.TipoRuta;
 import oracle.simulacion.request.ConfiguracionActualizarRequest;
+import oracle.simulacion.request.LadoChute;
 import oracle.simulacion.request.MoverRutaRequest;
 import oracle.simulacion.request.RegistroActualizarRequest;
 import oracle.simulacion.response.ArchivoSimulacionResponse;
@@ -186,9 +188,12 @@ public class SimulacionController {
       @RequestParam(defaultValue = "1") int pagina,
       @RequestParam(defaultValue = "25") int tamano,
       @RequestParam(required = false) String texto,
-      @RequestParam(required = false) String tipo,
-      @RequestParam(required = false) Long chuteId,
-      @RequestParam(required = false) Long clusterId) {
-    return configuracionService.rutasDashboard(id, pagina, tamano, texto, tipo, chuteId, clusterId);
+      @RequestParam(required = false) TipoRuta tipo,
+      @RequestParam Long chuteId,
+      @RequestParam(defaultValue = "DESPUES") LadoChute lado,
+      @RequestParam(required = false) Long clusterId,
+      @RequestParam(defaultValue = "false") boolean soloCambios) {
+    return configuracionService.rutasDashboard(
+        id, pagina, tamano, texto, tipo, chuteId, lado, clusterId, soloCambios);
   }
 }

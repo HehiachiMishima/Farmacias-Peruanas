@@ -55,7 +55,7 @@
   <button
     type="button"
     class="ui-btn ui-btn--secondary"
-    (click)="abrirRutas()"
+    (click)="rutasAbierto.set(true)"
     [disabled]="!dashboard() || !estaBalanceado()"
   >
     <ui-icon name="layers" [size]="16" />
@@ -180,6 +180,16 @@
     <p class="filtro-nota dash-nota-global">
       <ui-icon name="info" [size]="14" />
       Los indicadores son del registro completo; los filtros se aplican a los gráficos y cuadros.
+    </p>
+  }
+  @for (mezcla of datos.mezclas; track mezcla.id) {
+    <p class="dash-mezcla" role="alert">
+      <ui-icon name="alerta" [size]="16" />
+      <span>
+        <strong>{{ mezcla.chute }}</strong> mezcla {{ mezcla.clusters.join(' y ') }}, que no pueden
+        compartir chute, y no hay otro chute libre para separarlos. Mueve sus rutas a mano o revisa
+        el Excel.
+      </span>
     </p>
   }
 
@@ -356,267 +366,10 @@
   </div>
 }
 
-<ui-modal
+<app-simulacion-rutas-chute
   [abierto]="rutasAbierto()"
-  ancho="xl"
-  titulo="Rutas por chute"
-  subtitulo="Resumen ejecutivo antes vs. después y detalle de las rutas del registro."
+  [registroId]="seleccionado()"
+  [chutes]="chutesVisibles()"
+  [clusters]="dashboard()?.clusters ?? []"
   (cerrar)="rutasAbierto.set(false)"
->
-  @if (resumenRutas(); as resumen) {
-    <div class="rutas-kpis">
-      <article class="rutas-kpi rutas-kpi--principal">
-        <span class="rutas-kpi__etiqueta">Rutas</span>
-        <span class="rutas-kpi__valor">{{ formatearNumero(resumen.rutas) }}</span>
-        <span class="rutas-kpi__detalle">
-          {{ formatearNumero(resumen.rutasB2c) }} B2C · {{ formatearNumero(resumen.rutasB2b) }} B2B
-        </span>
-      </article>
-      <article class="rutas-kpi">
-        <span class="rutas-kpi__etiqueta">Bultos</span>
-        <span class="rutas-kpi__valor">{{ formatearNumero(resumen.bultos, 2) }}</span>
-      </article>
-      <article class="rutas-kpi">
-        <span class="rutas-kpi__etiqueta">Unidades</span>
-        <span class="rutas-kpi__valor">{{ formatearNumero(resumen.unidades, 2) }}</span>
-      </article>
-      <article class="rutas-kpi">
-        <span class="rutas-kpi__etiqueta">Líneas</span>
-        <span class="rutas-kpi__valor">{{ formatearNumero(resumen.lineas, 2) }}</span>
-      </article>
-      <article class="rutas-kpi">
-        <span class="rutas-kpi__etiqueta">COD</span>
-        <span class="rutas-kpi__valor">{{ formatearNumero(resumen.cod) }}</span>
-      </article>
-    </div>
-  }
-
-  <section class="rutas-resumen">
-    <header class="rutas-resumen__head">
-      <div>
-        <h3 class="rutas-resumen__titulo">Rutas por chute · antes vs. después</h3>
-        <p class="rutas-resumen__nota">
-          Cuántas rutas tenía cada chute antes y cuántas quedaron después del balanceo (según los
-          filtros del panel).
-        </p>
-      </div>
-      <span
-        class="rutas-variacion rutas-variacion--lg"
-        [class.rutas-variacion--sube]="totalesRutas().despues > totalesRutas().antes"
-        [class.rutas-variacion--baja]="totalesRutas().despues < totalesRutas().antes"
-      >
-        {{ etiquetaVariacion(totalesRutas().despues - totalesRutas().antes) }}
-      </span>
-    </header>
-
-    @if (chutesVisibles().length === 0) {
-      <ui-empty
-        icono="layers"
-        titulo="Sin chutes"
-        mensaje="No hay chutes que coincidan con los filtros del dashboard."
-      />
-    } @else {
-      <div class="ui-table-wrap rutas-resumen-wrap">
-        <table class="ui-table rutas-resumen-tabla">
-          <thead>
-            <tr>
-              <th>Chute</th>
-              <th>Cluster(s)</th>
-              <th class="num">Rutas antes</th>
-              <th class="num">Rutas después</th>
-              <th class="num">Variación</th>
-              <th class="num">Operarios antes</th>
-              <th class="num">Operarios después</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (chute of chutesVisibles(); track chute.chute) {
-              <tr>
-                <td class="u-mono">{{ chute.chute }}</td>
-                <td class="rutas-resumen-tabla__clusters">
-                  {{ chute.clusters.length > 0 ? chute.clusters.join(' · ') : '—' }}
-                </td>
-                <td class="num">{{ formatearNumero(chute.rutasOriginal) }}</td>
-                <td class="num">{{ formatearNumero(chute.rutasBalanceado) }}</td>
-                <td class="num">
-                  <span
-                    class="rutas-variacion"
-                    [class.rutas-variacion--sube]="chute.rutasBalanceado > chute.rutasOriginal"
-                    [class.rutas-variacion--baja]="chute.rutasBalanceado < chute.rutasOriginal"
-                  >
-                    {{ etiquetaVariacion(chute.rutasBalanceado - chute.rutasOriginal) }}
-                  </span>
-                </td>
-                <td class="num">{{ formatearNumero(chute.operariosOriginal) }}</td>
-                <td class="num">{{ formatearNumero(chute.operariosBalanceado) }}</td>
-              </tr>
-            }
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="2">Total</td>
-              <td class="num">{{ formatearNumero(totalesRutas().antes) }}</td>
-              <td class="num">{{ formatearNumero(totalesRutas().despues) }}</td>
-              <td class="num">
-                <span
-                  class="rutas-variacion"
-                  [class.rutas-variacion--sube]="totalesRutas().despues > totalesRutas().antes"
-                  [class.rutas-variacion--baja]="totalesRutas().despues < totalesRutas().antes"
-                >
-                  {{ etiquetaVariacion(totalesRutas().despues - totalesRutas().antes) }}
-                </span>
-              </td>
-              <td class="num">{{ formatearNumero(totalesOperarios().antes) }}</td>
-              <td class="num">{{ formatearNumero(totalesOperarios().despues) }}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    }
-  </section>
-
-  <section class="rutas-detalle">
-    <header class="rutas-detalle__head">
-      <h3 class="rutas-detalle__titulo">Detalle de rutas</h3>
-      <p class="rutas-detalle__nota">Busca, filtra y revisa cada ruta del registro.</p>
-    </header>
-
-    <div class="rutas-barra">
-      <div class="rutas-barra__campo rutas-barra__campo--busqueda">
-        <label class="ui-label" for="rutas-buscar">Buscar ruta</label>
-        <div class="rutas-barra__input">
-          <ui-icon name="search" [size]="16" />
-          <input
-            id="rutas-buscar"
-            type="search"
-            class="ui-input"
-            placeholder="Código de ruta…"
-            autocomplete="off"
-            [value]="filtroRutaTexto()"
-            (input)="buscarRuta($any($event.target).value)"
-          />
-        </div>
-      </div>
-      <div class="rutas-barra__campo">
-        <label class="ui-label" for="rutas-tipo">Tipo</label>
-        <select
-          id="rutas-tipo"
-          class="ui-input"
-          [value]="filtroRutaTipo()"
-          (change)="setFiltroRutaTipo($any($event.target).value)"
-        >
-          <option value="">Todos</option>
-          <option value="B2C">B2C</option>
-          <option value="B2B">B2B</option>
-        </select>
-      </div>
-      <div class="rutas-barra__campo">
-        <label class="ui-label" for="rutas-chute">Chute</label>
-        <ui-select-buscable
-          campoId="rutas-chute"
-          [opciones]="opcionesRutaChute()"
-          [valor]="filtroRutaChute()"
-          placeholder="Todos los chutes"
-          (valorCambia)="setFiltroRutaChute($event)"
-        />
-      </div>
-      <div class="rutas-barra__campo">
-        <label class="ui-label" for="rutas-cluster">Cluster</label>
-        <ui-select-buscable
-          campoId="rutas-cluster"
-          [opciones]="opcionesRutaCluster()"
-          [valor]="filtroRutaCluster()"
-          placeholder="Todos los clusters"
-          (valorCambia)="setFiltroRutaCluster($event)"
-        />
-      </div>
-      @if (tieneFiltrosRutas()) {
-        <button
-          type="button"
-          class="ui-btn ui-btn--ghost ui-btn--sm rutas-barra__limpiar"
-          (click)="limpiarFiltrosRutas()"
-        >
-          <ui-icon name="refresh" [size]="15" />
-          Limpiar
-        </button>
-      }
-    </div>
-
-    @if (cargandoRutas() && !rutasPagina()) {
-      <div class="loading"><span class="ui-spinner"></span> Cargando rutas…</div>
-    } @else if (errorRutas()) {
-      <ui-empty icono="alerta" titulo="No se pudieron cargar las rutas" [mensaje]="errorRutas()!">
-        <button
-          type="button"
-          class="ui-btn ui-btn--secondary ui-btn--sm"
-          (click)="cargarRutasDesde(1)"
-        >
-          <ui-icon name="refresh" [size]="16" /> Reintentar
-        </button>
-      </ui-empty>
-    } @else if (rutasPagina(); as pagina) {
-      @if (pagina.contenido.length === 0) {
-        <ui-empty
-          icono="search"
-          titulo="Sin rutas"
-          mensaje="No hay rutas que coincidan con la búsqueda o los filtros."
-        />
-      } @else {
-        <div class="ui-table-wrap rutas-tabla-wrap">
-          <table class="ui-table rutas-tabla">
-            <thead>
-              <tr>
-                <th>Ruta</th>
-                <th>Tipo</th>
-                <th>Chute</th>
-                <th>Cluster</th>
-                <th class="num">Bultos</th>
-                <th class="num">Unidades</th>
-                <th class="num">Líneas</th>
-                <th class="num">COD</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (ruta of pagina.contenido; track ruta.id) {
-                <tr>
-                  <td class="u-mono">{{ ruta.codigoRuta }}</td>
-                  <td>
-                    <span
-                      class="ui-badge"
-                      [class.ui-badge--info]="ruta.tipo === 'B2B'"
-                      [class.ui-badge--neutral]="ruta.tipo !== 'B2B'"
-                    >
-                      {{ ruta.tipo }}
-                    </span>
-                  </td>
-                  <td>{{ ruta.chute }}</td>
-                  <td>{{ ruta.cluster }}</td>
-                  <td class="num">{{ formatearNumero(ruta.totalBultos, 2) }}</td>
-                  <td class="num">{{ formatearNumero(ruta.totalUnidades, 2) }}</td>
-                  <td class="num">{{ formatearNumero(ruta.totalLineas, 2) }}</td>
-                  <td class="num">{{ formatearNumero(ruta.conteoCod) }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-        <div class="rutas-pie">
-          <span class="rutas-pie__rango">{{ rangoRutas() }}</span>
-          <ui-paginador
-            [pagina]="paginaRutas()"
-            [total]="pagina.total"
-            [porPagina]="porPaginaRutas()"
-            (paginaCambia)="cambiarPaginaRutas($event)"
-            (porPaginaCambia)="cambiarPorPaginaRutas($event)"
-          />
-        </div>
-      }
-    }
-  </section>
-
-  <div modal-footer class="modal-foot">
-    <button type="button" class="ui-btn ui-btn--primary" (click)="rutasAbierto.set(false)">
-      Cerrar
-    </button>
-  </div>
-</ui-modal>
+/>

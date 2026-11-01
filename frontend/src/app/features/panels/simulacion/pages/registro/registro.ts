@@ -31,10 +31,16 @@ import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
 import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
-import { PALETA_REGISTROS, colorRegistro, formatearNumero } from '../../simulacion-formato';
+import {
+  PALETA_REGISTROS,
+  colorRegistro,
+  datosCarga,
+  formatearNumero,
+  nombreRegistroSugerido,
+  problemaArchivoExcel,
+  tamanoArchivo,
+} from '../../simulacion-formato';
 
-const MAX_BYTES = 20 * 1024 * 1024;
-const FORMATOS = /\.(xlsx|xls|csv)$/i;
 /** Al menos un carácter visible: un nombre solo con espacios no es válido. */
 const CON_TEXTO = /\S/;
 
@@ -67,6 +73,7 @@ export class SimulacionRegistro {
 
   readonly permisos = PERMISOS;
   readonly paleta = PALETA_REGISTROS;
+  readonly tamanoArchivo = tamanoArchivo;
   readonly colorRegistro = colorRegistro;
   readonly formatearNumero = formatearNumero;
 
@@ -234,28 +241,18 @@ export class SimulacionRegistro {
     if (!archivo) {
       return;
     }
-    if (!FORMATOS.test(archivo.name)) {
-      this.notificaciones.advertencia('Formato no válido', 'Usa un archivo .xlsx, .xls o .csv.');
-      return;
-    }
-    if (archivo.size > MAX_BYTES) {
-      this.notificaciones.advertencia('Archivo muy grande', 'El máximo permitido es 20 MB.');
+    const problema = problemaArchivoExcel(archivo);
+    if (problema) {
+      this.notificaciones.advertencia(problema.titulo, problema.mensaje);
       return;
     }
     this.archivoSeleccionado.set(archivo);
-    const nombre = archivo.name.replace(FORMATOS, '');
     this.formulario.reset({
-      nombreRegistro: nombre.slice(0, 150),
+      nombreRegistro: nombreRegistroSugerido(archivo),
       etiqueta: '',
       colorHex: PALETA_REGISTROS[0].hex,
     });
     this.subirAbierto.set(true);
-  }
-
-  tamanoArchivo(archivo: File): string {
-    return archivo.size < 1024 * 1024
-      ? `${Math.max(1, Math.round(archivo.size / 1024))} KB`
-      : `${(archivo.size / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   cerrarSubida(): void {
@@ -279,16 +276,9 @@ export class SimulacionRegistro {
       this.formulario.markAllAsTouched();
       return;
     }
-    const valores = this.formulario.getRawValue();
-    const formulario = new FormData();
-    formulario.append('archivo', archivo, archivo.name);
-    formulario.append('nombreRegistro', valores.nombreRegistro);
-    formulario.append('etiqueta', valores.etiqueta);
-    formulario.append('colorHex', valores.colorHex);
-
     this.guardando.set(true);
     this.api
-      .subir(formulario)
+      .subir(datosCarga(archivo, this.formulario.getRawValue()))
       .pipe(finalize(() => this.guardando.set(false)))
       .subscribe({
         next: (registro) => {

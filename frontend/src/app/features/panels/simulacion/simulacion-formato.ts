@@ -20,6 +20,51 @@ export const PALETA_REGISTROS: ColorRegistro[] = [
   { nombre: 'Pizarra', hex: '#64748b' },
 ];
 
+/** Formatos y tamaño que acepta la carga del Excel de proyección. */
+export const FORMATOS_EXCEL = /\.(xlsx|xls|csv)$/i;
+export const MAX_BYTES_EXCEL = 20 * 1024 * 1024;
+
+export interface ProblemaArchivo {
+  titulo: string;
+  mensaje: string;
+}
+
+/** Motivo por el que el archivo no se puede cargar, o null si es válido. */
+export function problemaArchivoExcel(archivo: File): ProblemaArchivo | null {
+  if (!FORMATOS_EXCEL.test(archivo.name)) {
+    return { titulo: 'Formato no válido', mensaje: 'Usa un archivo .xlsx, .xls o .csv.' };
+  }
+  if (archivo.size > MAX_BYTES_EXCEL) {
+    return { titulo: 'Archivo muy grande', mensaje: 'El máximo permitido es 20 MB.' };
+  }
+  return null;
+}
+
+/** Nombre sugerido para el registro: el del archivo sin extensión. */
+export function nombreRegistroSugerido(archivo: File): string {
+  return archivo.name.replace(FORMATOS_EXCEL, '').slice(0, 150);
+}
+
+/** Tamaño legible del archivo: «840 KB», «3.2 MB». */
+export function tamanoArchivo(archivo: File): string {
+  return archivo.size < 1024 * 1024
+    ? `${Math.max(1, Math.round(archivo.size / 1024))} KB`
+    : `${(archivo.size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Cuerpo multipart de la carga, con los textos ya recortados. */
+export function datosCarga(
+  archivo: File,
+  valores: { nombreRegistro: string; etiqueta: string; colorHex: string },
+): FormData {
+  const datos = new FormData();
+  datos.append('archivo', archivo, archivo.name);
+  datos.append('nombreRegistro', valores.nombreRegistro.trim());
+  datos.append('etiqueta', valores.etiqueta.trim());
+  datos.append('colorHex', valores.colorHex);
+  return datos;
+}
+
 export const PALETA_CLUSTERS = [
   '#1d63ed',
   '#e11d2e',

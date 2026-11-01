@@ -101,7 +101,7 @@ export class SimulacionApi {
     return this.api.get<DashboardSimulacion>(`/simulacion/registros/${id}/dashboard`);
   }
 
-  /** Detalle paginado de rutas del dashboard con totales del conjunto filtrado. */
+  /** Rutas de un lado del chute (antes o después), paginadas y con totales del filtro. */
   rutasDashboard(id: number, filtros: RutasDashboardFiltros): Observable<RutasDashboardSimulacion> {
     return this.api.get<RutasDashboardSimulacion>(`/simulacion/registros/${id}/dashboard/rutas`, {
       pagina: filtros.pagina,
@@ -109,7 +109,9 @@ export class SimulacionApi {
       texto: filtros.texto,
       tipo: filtros.tipo,
       chuteId: filtros.chuteId,
+      lado: filtros.lado,
       clusterId: filtros.clusterId,
+      soloCambios: filtros.soloCambios,
     });
   }
 }

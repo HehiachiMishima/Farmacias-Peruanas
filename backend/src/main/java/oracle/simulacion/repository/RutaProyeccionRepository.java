@@ -79,6 +79,18 @@ public interface RutaProyeccionRepository
       """)
   List<CargaRutas> cargaOriginalPorArchivo(@Param("archivoId") Long archivoId);
 
+  /** Rutas que cambiaron de chute, agrupadas por (chute original, chute actual). */
+  @Query("""
+      SELECT r.chuteOriginalId AS origen,
+             r.chuteId AS destino,
+             COUNT(r) AS rutas
+        FROM RutaProyeccion r
+       WHERE r.archivoId = :archivoId
+         AND r.chuteId <> r.chuteOriginalId
+       GROUP BY r.chuteOriginalId, r.chuteId
+      """)
+  List<MovimientoRutas> movimientosPorArchivo(@Param("archivoId") Long archivoId);
+
   /** Devuelve todas las rutas del archivo a su chute original sin recorrerlas una a una. */
   @Modifying
   @Query("""
@@ -90,8 +102,9 @@ public interface RutaProyeccionRepository
   int restaurarChutes(@Param("archivoId") Long archivoId);
 
   /**
-   * Totales de las rutas filtradas del dashboard en una sola consulta: el
-   * modal muestra los KPIs del conjunto completo, no solo de la página.
+   * Totales de un lado del chute en una sola consulta: el modal muestra los
+   * del conjunto filtrado, no solo de la página. Con antes = true cuenta las
+   * rutas que el chute tenía al cargar el Excel; si no, las que tiene hoy.
    */
   @Query(
       value =
@@ -99,6 +112,8 @@ public interface RutaProyeccionRepository
           SELECT COUNT(*) AS rutas,
                  COALESCE(SUM(CASE WHEN tipo = 'B2C' THEN 1 ELSE 0 END), 0) AS rutasB2c,
                  COALESCE(SUM(CASE WHEN tipo = 'B2B' THEN 1 ELSE 0 END), 0) AS rutasB2b,
+                 COALESCE(SUM(CASE WHEN chute_id <> chute_original_id THEN 1 ELSE 0 END), 0)
+                     AS cambios,
                  COALESCE(SUM(total_bultos), 0) AS bultos,
                  COALESCE(SUM(total_unidades), 0) AS unidades,
                  COALESCE(SUM(total_lineas), 0) AS lineas,
@@ -107,8 +122,9 @@ public interface RutaProyeccionRepository
            WHERE archivo_id = :archivoId
              AND (:texto IS NULL OR codigo_ruta LIKE :texto)
              AND (:tipo IS NULL OR tipo = :tipo)
-             AND (:chuteId IS NULL OR chute_id = :chuteId)
+             AND (CASE WHEN :antes THEN chute_original_id ELSE chute_id END) = :chuteId
              AND (:clusterId IS NULL OR cluster_id = :clusterId)
+             AND (:soloCambios = FALSE OR chute_id <> chute_original_id)
           """,
       nativeQuery = true)
   ResumenRutasFiltro resumenFiltrado(
@@ -116,5 +132,7 @@ public interface RutaProyeccionRepository
       @Param("texto") String texto,
       @Param("tipo") String tipo,
       @Param("chuteId") Long chuteId,
-      @Param("clusterId") Long clusterId);
+      @Param("antes") boolean antes,
+      @Param("clusterId") Long clusterId,
+      @Param("soloCambios") boolean soloCambios);
 }

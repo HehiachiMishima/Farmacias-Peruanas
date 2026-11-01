@@ -1,6 +1,11 @@
 -- Active: 1791152181635@@127.0.0.1@3306@farmacias_peruanas
 -- ============================================================
 -- Migración del panel Simulación: TIPO de ruta y chute original
+--
+-- Aplica SOLO sobre una base ya existente (panel.simulacion.sql ya crea
+-- estas columnas desde cero). Ejecutar una vez:
+--   mysql -u <usuario> -p farmacias_peruanas < migracion_simulacion_tipo.sql
+--
 -- Cambios:
 --   1. parametros_chutes.operarios: DEFAULT 2 -> 1.
 --   2. rutas_proyeccion.tipo: B2C/B2B. Las rutas existentes se

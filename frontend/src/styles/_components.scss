@@ -1297,6 +1297,12 @@ body.col-resize--activo .col-resize {
 .ui-modal--xl {
   max-width: 980px;
 }
+/* Casi pantalla completa: paneles de análisis con gráfico y tablas. */
+.ui-modal--full {
+  max-width: 1680px;
+  height: calc(100vh - 2 * var(--space-6));
+  height: calc(100dvh - 2 * var(--space-6));
+}
 
 .ui-modal--compacto {
   .ui-modal__header {
@@ -1350,7 +1356,8 @@ body.col-resize--activo .col-resize {
   .ui-modal--sm,
   .ui-modal--md,
   .ui-modal--lg,
-  .ui-modal--xl {
+  .ui-modal--xl,
+  .ui-modal--full {
     max-width: none;
     max-height: calc(100dvh - var(--space-6));
     border-radius: 20px 20px 0 0;

@@ -36,6 +36,9 @@ export interface RutaSimulacion {
   id: number;
   chuteId: number;
   chute: string;
+  /** Chute que tenía la ruta al cargar el Excel (no lo cambia el balanceo). */
+  chuteOriginalId: number;
+  chuteOriginal: string;
   clusterId: number;
   cluster: string;
   codigoRuta: string;
@@ -67,6 +70,8 @@ export interface ConfiguracionSimulacion {
   clusters: ClusterParametroSimulacion[];
   chutes: ChuteParametroSimulacion[];
   carga: CargaSimulacion[];
+  /** Chutes que hoy mezclan CL1 y CL2: el balanceo los separa. */
+  mezclas: ChuteMezcladoSimulacion[];
 }
 
 export interface RutasSimulacionFiltros {
@@ -157,6 +162,9 @@ export interface ChuteComparativoSimulacion {
   /** Cantidad de rutas asignadas al chute antes y después del balanceo. */
   rutasOriginal: number;
   rutasBalanceado: number;
+  /** Rutas que el balanceo sacó del chute y las que trajo de otros. */
+  rutasSalieron: number;
+  rutasLlegaron: number;
   tiempoOriginal: number;
   tiempoBalanceado: number;
   estado: 'MEJORO' | 'AUMENTO' | 'IGUAL' | string;
@@ -176,13 +184,23 @@ export interface DashboardSimulacion {
   kpis: SimulacionKpis;
   clusters: ClusterComparativoSimulacion[];
   chutes: ChuteComparativoSimulacion[];
+  /** Chutes que hoy mezclan CL1 y CL2: el balanceo los separa. */
+  mezclas: ChuteMezcladoSimulacion[];
 }
 
-/** Totales de las rutas que cumplen los filtros del modal «Rutas por chute». */
+export interface ChuteMezcladoSimulacion {
+  id: number;
+  chute: string;
+  clusters: string[];
+}
+
+/** Totales de un lado del chute (antes o después) con los filtros del modal. */
 export interface ResumenRutasSimulacion {
   rutas: number;
   rutasB2c: number;
   rutasB2b: number;
+  /** Rutas que cambiaron de chute: salieron (antes) o llegaron (después). */
+  cambios: number;
   bultos: number;
   unidades: number;
   lineas: number;
@@ -194,9 +212,15 @@ export interface RutasDashboardFiltros {
   tamano: number;
   texto: string;
   tipo: '' | 'B2C' | 'B2B';
-  chuteId: number | null;
+  chuteId: number;
+  /** ANTES: rutas que el chute tenía al cargar el Excel; DESPUES: las que tiene hoy. */
+  lado: LadoChute;
   clusterId: number | null;
+  /** Solo las rutas que cambiaron de chute. */
+  soloCambios: boolean;
 }
+
+export type LadoChute = 'ANTES' | 'DESPUES';
 
 /** Detalle ejecutivo del modal: totales del conjunto filtrado y la página pedida. */
 export interface RutasDashboardSimulacion {

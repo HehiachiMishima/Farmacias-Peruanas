@@ -2,7 +2,7 @@
 -- Migración del panel Simulación: tope global de operarios
 -- y reasignación de operarios entre chutes
 --
--- Aplica SOLO sobre una base ya existente (instalacion.sql crea el
+-- Aplica SOLO sobre una base ya existente (panel.simulacion.sql crea el
 -- esquema nuevo desde cero). Ejecutar una vez:
 --   mysql -u <usuario> -p farmacias_peruanas < migracion_simulacion_operarios.sql
 --
