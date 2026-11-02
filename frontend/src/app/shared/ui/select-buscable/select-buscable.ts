@@ -14,6 +14,9 @@ import {
 import { Icon } from '../icon/icon';
 import { normalizarTexto } from '../../../core/utils/texto.util';
 
+/** Contador para ids únicos de la lista (aria-controls / aria-activedescendant). */
+let siguienteId = 0;
+
 export interface OpcionSeleccion {
   id: number;
   etiqueta: string;
@@ -46,6 +49,13 @@ export interface OpcionSeleccion {
           spellcheck="false"
           [disabled]="deshabilitado()"
           [placeholder]="placeholder()"
+          role="combobox"
+          aria-autocomplete="list"
+          [attr.aria-expanded]="abierto()"
+          [attr.aria-controls]="listaId"
+          [attr.aria-activedescendant]="
+            abierto() && filtradas().length > 0 ? listaId + '-' + resaltado() : null
+          "
           [attr.id]="campoId()"
           [attr.aria-label]="campoId() ? null : placeholder()"
           [value]="abierto() ? consulta() : (seleccion()?.etiqueta ?? '')"
@@ -55,13 +65,31 @@ export interface OpcionSeleccion {
           (keydown)="tecla($event)"
           (click)="$event.stopPropagation(); alHacerClic()"
         />
+        @if (limpiable() && valor() !== null && !deshabilitado()) {
+          <button
+            type="button"
+            class="ui-selbusc__limpiar"
+            aria-label="Quitar selección"
+            (click)="$event.stopPropagation(); limpiar()"
+          >
+            <ui-icon name="close" [size]="14" />
+          </button>
+        }
         <ui-icon class="ui-selbusc__chevron" name="chevronRight" [size]="16" />
       </div>
 
       @if (abierto()) {
-        <ul class="ui-selbusc__lista" role="listbox" [attr.aria-label]="placeholder()">
+        <ul
+          class="ui-selbusc__lista"
+          role="listbox"
+          [attr.id]="listaId"
+          [attr.aria-label]="placeholder()"
+        >
           @for (op of filtradas(); track op.id; let i = $index) {
             <li
+              role="option"
+              [attr.id]="listaId + '-' + i"
+              [attr.aria-selected]="op.id === valor()"
               class="ui-selbusc__op"
               [class.ui-selbusc__op--activo]="i === resaltado()"
               [class.ui-selbusc__op--sel]="op.id === valor()"
@@ -92,6 +120,10 @@ export class SelectBuscable {
   readonly deshabilitado = input(false);
   /** id del campo, para asociarlo a un <label for>; sin él se usa el placeholder como aria-label. */
   readonly campoId = input<string | null>(null);
+  /** Muestra un botón para quitar la selección (emite null), p. ej. «Todos los clusters». */
+  readonly limpiable = input(false);
+
+  readonly listaId = `ui-selbusc-${++siguienteId}`;
 
   readonly valorCambia = output<number | null>();
 
@@ -170,6 +202,11 @@ export class SelectBuscable {
     this.resaltado.set(0);
   }
 
+  limpiar(): void {
+    this.valorCambia.emit(null);
+    this.cerrar();
+  }
+
   elegir(op: OpcionSeleccion): void {
     this.valorCambia.emit(op.id);
     // Mantiene el foco para poder escribir de nuevo sin volver a hacer clic.
@@ -218,5 +255,4 @@ export class SelectBuscable {
       this.cerrar();
     }
   }
-
 }

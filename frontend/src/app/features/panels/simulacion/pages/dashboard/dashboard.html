@@ -177,9 +177,9 @@
     <p class="dash-mezcla" role="alert">
       <ui-icon name="alerta" [size]="16" />
       <span>
-        <strong>{{ mezcla.chute }}</strong> mezcla {{ mezcla.clusters.join(' y ') }}, que no pueden
-        compartir chute, y no hay otro chute libre para separarlos. Mueve sus rutas a mano o revisa
-        el Excel.
+        <strong>{{ mezcla.chute }}</strong> junta {{ mezcla.clusters.join(' y ') }}, que no pueden
+        compartir chute. Ejecuta el balanceo para separarlos; si no hay otro chute libre, mueve sus
+        rutas desde Configuración.
       </span>
     </p>
   }
@@ -254,10 +254,10 @@
                 <td class="fuerte">{{ chute.chute }}</td>
                 @for (m of metricas; track m.id) {
                   <td class="num u-muted" [class.cuadro__col--activa]="metrica() === m.id">
-                    {{ formatearNumero(m.antes(chute)) }}
+                    {{ formatearNumero(m.antes(chute), m.decimales) }}
                   </td>
                   <td class="num" [class.cuadro__col--activa]="metrica() === m.id">
-                    <span class="fuerte">{{ formatearNumero(m.despues(chute)) }}</span>
+                    <span class="fuerte">{{ formatearNumero(m.despues(chute), m.decimales) }}</span>
                     <span
                       class="cuadro__delta"
                       [class]="claseVariacion(m.antes(chute), m.despues(chute), false)"
@@ -273,16 +273,31 @@
             <tr>
               <td class="fuerte">Total</td>
               @for (total of totalesChute(); track $index) {
-                <td class="num">{{ formatearNumero(total.antes) }}</td>
-                <td class="num fuerte">{{ formatearNumero(total.despues) }}</td>
+                <td class="num">{{ formatearNumero(total.antes, metricas[$index].decimales) }}</td>
+                <td class="num fuerte">
+                  {{ formatearNumero(total.despues, metricas[$index].decimales) }}
+                </td>
               }
             </tr>
           </tfoot>
         </table>
       </div>
+      @if (filtroClusters().length > 0) {
+        <p class="filtro-nota cuadro__nota">
+          <ui-icon name="info" [size]="14" />
+          Con filtro de cluster se listan los chutes que lo atienden, con toda su carga (también la
+          de otros clusters en ese chute).
+        </p>
+      }
     </article>
 
-    @if (chutesDetalle().length > 0) {
+    @if (demasiadosChutes()) {
+      <p class="filtro-nota">
+        <ui-icon name="info" [size]="14" />
+        Elegiste {{ formatearNumero(chutesDetalle().length) }} chutes: el detalle de rutas admite
+        hasta {{ maxChutesDetalle }} a la vez. Quita algunos del filtro para verlo.
+      </p>
+    } @else if (chutesDetalle().length > 0) {
       <article class="dash-card">
         <header class="dash-card__head">
           <div class="dash-card__titulos">

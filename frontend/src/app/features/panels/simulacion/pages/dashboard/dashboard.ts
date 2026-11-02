@@ -30,48 +30,67 @@ import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtr
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 import { SelectMultiple } from '../../../../../shared/ui/select-multiple/select-multiple';
-import { etiquetaRegistro, formatearHoras, formatearNumero } from '../../simulacion-formato';
+import {
+  LIMITES,
+  etiquetaRegistro,
+  formatearHoras,
+  formatearNumero,
+} from '../../simulacion-formato';
 import { SimulacionDetalleChute } from './detalle-chute/detalle-chute';
 
 type Metrica = 'rutas' | 'bultos' | 'unidades' | 'lineas' | 'cod';
 
-/** Métricas de carga por chute: qué campos comparar y cómo se llaman. */
+/**
+ * Métricas de carga por chute: qué campos comparar, cómo se llaman y con
+ * cuántos decimales se muestran (bultos, unidades y líneas son promedios).
+ */
 const METRICAS: ReadonlyArray<{
   id: Metrica;
   nombre: string;
+  decimales: number;
   antes: (c: ChuteComparativoSimulacion) => number;
   despues: (c: ChuteComparativoSimulacion) => number;
 }> = [
   {
     id: 'rutas',
     nombre: 'Rutas',
+    decimales: 0,
     antes: (c) => c.rutasOriginal,
     despues: (c) => c.rutasBalanceado,
   },
   {
     id: 'bultos',
     nombre: 'Bultos',
+    decimales: 2,
     antes: (c) => c.bultosOriginal,
     despues: (c) => c.bultosBalanceado,
   },
   {
     id: 'unidades',
     nombre: 'Unidades',
+    decimales: 2,
     antes: (c) => c.unidadesOriginal,
     despues: (c) => c.unidadesBalanceado,
   },
   {
     id: 'lineas',
     nombre: 'Líneas',
+    decimales: 2,
     antes: (c) => c.lineasOriginal,
     despues: (c) => c.lineasBalanceado,
   },
-  { id: 'cod', nombre: 'COD', antes: (c) => c.codOriginal, despues: (c) => c.codBalanceado },
+  {
+    id: 'cod',
+    nombre: 'COD',
+    decimales: 0,
+    antes: (c) => c.codOriginal,
+    despues: (c) => c.codBalanceado,
+  },
 ];
 
 /**
  * Dashboard ejecutivo de simulación: comparativo antes vs. después del
- * balanceo. Por chute se compara la carga (bultos, unidades, líneas, COD);
+ * balanceo. Por chute se compara la carga (rutas, bultos, unidades, líneas, COD);
  * por cluster, solo el tiempo de cierre frente a su límite.
  */
 @Component({
@@ -157,6 +176,10 @@ export class SimulacionDashboard {
   readonly chutesDetalle = computed(() =>
     this.filtroChutes().length === 0 ? [] : this.chutesVisibles(),
   );
+
+  /** El detalle consulta hasta LIMITES.chutesDetalle chutes a la vez (tope del backend). */
+  readonly maxChutesDetalle = LIMITES.chutesDetalle;
+  readonly demasiadosChutes = computed(() => this.chutesDetalle().length > LIMITES.chutesDetalle);
 
   /** Chutes elegidos que el filtro de clusters deja fuera del detalle. */
   readonly chutesOcultos = computed(() => {
@@ -271,7 +294,7 @@ export class SimulacionDashboard {
         valor: `${formatearNumero(kpis.rutasMovidas)} rutas`,
         icono: 'flecha',
         color: 'var(--violet)',
-        detalle: `${formatearNumero(kpis.operariosMovidos)} operario(s) reasignado(s) · ${formatearNumero(kpis.operariosAgregados)} añadido(s)`,
+        detalle: `en otro chute · ${formatearNumero(kpis.operariosMovidos)} operario(s) reasignado(s) · ${formatearNumero(kpis.operariosAgregados)} añadido(s)`,
       },
     ];
   });
@@ -296,7 +319,7 @@ export class SimulacionDashboard {
     })),
   );
 
-  /** Totales de las cuatro métricas (fila final del cuadro por chute). */
+  /** Totales de las cinco métricas (fila final del cuadro por chute). */
   readonly totalesChute = computed(() => {
     const chutes = this.chutesVisibles();
     return METRICAS.map((m) => ({

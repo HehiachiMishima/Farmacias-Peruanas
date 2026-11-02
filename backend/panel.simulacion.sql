@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS archivos_excel (
     nombre_archivo VARCHAR(255) NOT NULL COMMENT 'Nombre original del archivo .xlsx/.csv.',
     etiqueta VARCHAR(50) NULL COMMENT 'Etiqueta visual (Ej: URGENTE, OK).',
     color_hex VARCHAR(10) NULL COMMENT 'Color del registro (Ej: #6366f1).',
-    estado ENUM('PROYECCION', 'BALANCEADO') DEFAULT 'PROYECCION' COMMENT 'Indica si los datos actuales son los originales o ya fueron modificados.',
+    estado ENUM('PROYECCION', 'BALANCEADO') NOT NULL DEFAULT 'PROYECCION' COMMENT 'Indica si los datos actuales son los originales o ya fueron modificados.',
     creado_por BIGINT NOT NULL COMMENT 'ID del usuario que subió el archivo.',
     actualizado_por BIGINT NOT NULL COMMENT 'ID del usuario que modificó por última vez.',
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)),
@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS simulacion_config (
     archivo_id BIGINT PRIMARY KEY,
     velocidad_base DECIMAL(10, 2) NOT NULL DEFAULT 100.00 COMMENT 'Bultos por hora por operario.',
     operarios_maximos INT NULL COMMENT 'Tope global de operarios disponibles; NULL = sin tope global.',
+    operarios_por_chute INT NULL COMMENT 'Máximo de operarios en un chute; NULL = reparto parejo (máximo global ÷ chutes).',
     creado_por BIGINT NOT NULL,
     actualizado_por BIGINT NOT NULL,
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)),
@@ -82,6 +83,7 @@ CREATE TABLE IF NOT EXISTS parametros_chutes (
     archivo_id BIGINT NOT NULL,
     chute_id BIGINT NOT NULL,
     operarios INT NOT NULL DEFAULT 1 COMMENT 'Cantidad de operarios asignados.',
+    operarios_original INT NOT NULL DEFAULT 1 COMMENT 'Operarios fijados por el usuario: base del comparativo y de Restablecer.',
     PRIMARY KEY (archivo_id, chute_id),
     CONSTRAINT fk_param_chute_archivo FOREIGN KEY (archivo_id) REFERENCES archivos_excel (id) ON DELETE CASCADE,
     CONSTRAINT fk_param_chute_chute FOREIGN KEY (chute_id) REFERENCES chutes (id) ON DELETE CASCADE
@@ -107,12 +109,9 @@ CREATE TABLE IF NOT EXISTS rutas_proyeccion (
     CONSTRAINT fk_ruta_chute_original FOREIGN KEY (chute_original_id) REFERENCES chutes (id),
     CONSTRAINT fk_ruta_cluster FOREIGN KEY (cluster_id) REFERENCES clusters (id),
     CONSTRAINT uq_rutas_archivo_ruta_tipo UNIQUE (archivo_id, codigo_ruta, tipo),
-    INDEX idx_ruta_codigo (codigo_ruta),
-    INDEX idx_ruta_bultos (total_bultos),
     INDEX idx_rutas_archivo_chute (archivo_id, chute_id),
     INDEX idx_rutas_archivo_chute_original (archivo_id, chute_original_id),
-    INDEX idx_rutas_archivo_cluster (archivo_id, cluster_id),
-    FULLTEXT INDEX ft_rutas_busqueda (codigo_ruta)
+    INDEX idx_rutas_archivo_cluster (archivo_id, cluster_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Rutas del Excel, agrupadas y optimizadas para balanceo.';
 
 -- ============================================================
@@ -130,6 +129,9 @@ CREATE TABLE IF NOT EXISTS historial_balanceo (
     chute_origen_id BIGINT NULL COMMENT 'Chute del que sale la ruta o el operario.',
     chute_destino_id BIGINT NULL COMMENT 'Chute al que llega la ruta o el operario.',
     chute_modificado_id BIGINT NULL COMMENT 'Chute al que se le sumó el operario.',
+    motivo ENUM('BALANCEO', 'SEPARACION', 'MANUAL') NOT NULL DEFAULT 'BALANCEO' COMMENT 'BALANCEO: ajuste de tiempos; SEPARACION: CL1 y CL2 no comparten chute; MANUAL: movido por el usuario.',
+    operarios_origen INT NULL COMMENT 'Operarios del chute de origen después de la acción.',
+    operarios_destino INT NULL COMMENT 'Operarios del chute de destino (o modificado) después de la acción.',
     creado_por BIGINT NOT NULL,
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)),
     CONSTRAINT fk_historial_archivo FOREIGN KEY (archivo_id) REFERENCES archivos_excel (id) ON DELETE CASCADE,
@@ -138,8 +140,8 @@ CREATE TABLE IF NOT EXISTS historial_balanceo (
     CONSTRAINT fk_historial_destino FOREIGN KEY (chute_destino_id) REFERENCES chutes (id),
     CONSTRAINT fk_historial_modificado FOREIGN KEY (chute_modificado_id) REFERENCES chutes (id),
     CONSTRAINT fk_historial_creado_por FOREIGN KEY (creado_por) REFERENCES usuarios (id),
-    INDEX idx_historial_archivo_fecha (archivo_id, creado_en DESC)
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Registro de movimientos realizados por el botón de balanceo.';
+    INDEX idx_historial_archivo_id (archivo_id, id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Movimientos de rutas y operarios hechos por el balanceo o a mano.';
 
 -- ############################################################
 -- 5. Permisos del panel Simulación

@@ -17,7 +17,8 @@ public enum TipoRuta {
     if (valor == null) {
       return null;
     }
-    return switch (valor.trim().toUpperCase(Locale.ROOT)) {
+    // strip() también quita el espacio no separable que dejan algunas hojas de cálculo.
+    return switch (valor.replace('\u00A0', ' ').strip().toUpperCase(Locale.ROOT)) {
       case "B2C" -> B2C;
       case "B2B" -> B2B;
       default -> null;

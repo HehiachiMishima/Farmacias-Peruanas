@@ -4,6 +4,15 @@ import { ArchivoSimulacion } from './data/simulacion.model';
 export const VELOCIDAD_INICIAL = 100;
 export const OPERARIOS_INICIALES = 1;
 
+/** Topes que valida el backend (Limites.java): el formulario no deja pasarlos. */
+export const LIMITES = {
+  operariosPorChute: 50,
+  operariosTotal: 10_000,
+  horas: 744,
+  velocidad: 100_000,
+  chutesDetalle: 50,
+} as const;
+
 export interface ColorRegistro {
   nombre: string;
   hex: string;

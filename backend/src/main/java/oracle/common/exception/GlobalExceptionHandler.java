@@ -4,6 +4,7 @@ package oracle.common.exception;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.sql.SQLException;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
@@ -69,6 +71,24 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictoException.class)
     public ResponseEntity<ApiError> conflicto(ConflictoException ex, HttpServletRequest req) {
         return cuerpo(HttpStatus.CONFLICT, ex.getMessage(), req);
+    }
+
+    @ExceptionHandler(SolicitudInvalidaException.class)
+    public ResponseEntity<ApiError> solicitudInvalida(SolicitudInvalidaException ex, HttpServletRequest req) {
+        return cuerpo(HttpStatus.BAD_REQUEST, ex.getMessage(), req);
+    }
+
+    /** Validaciones jakarta (@Size, @Min...) sobre parametros de consulta o de ruta. */
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ApiError> parametrosInvalidos(
+            HandlerMethodValidationException ex, HttpServletRequest req) {
+        String detalle = ex.getParameterValidationResults().stream()
+                .flatMap(r -> r.getResolvableErrors().stream()
+                        .map(e -> r.getMethodParameter().getParameterName() + ": " + e.getDefaultMessage()))
+                .collect(Collectors.joining("; "));
+        return cuerpo(HttpStatus.BAD_REQUEST,
+                detalle.isBlank() ? "Hay parametros invalidos en la peticion." : "Parametros invalidos: " + detalle + ".",
+                req);
     }
 
     /** Validaciones jakarta (@NotBlank, @Size...) declaradas en los Request. */

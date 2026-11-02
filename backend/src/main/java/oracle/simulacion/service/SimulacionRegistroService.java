@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import oracle.common.config.Transacciones;
 import oracle.common.exception.ConflictoException;
+import oracle.common.exception.SolicitudInvalidaException;
 import oracle.common.exception.LimiteExcedidoException;
 import oracle.common.exception.RecursoNoEncontradoException;
 import oracle.common.response.ApiResponse;
@@ -31,6 +32,8 @@ import oracle.common.support.Auditoria;
 import oracle.common.support.Filtros;
 import oracle.common.support.Trazas;
 import oracle.simulacion.model.ArchivoExcel;
+import oracle.simulacion.model.ParametroChute;
+import oracle.simulacion.model.SimulacionConfig;
 import oracle.simulacion.repository.ArchivoExcelRepository;
 import oracle.simulacion.repository.ResumenRutasArchivo;
 import oracle.simulacion.repository.RutaProyeccionRepository;
@@ -54,8 +57,6 @@ import reactor.core.scheduler.Schedulers;
 public class SimulacionRegistroService {
 
   private static final int MAX_TAMANO_PAGINA = 100;
-  private static final BigDecimal VELOCIDAD_INICIAL = new BigDecimal("100.00");
-  private static final int OPERARIOS_INICIALES = 1;
   private static final String COLOR_INICIAL = "#1d63ed";
   /**
    * Cargas que se procesan a la vez por instancia. En Render free (0,1 vCPU, 512 MB) dos cargas
@@ -233,7 +234,9 @@ public class SimulacionRegistroService {
                     () ->
                         transacciones.ejecutar(
                             () -> {
-                              ArchivoExcel archivo = buscar(id);
+                              // Con bloqueo: un balanceo en curso sobre el mismo
+                              // registro termina antes y su estado no se pisa.
+                              ArchivoExcel archivo = buscarBloqueado(id);
                               archivo.setNombreRegistro(req.nombreRegistro().trim());
                               archivo.setEtiqueta(normalizarEtiqueta(req.etiqueta()));
                               archivo.setColorHex(normalizarColor(req.colorHex()));
@@ -369,15 +372,19 @@ public class SimulacionRegistroService {
     Map<String, Long> chutes =
         lotes.asegurarChutes(rutas.stream().map(SimulacionExcel.FilaRuta::chute).toList());
 
-    lotes.insertarConfig(archivoId, VELOCIDAD_INICIAL, chutes.size(), actor);
+    lotes.insertarConfig(archivoId, SimulacionConfig.VELOCIDAD_INICIAL, chutes.size(), actor);
     lotes.insertarParametrosCluster(archivoId, clusters.values());
-    lotes.insertarParametrosChute(archivoId, chutes.values(), OPERARIOS_INICIALES);
+    lotes.insertarParametrosChute(archivoId, chutes.values(), ParametroChute.OPERARIOS_INICIALES);
     lotes.insertarRutas(archivoId, rutas, clusters, chutes);
     return guardado;
   }
 
   private ArchivoExcel buscar(Long id) {
     return archivoRepo.findById(id).orElseThrow(() -> noExiste(id));
+  }
+
+  private ArchivoExcel buscarBloqueado(Long id) {
+    return archivoRepo.bloquear(id).orElseThrow(() -> noExiste(id));
   }
 
   private static RecursoNoEncontradoException noExiste(Long id) {
@@ -416,7 +423,7 @@ public class SimulacionRegistroService {
     }
     String limpio = color.trim();
     if (!limpio.matches("^#[0-9a-fA-F]{6}$")) {
-      throw new ConflictoException("El color debe tener formato #RRGGBB.");
+      throw new SolicitudInvalidaException("El color debe tener formato #RRGGBB.");
     }
     return limpio.toLowerCase(Locale.ROOT);
   }

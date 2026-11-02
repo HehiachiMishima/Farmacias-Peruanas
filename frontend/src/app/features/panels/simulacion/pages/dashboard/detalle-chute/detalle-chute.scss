@@ -32,6 +32,11 @@
     color: var(--text);
   }
 
+  &__rutas {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
   &__clusters {
     font-weight: 600;
     color: var(--text-2);

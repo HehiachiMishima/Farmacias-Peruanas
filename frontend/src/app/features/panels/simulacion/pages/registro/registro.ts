@@ -297,6 +297,8 @@ export class SimulacionRegistro {
               'Revisa la lista antes de reintentar',
               'La carga tardó más de lo esperado y pudo haberse completado.',
             );
+            // Igual que en Configuración: se cierra para no reenviar el mismo archivo.
+            this.cerrarSubida();
             this.cargarDesde(1);
           }
         },

@@ -110,6 +110,8 @@ export class SimulacionDetalleChute {
   readonly formatearHoras = formatearHoras;
 
   readonly texto = signal('');
+  /** Lo que muestra el buscador; el filtro se aplica tras la pausa de escritura. */
+  readonly textoBusqueda = signal('');
   readonly tipo = signal<TipoFiltro>('');
   readonly clusterId = signal<number | null>(null);
   readonly soloCambios = signal(false);
@@ -239,7 +241,7 @@ export class SimulacionDetalleChute {
     ];
   });
 
-  /** Chutes que siguen juntando CL1 y CL2 tras el balanceo (no debería pasar). */
+  /** Chutes que hoy juntan CL1 y CL2: sin balancear o sin otro chute libre para separarlos. */
   readonly mezclados = computed(() => this.chutes().filter((chute) => chute.mezclaBalanceada));
 
   constructor() {
@@ -274,6 +276,7 @@ export class SimulacionDetalleChute {
   }
 
   buscar(texto: string): void {
+    this.textoBusqueda.set(texto);
     this.busqueda$.next(texto);
   }
 
@@ -299,6 +302,7 @@ export class SimulacionDetalleChute {
 
   private reiniciarFiltros(): void {
     this.busqueda$.next('');
+    this.textoBusqueda.set('');
     this.texto.set('');
     this.tipo.set('');
     this.clusterId.set(null);
@@ -387,17 +391,10 @@ export class SimulacionDetalleChute {
       : { texto: `Llegó de ${ruta.chuteOriginal}`, tipo: 'llega' };
   }
 
-  /**
-   * La ruta salió de un chute que juntaba CL1 y CL2 y su cluster ya no está
-   * allí: es la separación que obliga la regla, no un ajuste de tiempos.
-   */
+  /** La ruta salió de su chute para separar CL1 y CL2 (no por un ajuste de tiempos). */
   private separaMezcla(ruta: RutaSimulacion): boolean {
-    const origen = this.porId().get(ruta.chuteOriginalId);
     return (
-      !!origen &&
-      origen.mezclaOriginal &&
-      !origen.mezclaBalanceada &&
-      !origen.clustersBalanceado.includes(ruta.cluster)
+      this.porId().get(ruta.chuteOriginalId)?.clustersSeparados.includes(ruta.cluster) ?? false
     );
   }
 }

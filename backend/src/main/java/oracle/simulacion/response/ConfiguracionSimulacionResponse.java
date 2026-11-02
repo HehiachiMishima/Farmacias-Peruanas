@@ -12,6 +12,10 @@ public record ConfiguracionSimulacionResponse(
     ArchivoSimulacionResponse archivo,
     BigDecimal velocidadBase,
     Integer operariosMaximos,
+    /** Máximo por chute definido por el usuario; nulo = reparto parejo. */
+    Integer operariosPorChute,
+    /** Tope por chute que aplica el balanceo (el definido o el reparto parejo). */
+    int topePorChute,
     List<ClusterParametroResponse> clusters,
     List<ChuteParametroResponse> chutes,
     List<CargaSimulacionResponse> carga,

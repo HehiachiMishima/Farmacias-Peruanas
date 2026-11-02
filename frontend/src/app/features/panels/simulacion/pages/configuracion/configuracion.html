@@ -53,6 +53,7 @@
         type="number"
         class="ui-input"
         min="0.01"
+        [max]="limitesValidos.velocidad"
         step="any"
         inputmode="decimal"
         [value]="velocidad()"
@@ -68,6 +69,7 @@
         type="number"
         class="ui-input"
         min="1"
+        [max]="limitesValidos.operariosTotal"
         step="1"
         inputmode="numeric"
         [value]="operariosMaximos()"
@@ -76,6 +78,32 @@
       />
       <span class="config-panel__ayuda" [class.config-panel__ayuda--alerta]="excedeMaximo()">
         {{ formatearNumero(operariosAsignados()) }} asignados en los chutes
+      </span>
+    </div>
+    <div class="config-panel__campo">
+      <label class="ui-label" for="config-por-chute">Máximo por chute</label>
+      <input
+        id="config-por-chute"
+        type="number"
+        class="ui-input"
+        min="1"
+        [max]="limitesValidos.operariosPorChute"
+        step="1"
+        inputmode="numeric"
+        [placeholder]="'Automático: ' + topePorChute()"
+        [value]="operariosPorChute() ?? ''"
+        [disabled]="!config() || !puedeModificar() || ocupado()"
+        (change)="setOperariosPorChute($event)"
+      />
+      <span
+        class="config-panel__ayuda"
+        [class.config-panel__ayuda--alerta]="chutesSobreTope().length > 0"
+      >
+        @if (operariosPorChute() === null) {
+          Opcional · vacío reparte el máximo: {{ formatearNumero(topePorChute()) }} por chute
+        } @else {
+          El balanceo no pondrá más de {{ formatearNumero(topePorChute()) }} en un chute
+        }
       </span>
     </div>
   </div>
@@ -179,6 +207,24 @@
         operarios, no añadir. Sube el máximo si quieres que pueda sumar operarios.
       </p>
     }
+    @if (chutesSobreTope().length > 0) {
+      <p class="config-aviso">
+        <ui-icon name="alerta" [size]="15" />
+        {{
+          chutesSobreTope()
+            .map((c) => c.nombre + ' (' + c.operarios + ')')
+            .join(', ')
+        }}
+        pasa(n) el máximo de {{ operariosPorChute() }} por chute: ajústalos o sube el máximo para
+        guardar.
+      </p>
+    } @else if (topePorChute() <= 1) {
+      <p class="config-aviso config-aviso--info">
+        <ui-icon name="info" [size]="15" />
+        Con un tope de 1 operario por chute el balanceo no sube operarios en ningún chute: solo
+        mueve rutas. Define el máximo por chute o sube el máximo de operarios.
+      </p>
+    }
     @for (mezcla of config()?.mezclas ?? []; track mezcla.id) {
       <p class="config-aviso">
         <ui-icon name="alerta" [size]="15" />
@@ -273,6 +319,7 @@
               type="number"
               class="ui-input"
               min="0"
+              [max]="limitesValidos.horas"
               step="0.1"
               inputmode="decimal"
               [value]="cluster.limite"
@@ -314,7 +361,7 @@
           class="ui-input"
           placeholder="Buscar ruta por código…"
           aria-label="Buscar ruta por código"
-          [value]="filtroTexto()"
+          [value]="textoBusqueda()"
           (input)="buscarRuta($any($event.target).value)"
         />
       </div>
@@ -441,6 +488,7 @@
                       type="number"
                       class="ui-input ops-input"
                       min="1"
+                      [max]="operariosPorChute() ?? limitesValidos.operariosPorChute"
                       step="1"
                       inputmode="numeric"
                       [value]="getOperarios(ruta.chuteId)"
@@ -508,9 +556,9 @@
 
 <ui-modal
   [abierto]="historialAbierto()"
-  ancho="lg"
-  titulo="Cambios del balanceo"
-  subtitulo="Últimos movimientos de rutas, operarios reasignados y añadidos sobre el registro."
+  ancho="xl"
+  titulo="Cambios del registro"
+  subtitulo="Cada ejecución del balanceo y cada movimiento manual, del más reciente al más antiguo."
   (cerrar)="historialAbierto.set(false)"
 >
   @if (historialCargando()) {
@@ -522,44 +570,112 @@
       mensaje="Todavía no se han movido rutas ni reasignado o añadido operarios."
     />
   } @else {
-    <div class="ui-table-wrap">
-      <table class="ui-table">
-        <thead>
-          <tr>
-            <th>Acción</th>
-            <th>Ruta</th>
-            <th>Detalle</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (cambio of historial(); track cambio.id) {
-            <tr>
-              @if (cambio.tipoAccion === 'MOVER_RUTA') {
-                <td><span class="ui-badge ui-badge--warning">Ruta movida</span></td>
-                <td class="u-mono">{{ cambio.ruta ?? '—' }}</td>
-                <td>
-                  De <strong>{{ cambio.chuteOrigen }}</strong> a
-                  <strong>{{ cambio.chuteDestino }}</strong>
-                </td>
-              } @else if (cambio.tipoAccion === 'MOVER_OPERARIO') {
-                <td><span class="ui-badge ui-badge--info">Operario reasignado</span></td>
-                <td class="u-muted">—</td>
-                <td>
-                  De <strong>{{ cambio.chuteOrigen }}</strong> a
-                  <strong>{{ cambio.chuteDestino }}</strong>
-                </td>
-              } @else {
-                <td><span class="ui-badge ui-badge--success">Operario +1</span></td>
-                <td class="u-muted">—</td>
-                <td>
-                  En <strong>{{ cambio.chuteModificado }}</strong> (cuello de botella)
-                </td>
+    @for (grupo of historialAgrupado(); track grupo.clave) {
+      <section class="historial-grupo">
+        <header class="historial-grupo__head">
+          <div>
+            <h3 class="historial-grupo__titulo">{{ grupo.titulo }}</h3>
+            <p class="historial-grupo__meta">
+              {{ grupo.fecha | date: 'dd/MM/yyyy HH:mm' }} ·
+              {{ grupo.creadoPor | actorLabel }}
+            </p>
+          </div>
+          <ul class="historial-grupo__resumen">
+            @if (grupo.rutas > 0) {
+              <li>{{ formatearNumero(grupo.rutas) }} ruta(s) movida(s)</li>
+            }
+            @if (grupo.separaciones > 0) {
+              <li>{{ formatearNumero(grupo.separaciones) }} por separar CL1/CL2</li>
+            }
+            @if (grupo.reasignados > 0) {
+              <li>{{ formatearNumero(grupo.reasignados) }} operario(s) reasignado(s)</li>
+            }
+            @if (grupo.anadidos > 0) {
+              <li>{{ formatearNumero(grupo.anadidos) }} operario(s) añadido(s)</li>
+            }
+          </ul>
+        </header>
+        <div class="ui-table-wrap">
+          <table class="ui-table">
+            <thead>
+              <tr>
+                <th>Acción</th>
+                <th>Ruta</th>
+                <th>Cluster · tipo</th>
+                <th class="num">Bultos</th>
+                <th>Detalle</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (cambio of grupo.cambios; track cambio.id) {
+                <tr>
+                  @switch (cambio.tipoAccion) {
+                    @case ('MOVER_RUTA') {
+                      <td>
+                        <span
+                          class="ui-badge"
+                          [class.ui-badge--success]="cambio.motivo === 'SEPARACION'"
+                          [class.ui-badge--warning]="cambio.motivo !== 'SEPARACION'"
+                        >
+                          {{ cambio.motivo === 'SEPARACION' ? 'Separa CL1/CL2' : 'Ruta movida' }}
+                        </span>
+                      </td>
+                      <td class="u-mono">{{ cambio.ruta ?? '—' }}</td>
+                      <td>
+                        {{ cambio.cluster ?? '—' }}
+                        @if (cambio.tipo) {
+                          · {{ cambio.tipo }}
+                        }
+                      </td>
+                      <td class="num">
+                        {{ cambio.bultos === null ? '—' : formatearNumero(cambio.bultos, 2) }}
+                      </td>
+                      <td>
+                        De <strong>{{ cambio.chuteOrigen }}</strong> a
+                        <strong>{{ cambio.chuteDestino }}</strong>
+                      </td>
+                    }
+                    @case ('MOVER_OPERARIO') {
+                      <td><span class="ui-badge ui-badge--info">Operario reasignado</span></td>
+                      <td class="u-muted">—</td>
+                      <td class="u-muted">—</td>
+                      <td class="num u-muted">—</td>
+                      <td>
+                        <strong>{{ cambio.chuteOrigen }}</strong>
+                        @if (cambio.operariosOrigen !== null) {
+                          ({{ cambio.operariosOrigen + 1 }} → {{ cambio.operariosOrigen }})
+                        }
+                        cede uno a <strong>{{ cambio.chuteDestino }}</strong>
+                        @if (cambio.operariosDestino !== null) {
+                          ({{ cambio.operariosDestino - 1 }} → {{ cambio.operariosDestino }})
+                        }
+                      </td>
+                    }
+                    @case ('AÑADIR_OPERARIO') {
+                      <td><span class="ui-badge ui-badge--success">Operario añadido</span></td>
+                      <td class="u-muted">—</td>
+                      <td class="u-muted">—</td>
+                      <td class="num u-muted">—</td>
+                      <td>
+                        <strong>{{ cambio.chuteModificado }}</strong>
+                        @if (cambio.operariosDestino !== null) {
+                          ({{ cambio.operariosDestino - 1 }} → {{ cambio.operariosDestino }})
+                        }
+                        · cuello de botella
+                      </td>
+                    }
+                    @default {
+                      <td><span class="ui-badge ui-badge--neutral">Otro cambio</span></td>
+                      <td colspan="4" class="u-muted">{{ cambio.tipoAccion }}</td>
+                    }
+                  }
+                </tr>
               }
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
   }
   <div modal-footer class="modal-foot">
     <button type="button" class="ui-btn ui-btn--secondary" (click)="historialAbierto.set(false)">
@@ -584,11 +700,17 @@
       <label class="ui-label" for="mover-destino">Chute destino</label>
       <ui-select-buscable
         campoId="mover-destino"
-        [opciones]="opcionesDestino()"
+        [opciones]="destinosMover().opciones"
         [valor]="chuteDestino()"
         placeholder="Elegir chute…"
         (valorCambia)="chuteDestino.set($event)"
       />
+      @if (destinosMover().excluidos.length > 0) {
+        <span class="hint">
+          No se ofrecen {{ destinosMover().excluidos.join(', ') }}: ya tienen rutas de un cluster
+          que no puede compartir chute con {{ ruta.cluster }}.
+        </span>
+      }
     </div>
   }
   <div modal-footer class="modal-foot">
@@ -675,6 +797,7 @@
         class="ui-input"
         [class.ui-input--invalid]="campoInvalido('nombreRegistro')"
         [formControl]="formulario.controls.nombreRegistro"
+        maxlength="150"
         placeholder="Ej: Proyección enero"
       />
       @if (campoInvalido('nombreRegistro')) {
@@ -713,8 +836,8 @@
   </div>
 
   <p class="hint">
-    Columnas requeridas: COD., RUTA, CLUSTER, CHUTE, TIPO (B2C o B2B) y BULTOS PROMEDIO. También se
-    aceptan CSV.
+    Columnas requeridas: RUTA, CLUSTER, CHUTE, TIPO (B2C o B2B) y BULTOS PROMEDIO. Opcionales: COD.,
+    UNIDADES y LÍNEAS. También se aceptan CSV.
   </p>
 
   <div modal-footer class="modal-foot">
@@ -782,41 +905,44 @@
       <ol class="guia__lista">
         <li>
           Primero separa <strong>CL1 y CL2</strong>: si comparten un chute, saca las rutas del
-          cluster con menos rutas allí y las lleva al chute compatible más rápido. Esta regla se
-          cumple aunque no mejore ningún tiempo.
+          cluster con menos rutas allí (si ese no tiene adónde ir, prueba con el otro) y las lleva
+          al chute compatible más rápido. Esta regla se cumple aunque no mejore ningún tiempo.
         </li>
         <li>
           Busca el cluster con mayor <strong>déficit</strong> (tiempo de cierre − límite). Si ningún
-          cluster supera su límite, termina.
+          cluster supera su límite, termina. Un cluster que ya no se puede mejorar se aparta y se
+          sigue con los demás.
         </li>
         <li>
           Identifica el <strong>chute cuello de botella</strong>: el más lento de ese cluster.
         </li>
         <li>
-          Toma la <strong>ruta más grande</strong> (más bultos) del cuello y evalúa moverla al chute
-          más rápido disponible, de cualquier cluster salvo que junte CL1 con CL2.
+          Prueba las rutas del cuello <strong>de mayor a menor</strong> (hasta 25) y evalúa moverlas
+          al chute más rápido disponible, de cualquier cluster salvo que junte CL1 con CL2.
         </li>
         <li>
-          La mueve solo si el destino, aun recibiendo esa ruta, sigue quedando por debajo del tiempo
+          Mueve la primera que cabe: el destino, aun recibiéndola, queda por debajo del tiempo
           actual del cuello y no deja a otro cluster de ese chute fuera de su límite. Así el
           problema no se traslada a otro chute.
         </li>
         <li>
-          Si no existe una ruta que mejore la situación, busca un
-          <strong>operario con holgura</strong>
-          en otro chute y lo reasigna al cuello de botella. Solo cede quien puede hacerlo sin que su
-          cluster empeore.
+          Si ninguna ruta cabe, busca un <strong>operario con holgura</strong> en otro chute y lo
+          reasigna al cuello de botella, si el cuello no está ya en el máximo por chute. Solo cede
+          quien, con un operario menos, sigue dentro de su límite y no queda más lento que el cuello
+          actual.
         </li>
         <li>
           Si nadie puede ceder un operario, añade <strong>1 operario</strong> al cuello de botella,
-          únicamente si todavía hay cupo dentro del máximo disponible del registro.
+          únicamente si queda cupo en el máximo de operarios y el chute no llegó a su máximo por
+          chute.
         </li>
         <li>Repite el ciclo hasta que todos los clusters cumplan o hasta agotar los ajustes.</li>
       </ol>
       <p class="guia__texto">
-        El proceso tiene tres topes de seguridad: 1.000 iteraciones por ejecución, 50 operarios por
-        chute y el máximo de operarios disponibles que definas para el registro. Al agotar el máximo
-        global el balanceo se detiene y avisa que subas el tope o revises los límites.
+        Los topes son: 1.000 ajustes por ejecución, el máximo de operarios del registro y el máximo
+        por chute. Si dejas vacío el máximo por chute, se reparte el máximo de operarios entre los
+        chutes (redondeado hacia arriba). Al terminar, el mensaje nombra los clusters que siguen
+        fuera de su límite.
       </p>
     </section>
 
@@ -829,8 +955,8 @@
           <strong>antes vs. después</strong> aunque el historial se borre.
         </li>
         <li>
-          «Restablecer» devuelve todas las rutas a su chute original y deshace las reasignaciones y
-          operarios añadidos por el balanceo.
+          «Restablecer» devuelve todas las rutas a su chute original y cada chute a los operarios
+          que fijaste tú (al cargar, 1).
         </li>
         <li>
           Mover una ruta a mano también se refleja en el comparativo, y no se permite llevarla a un

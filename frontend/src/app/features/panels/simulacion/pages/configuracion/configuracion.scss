@@ -11,11 +11,15 @@
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
 
-  /* Tres campos del mismo ancho: etiqueta, control y ayuda alineados en filas. */
+  /* Cuatro campos del mismo ancho: etiqueta, control y ayuda alineados en filas. */
   &__campos {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: var(--space-4);
+
+    @include bp.down(lg) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   &__campo {
@@ -330,6 +334,65 @@
   color: var(--cluster-color, var(--accent));
   background: color-mix(in srgb, var(--cluster-color, var(--accent)) 13%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--cluster-color, var(--accent)) 30%, var(--border));
+}
+
+/* Historial: un bloque por ejecución del balanceo o movimiento manual. */
+.historial-grupo {
+  & + & {
+    margin-top: var(--space-5);
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--border);
+  }
+
+  &__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-4);
+    margin-bottom: var(--space-3);
+  }
+
+  &__titulo {
+    margin: 0;
+    font-size: var(--fs-base);
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  &__meta {
+    margin: 2px 0 0;
+    font-size: var(--fs-xs);
+    color: var(--text-3);
+  }
+
+  &__resumen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: var(--fs-xs);
+      font-weight: 700;
+      color: var(--text-2);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+    }
+  }
+}
+
+/* Texto de ayuda bajo un campo o en un modal (destinos excluidos, columnas del Excel). */
+.hint {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-3);
 }
 
 .mover-texto {

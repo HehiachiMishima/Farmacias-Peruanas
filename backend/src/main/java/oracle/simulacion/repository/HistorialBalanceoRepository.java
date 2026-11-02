@@ -9,7 +9,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface HistorialBalanceoRepository extends JpaRepository<HistorialBalanceo, Long> {
 
-  List<HistorialBalanceo> findByArchivoIdOrderByIdAsc(Long archivoId);
 
   /** Últimos movimientos para el historial visible (acotado). */
   List<HistorialBalanceo> findTop500ByArchivoIdOrderByIdDesc(Long archivoId);

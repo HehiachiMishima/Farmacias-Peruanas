@@ -777,12 +777,16 @@ public final class SimulacionExcel {
     }
 
     private void acumular(int numero, Fila fila) {
+      // Sin RUTA no es una ruta: filas vacías o de totales al pie de la hoja.
       String ruta = nombre(texto(fila, iRuta));
       if (ruta.isEmpty()) {
         return;
       }
       long bultos = centimos(fila, iBultos, numero, "BULTOS");
-      if (bultos == 0) {
+      long unidades = centimos(fila, iUnidades, numero, "UNIDADES");
+      long lineas = centimos(fila, iLineas, numero, "LINEAS");
+      // Una fila con 0 bultos pero con unidades o líneas sí suma a su ruta.
+      if (bultos == 0 && unidades == 0 && lineas == 0) {
         return;
       }
       String cluster = nombre(texto(fila, iCluster));
@@ -800,8 +804,6 @@ public final class SimulacionExcel {
       exigirLongitud(ruta, "RUTA", numero);
       exigirLongitud(cluster, "CLUSTER", numero);
       exigirLongitud(chute, "CHUTE", numero);
-      long unidades = centimos(fila, iUnidades, numero, "UNIDADES");
-      long lineas = centimos(fila, iLineas, numero, "LINEAS");
       String cod = texto(fila, iCod);
 
       String claveRuta = clave(ruta) + '\u0000' + tipo.name();
@@ -823,12 +825,18 @@ public final class SimulacionExcel {
         }
         throw sinCabecera();
       }
-      if (porRuta.isEmpty()) {
+      // Una ruta sin bultos no tiene carga que balancear.
+      List<FilaRuta> rutas = new ArrayList<>(porRuta.size());
+      porRuta.values().forEach(
+          (acumulado) -> {
+            if (acumulado.bultos > 0) {
+              rutas.add(acumulado.aFila());
+            }
+          });
+      if (rutas.isEmpty()) {
         throw ArchivoInvalidoException.contenido(
             "El archivo no contiene rutas con bultos mayores a cero.");
       }
-      List<FilaRuta> rutas = new ArrayList<>(porRuta.size());
-      porRuta.values().forEach((acumulado) -> rutas.add(acumulado.aFila()));
       return new Analisis(List.copyOf(rutas), BigDecimal.valueOf(totalBultos, 2));
     }
 

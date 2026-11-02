@@ -1,5 +1,8 @@
 package oracle.simulacion.response;
 
 import java.math.BigDecimal;
+import java.util.List;
 
-public record ClusterParametroResponse(Long id, String nombre, BigDecimal limiteHoras) {}
+/** Límite de un cluster y los clusters con los que no puede compartir chute. */
+public record ClusterParametroResponse(
+    Long id, String nombre, BigDecimal limiteHoras, List<Long> incompatibles) {}

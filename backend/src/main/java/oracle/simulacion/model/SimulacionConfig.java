@@ -16,6 +16,9 @@ import oracle.common.model.Auditable;
 @Setter
 public class SimulacionConfig extends Auditable {
 
+  /** Bultos por hora por operario con los que arranca un registro. */
+  public static final BigDecimal VELOCIDAD_INICIAL = new BigDecimal("100.00");
+
   @Id
   @Column(name = "archivo_id")
   private Long archivoId;
@@ -30,4 +33,11 @@ public class SimulacionConfig extends Auditable {
    */
   @Column(name = "operarios_maximos")
   private Integer operariosMaximos;
+
+  /**
+   * Máximo de operarios en un chute. Si falta, el balanceo reparte parejo: el
+   * tope global entre el número de chutes, redondeado hacia arriba.
+   */
+  @Column(name = "operarios_por_chute")
+  private Integer operariosPorChute;
 }

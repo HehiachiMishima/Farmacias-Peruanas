@@ -1840,6 +1840,32 @@ $pf-entrada: cubic-bezier(0.7, 0, 0.84, 0);
   transform: rotate(-90deg);
 }
 
+/* Quitar la selección (opción «Todos»): solo con [limpiable] y un valor elegido. */
+.ui-selbusc__limpiar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-3);
+  background: transparent;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text);
+    background: var(--surface-2);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+  }
+}
+
 .ui-selbusc__lista {
   position: absolute;
   z-index: 40;

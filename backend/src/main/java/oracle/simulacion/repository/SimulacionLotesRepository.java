@@ -1,6 +1,8 @@
 package oracle.simulacion.repository;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -8,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
+import oracle.simulacion.model.HistorialBalanceo;
 import oracle.simulacion.service.SimulacionExcel;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -69,14 +72,52 @@ public class SimulacionLotesRepository {
   }
 
   public void insertarParametrosChute(Long archivoId, Collection<Long> chuteIds, int operarios) {
+    // Los operarios iniciales son también la base que deja «Restablecer».
     jdbc.batchUpdate(
-        "INSERT INTO parametros_chutes (archivo_id, chute_id, operarios) VALUES (?, ?, ?)",
+        """
+        INSERT INTO parametros_chutes (archivo_id, chute_id, operarios, operarios_original)
+        VALUES (?, ?, ?, ?)
+        """,
         new ArrayList<>(chuteIds),
         LOTE,
         (ps, chuteId) -> {
           ps.setLong(1, archivoId);
           ps.setLong(2, chuteId);
           ps.setInt(3, operarios);
+          ps.setInt(4, operarios);
+        });
+  }
+
+  /**
+   * Historial del balanceo en lotes: con IDENTITY, JPA insertaría fila a fila
+   * y una ejecución larga podría pasar el tiempo límite de la petición.
+   */
+  public void insertarHistorial(List<HistorialBalanceo> logs) {
+    if (logs.isEmpty()) {
+      return;
+    }
+    jdbc.batchUpdate(
+        """
+        INSERT INTO historial_balanceo
+            (archivo_id, tipo_accion, ruta_id, chute_origen_id, chute_destino_id,
+             chute_modificado_id, motivo, operarios_origen, operarios_destino,
+             creado_por, creado_en)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        logs,
+        LOTE,
+        (ps, log) -> {
+          ps.setLong(1, log.getArchivoId());
+          ps.setString(2, log.getTipoAccion());
+          ps.setObject(3, log.getRutaId(), Types.BIGINT);
+          ps.setObject(4, log.getChuteOrigenId(), Types.BIGINT);
+          ps.setObject(5, log.getChuteDestinoId(), Types.BIGINT);
+          ps.setObject(6, log.getChuteModificadoId(), Types.BIGINT);
+          ps.setString(7, log.getMotivo());
+          ps.setObject(8, log.getOperariosOrigen(), Types.INTEGER);
+          ps.setObject(9, log.getOperariosDestino(), Types.INTEGER);
+          ps.setLong(10, log.getCreadoPor());
+          ps.setTimestamp(11, Timestamp.from(log.getCreadoEn()));
         });
   }
 

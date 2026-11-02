@@ -38,7 +38,11 @@ import oracle.simulacion.repository.ParametroChuteRepository;
 import oracle.simulacion.repository.ParametroClusterRepository;
 import oracle.simulacion.repository.RutaProyeccionRepository;
 import oracle.simulacion.repository.SimulacionConfigRepository;
+import oracle.simulacion.repository.SimulacionLotesRepository;
+import oracle.simulacion.request.ChuteOperariosRequest;
+import oracle.simulacion.request.ConfiguracionActualizarRequest;
 import oracle.simulacion.request.LadoChute;
+import oracle.simulacion.request.MoverRutaRequest;
 import oracle.simulacion.request.Limites;
 import oracle.simulacion.response.BalanceoResponse;
 import oracle.simulacion.response.ChuteComparativoResponse;
@@ -66,6 +70,7 @@ class SimulacionBalanceoTest {
   @Mock private ParametroChuteRepository parametroChuteRepo;
   @Mock private RutaProyeccionRepository rutaRepo;
   @Mock private HistorialBalanceoRepository historialRepo;
+  @Mock private SimulacionLotesRepository lotes;
   @Mock private Transacciones transacciones;
 
   private SimulacionConfiguracionService servicio;
@@ -85,6 +90,7 @@ class SimulacionBalanceoTest {
             parametroChuteRepo,
             rutaRepo,
             historialRepo,
+            lotes,
             transacciones);
     lenient()
         .when(transacciones.ejecutar(any()))
@@ -109,7 +115,6 @@ class SimulacionBalanceoTest {
     RutaProyeccion cl1B = ruta(2L, 1L, 1L, "3031", "100");
     RutaProyeccion cl2 = ruta(3L, 2L, 1L, "3032", "50");
     when(rutaRepo.findByArchivoIdOrderByIdAsc(10L)).thenReturn(List.of(cl1A, cl1B, cl2));
-    when(historialRepo.saveAll(any())).thenReturn(List.of());
 
     BalanceoResponse resultado = servicio.balancear(10L).block().datos();
 
@@ -145,10 +150,11 @@ class SimulacionBalanceoTest {
   void noMueveUnaRutaSiDejaAOtroClusterFueraDeSuLimite() {
     ArchivoExcel archivo = archivo();
     // CL1: 500 bultos / (100 × 2) = 2,5 h con límite 2 h. CHUTE 2 es de CL3
-    // (1,5 h, límite 1,6 h): recibir la ruta de 300 lo dejaría en 3 h.
+    // (1,5 h, límite 1,6 h): recibir la ruta de 300 lo dejaría en 3 h. Con máximo
+    // 10 hay cupo para un operario más (tope automático 10 ÷ 2 = 5 por chute).
     prepararRegistro(
         archivo,
-        configuracion("100", null),
+        configuracion("100", 10),
         List.of(limite(1L, "2.00"), limite(3L, "1.60")),
         List.of(operarios(1L, 2), operarios(2L, 2)),
         List.of(cluster(1L, "CL1"), cluster(3L, "CL3")),
@@ -156,7 +162,6 @@ class SimulacionBalanceoTest {
     RutaProyeccion grande = ruta(1L, 1L, 1L, "3030", "300");
     when(rutaRepo.findByArchivoIdOrderByIdAsc(10L))
         .thenReturn(List.of(grande, ruta(2L, 1L, 1L, "3031", "200"), ruta(3L, 3L, 2L, "4040", "300")));
-    when(historialRepo.saveAll(any())).thenReturn(List.of());
 
     BalanceoResponse resultado = servicio.balancear(10L).block().datos();
 
@@ -197,7 +202,9 @@ class SimulacionBalanceoTest {
   void restablecerDevuelveRutasYOperariosAlOriginal() {
     ArchivoExcel archivo = archivo();
     archivo.setEstado(ArchivoExcel.ESTADO_BALANCEADO);
-    ParametroChute chute1 = operarios(1L, 2);
+    // Original 1 y 2. El balanceo pasó uno de CHUTE 2 a CHUTE 1 y añadió otro a CHUTE 2.
+    ParametroChute chute1 = operarios(1L, 1);
+    chute1.setOperarios(2);
     ParametroChute chute2 = operarios(2L, 2);
     prepararRegistro(
         archivo,
@@ -206,16 +213,6 @@ class SimulacionBalanceoTest {
         List.of(chute1, chute2),
         List.of(cluster(1L, "CL1")),
         List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
-    // Original: 1 y 2 operarios. El balanceo pasó uno de CHUTE 2 a CHUTE 1 y
-    // luego añadió otro a CHUTE 2.
-    HistorialBalanceo reasignado = new HistorialBalanceo();
-    reasignado.setTipoAccion(HistorialBalanceo.ACCION_MOVER_OPERARIO);
-    reasignado.setChuteOrigenId(2L);
-    reasignado.setChuteDestinoId(1L);
-    HistorialBalanceo anadido = new HistorialBalanceo();
-    anadido.setTipoAccion(HistorialBalanceo.ACCION_ANADIR_OPERARIO);
-    anadido.setChuteModificadoId(2L);
-    when(historialRepo.findByArchivoIdOrderByIdAsc(10L)).thenReturn(List.of(reasignado, anadido));
 
     servicio.restablecer(10L).block();
 
@@ -283,9 +280,11 @@ class SimulacionBalanceoTest {
     ParametroChute parametroChute1 = new ParametroChute();
     parametroChute1.setId(new ParametroChuteId(10L, 1L));
     parametroChute1.setOperarios(2);
+    parametroChute1.setOperariosOriginal(2);
     ParametroChute parametroChute2 = new ParametroChute();
     parametroChute2.setId(new ParametroChuteId(10L, 2L));
     parametroChute2.setOperarios(2);
+    parametroChute2.setOperariosOriginal(2);
 
     rutaGrande = ruta(1L, 1L, 1L, "3030", "300");
     rutaPequena = ruta(2L, 1L, 1L, "3031", "200");
@@ -300,7 +299,6 @@ class SimulacionBalanceoTest {
         .thenReturn(List.of(rutaGrande, rutaPequena, rutaChuteRapido));
     when(clusterRepo.findAllById(any())).thenReturn(List.of(cluster));
     when(chuteRepo.findAllById(any())).thenReturn(List.of(chute1, chute2));
-    when(historialRepo.saveAll(any())).thenReturn(List.of());
     when(archivoRepo.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
 
     Mono<ApiResponse<BalanceoResponse>> respuesta = servicio.balancear(10L);
@@ -341,9 +339,11 @@ class SimulacionBalanceoTest {
     ParametroChute parametroChute1 = new ParametroChute();
     parametroChute1.setId(new ParametroChuteId(10L, 1L));
     parametroChute1.setOperarios(2);
+    parametroChute1.setOperariosOriginal(2);
     ParametroChute parametroChute2 = new ParametroChute();
     parametroChute2.setId(new ParametroChuteId(10L, 2L));
     parametroChute2.setOperarios(3);
+    parametroChute2.setOperariosOriginal(3);
 
     RutaProyeccion cuello = ruta(1L, 1L, 1L, "3030", "300");
     RutaProyeccion rapida = ruta(2L, 1L, 2L, "3031", "200");
@@ -356,7 +356,6 @@ class SimulacionBalanceoTest {
     when(rutaRepo.findByArchivoIdOrderByIdAsc(10L)).thenReturn(List.of(cuello, rapida));
     when(clusterRepo.findAllById(any())).thenReturn(List.of(cluster));
     when(chuteRepo.findAllById(any())).thenReturn(List.of(chute1, chute2));
-    when(historialRepo.saveAll(any())).thenReturn(List.of());
     when(archivoRepo.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
 
     BalanceoResponse resultado = servicio.balancear(10L).block().datos();
@@ -388,6 +387,7 @@ class SimulacionBalanceoTest {
     ParametroChute parametroChute = new ParametroChute();
     parametroChute.setId(new ParametroChuteId(10L, 1L));
     parametroChute.setOperarios(2);
+    parametroChute.setOperariosOriginal(2);
 
     when(archivoRepo.bloquear(10L)).thenReturn(Optional.of(archivo));
     when(configRepo.findById(10L)).thenReturn(Optional.of(config));
@@ -424,6 +424,7 @@ class SimulacionBalanceoTest {
     ParametroChute parametroChute = new ParametroChute();
     parametroChute.setId(new ParametroChuteId(10L, 1L));
     parametroChute.setOperarios(2);
+    parametroChute.setOperariosOriginal(2);
 
     when(archivoRepo.bloquear(10L)).thenReturn(Optional.of(archivo));
     when(configRepo.findById(10L)).thenReturn(Optional.of(config));
@@ -438,37 +439,217 @@ class SimulacionBalanceoTest {
 
   @Test
   void noSuperaElMaximoDeOperariosPorChute() {
-    ArchivoExcel archivo = new ArchivoExcel();
-    archivo.setId(10L);
-    archivo.setEstado(ArchivoExcel.ESTADO_PROYECCION);
-
-    SimulacionConfig config = new SimulacionConfig();
-    config.setArchivoId(10L);
-    config.setVelocidadBase(new BigDecimal("1"));
-
-    ParametroCluster parametroCluster = new ParametroCluster();
-    parametroCluster.setId(new ParametroClusterId(10L, 1L));
-    parametroCluster.setLimiteHoras(new BigDecimal("0.01"));
-
-    ParametroChute parametroChute = new ParametroChute();
-    parametroChute.setId(new ParametroChuteId(10L, 1L));
-    parametroChute.setOperarios(2);
-
-    when(archivoRepo.bloquear(10L)).thenReturn(Optional.of(archivo));
-    when(configRepo.findById(10L)).thenReturn(Optional.of(config));
-    when(parametroClusterRepo.findByIdArchivoId(10L)).thenReturn(List.of(parametroCluster));
-    when(parametroChuteRepo.findByIdArchivoId(10L)).thenReturn(List.of(parametroChute));
+    ArchivoExcel archivo = archivo();
+    SimulacionConfig config = configuracion("1", 100);
+    config.setOperariosPorChute(5);
+    ParametroChute parametro = operarios(1L, 2);
+    prepararRegistro(
+        archivo,
+        config,
+        List.of(limite(1L, "0.01")),
+        List.of(parametro),
+        List.of(cluster(1L, "CL1")),
+        List.of(chute(1L, "CHUTE 1")));
     when(rutaRepo.findByArchivoIdOrderByIdAsc(10L))
         .thenReturn(List.of(ruta(1L, 1L, 1L, "3030", "100000")));
-    when(clusterRepo.findAllById(any())).thenReturn(List.of());
-    when(chuteRepo.findAllById(any())).thenReturn(List.of());
-    when(historialRepo.saveAll(any())).thenReturn(List.of());
-    when(archivoRepo.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
 
     BalanceoResponse resultado = servicio.balancear(10L).block().datos();
 
-    assertEquals(Limites.MAX_OPERARIOS - 2, resultado.operariosAgregados());
-    assertEquals(Limites.MAX_OPERARIOS, parametroChute.getOperarios());
+    assertEquals(3, resultado.operariosAgregados());
+    assertEquals(5, parametro.getOperarios());
+    assertTrue(resultado.mensaje().contains("tope de 5 por chute"), resultado.mensaje());
+  }
+
+  @Test
+  void sinMaximoPorChuteRepartePorIgualElMaximoGlobal() {
+    ArchivoExcel archivo = archivo();
+    // Máximo 6 entre 2 chutes: tope automático de 3 por chute.
+    ParametroChute lento = operarios(1L, 1);
+    ParametroChute otro = operarios(2L, 1);
+    prepararRegistro(
+        archivo,
+        configuracion("1", 6),
+        List.of(limite(1L, "0.01"), limite(2L, "100")),
+        List.of(lento, otro),
+        List.of(cluster(1L, "CL1"), cluster(2L, "CL3")),
+        List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
+    when(rutaRepo.findByArchivoIdOrderByIdAsc(10L))
+        .thenReturn(List.of(ruta(1L, 1L, 1L, "3030", "100000"), ruta(2L, 2L, 2L, "4040", "1")));
+
+    BalanceoResponse resultado = servicio.balancear(10L).block().datos();
+
+    assertEquals(3, lento.getOperarios());
+    assertEquals(1, otro.getOperarios());
+    assertEquals(2, resultado.operariosAgregados());
+    assertTrue(resultado.mensaje().contains("Siguen fuera de su límite: CL1"), resultado.mensaje());
+  }
+
+  @Test
+  void unClusterSinArregloNoDetieneALosDemas() {
+    ArchivoExcel archivo = archivo();
+    // CL3 no puede bajar de 2 h (ya tiene el tope de 3); CL4 sí cumple con un operario más.
+    SimulacionConfig config = configuracion("100", 10);
+    config.setOperariosPorChute(3);
+    ParametroChute chuteCl3 = operarios(1L, 3);
+    ParametroChute chuteCl4 = operarios(2L, 1);
+    prepararRegistro(
+        archivo,
+        config,
+        List.of(limite(3L, "1"), limite(4L, "1")),
+        List.of(chuteCl3, chuteCl4),
+        List.of(cluster(3L, "CL3"), cluster(4L, "CL4")),
+        List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
+    when(rutaRepo.findByArchivoIdOrderByIdAsc(10L))
+        .thenReturn(List.of(ruta(1L, 3L, 1L, "3030", "600"), ruta(2L, 4L, 2L, "4040", "150")));
+
+    BalanceoResponse resultado = servicio.balancear(10L).block().datos();
+
+    assertEquals(3, chuteCl3.getOperarios());
+    assertEquals(2, chuteCl4.getOperarios());
+    assertEquals(1, resultado.operariosAgregados());
+    assertTrue(resultado.mensaje().contains("Siguen fuera de su límite: CL3"), resultado.mensaje());
+  }
+
+  @Test
+  void separaMoviendoElOtroClusterSiElPrimeroNoTieneDestino() {
+    ArchivoExcel archivo = archivo();
+    // CHUTE 1 junta CL1 (1 ruta) y CL2 (2 rutas). CHUTE 2 es de CL2: no admite CL1, pero sí CL2.
+    prepararRegistro(
+        archivo,
+        configuracion("100", null),
+        List.of(limite(1L, "100"), limite(2L, "100")),
+        List.of(operarios(1L, 1), operarios(2L, 1)),
+        List.of(cluster(1L, "CL1"), cluster(2L, "CL2")),
+        List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
+    RutaProyeccion cl1 = ruta(1L, 1L, 1L, "3030", "10");
+    RutaProyeccion cl2a = ruta(2L, 2L, 1L, "3031", "50");
+    RutaProyeccion cl2b = ruta(3L, 2L, 1L, "3032", "50");
+    when(rutaRepo.findByArchivoIdOrderByIdAsc(10L))
+        .thenReturn(List.of(cl1, cl2a, cl2b, ruta(4L, 2L, 2L, "3033", "5")));
+
+    BalanceoResponse resultado = servicio.balancear(10L).block().datos();
+
+    assertEquals(1L, cl1.getChuteId());
+    assertEquals(2L, cl2a.getChuteId());
+    assertEquals(2L, cl2b.getChuteId());
+    assertEquals(2, resultado.rutasMovidas());
+    assertFalse(resultado.mensaje().contains("No se pudo separar"), resultado.mensaje());
+  }
+
+  @Test
+  void noDiceQueCumplianSiUnClusterQuedaFueraDeLimite() {
+    ArchivoExcel archivo = archivo();
+    // Máximo global = operarios asignados: no hay cupo ni donante, y mover empeora.
+    prepararRegistro(
+        archivo,
+        configuracion("100", 2),
+        List.of(limite(3L, "2"), limite(4L, "2")),
+        List.of(operarios(1L, 1), operarios(2L, 1)),
+        List.of(cluster(3L, "CL3"), cluster(4L, "CL4")),
+        List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
+    when(rutaRepo.findByArchivoIdOrderByIdAsc(10L))
+        .thenReturn(List.of(ruta(1L, 3L, 1L, "3030", "500"), ruta(2L, 4L, 2L, "4040", "200")));
+
+    BalanceoResponse resultado = servicio.balancear(10L).block().datos();
+
+    assertFalse(resultado.mensaje().contains("ya cumplían"), resultado.mensaje());
+    assertTrue(resultado.mensaje().startsWith("No se pudo mejorar"), resultado.mensaje());
+    assertEquals(ArchivoExcel.ESTADO_PROYECCION, archivo.getEstado());
+  }
+
+  @Test
+  void pruebaUnaRutaMenorSiLaMayorNoCabe() {
+    ArchivoExcel archivo = archivo();
+    // CHUTE 1: 900 + 100 bultos (10 h); CHUTE 2: 500 (5 h). Mover la de 900 deja 14 h;
+    // la de 100 deja 9 h y 6 h.
+    prepararRegistro(
+        archivo,
+        configuracion("100", 2),
+        List.of(limite(3L, "9.5")),
+        List.of(operarios(1L, 1), operarios(2L, 1)),
+        List.of(cluster(3L, "CL3")),
+        List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
+    RutaProyeccion grande = ruta(1L, 3L, 1L, "3030", "900");
+    RutaProyeccion chica = ruta(2L, 3L, 1L, "3031", "100");
+    when(rutaRepo.findByArchivoIdOrderByIdAsc(10L))
+        .thenReturn(List.of(grande, chica, ruta(3L, 3L, 2L, "3032", "500")));
+
+    BalanceoResponse resultado = servicio.balancear(10L).block().datos();
+
+    assertEquals(1L, grande.getChuteId());
+    assertEquals(2L, chica.getChuteId());
+    assertEquals(1, resultado.rutasMovidas());
+  }
+
+  @Test
+  void guardarAManoPasaASerLaBaseYRespetaElMaximoPorChute() {
+    ArchivoExcel archivo = archivo();
+    archivo.setEstado(ArchivoExcel.ESTADO_BALANCEADO);
+    // El balanceo dejó CHUTE 1 en 3 (base 1); CHUTE 2 sigue en 1.
+    ParametroChute chute1 = operarios(1L, 1);
+    chute1.setOperarios(3);
+    ParametroChute chute2 = operarios(2L, 1);
+    prepararRegistro(
+        archivo,
+        configuracion("100", 10),
+        List.of(limite(1L, "2")),
+        List.of(chute1, chute2),
+        List.of(cluster(1L, "CL1")),
+        List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
+    lenient().when(rutaRepo.cargaPorArchivo(10L)).thenReturn(List.of());
+
+    // Se cambia solo CHUTE 2: pasa a 4 y ese 4 es su nueva base; CHUTE 1 conserva su base 1.
+    servicio
+        .guardar(
+            10L,
+            new ConfiguracionActualizarRequest(
+                new BigDecimal("100"),
+                10,
+                null,
+                List.of(),
+                List.of(new ChuteOperariosRequest(1L, 3), new ChuteOperariosRequest(2L, 4))))
+        .block();
+
+    assertEquals(4, chute2.getOperariosOriginal());
+    assertEquals(1, chute1.getOperariosOriginal());
+    assertEquals(ArchivoExcel.ESTADO_BALANCEADO, archivo.getEstado());
+
+    // Con máximo 2 por chute, CHUTE 1 (3) ya no cabe.
+    ConflictoException error =
+        assertThrows(
+            ConflictoException.class,
+            () ->
+                servicio
+                    .guardar(
+                        10L,
+                        new ConfiguracionActualizarRequest(
+                            new BigDecimal("100"), 10, 2, List.of(), List.of()))
+                    .block());
+    assertTrue(error.getMessage().contains("CHUTE 1 tiene 3"), error.getMessage());
+  }
+
+  @Test
+  void devolverUnaRutaAManoDejaElRegistroComoProyeccion() {
+    ArchivoExcel archivo = archivo();
+    archivo.setEstado(ArchivoExcel.ESTADO_BALANCEADO);
+    prepararRegistro(
+        archivo,
+        configuracion("100", null),
+        List.of(limite(1L, "2")),
+        List.of(operarios(1L, 1), operarios(2L, 1)),
+        List.of(cluster(1L, "CL1")),
+        List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
+    RutaProyeccion ruta = ruta(1L, 1L, 1L, "3030", "10");
+    ruta.setChuteId(2L);
+    when(rutaRepo.findByIdAndArchivoId(1L, 10L)).thenReturn(Optional.of(ruta));
+    when(rutaRepo.clustersEnChute(10L, 1L)).thenReturn(List.of());
+    when(rutaRepo.contarFueraDeOrigen(10L)).thenReturn(0L);
+    when(rutaRepo.cargaPorArchivo(10L)).thenReturn(List.of());
+
+    servicio.mover(10L, 1L, new MoverRutaRequest(1L)).block();
+
+    assertEquals(1L, ruta.getChuteId());
+    assertEquals(ArchivoExcel.ESTADO_PROYECCION, archivo.getEstado());
   }
 
   @Test
@@ -485,7 +666,6 @@ class SimulacionBalanceoTest {
         .thenReturn(List.of(cluster(1L, "CL1"), cluster(2L, "CL2")));
     when(chuteRepo.findAllById(any()))
         .thenReturn(List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
-    when(historialRepo.findByArchivoIdOrderByIdAsc(10L)).thenReturn(List.of());
     // Al cargar, CHUTE 1 juntaba CL1 y CL2; el balanceo llevó la ruta de CL2 a CHUTE 2.
     when(rutaRepo.cargaOriginalPorArchivo(10L))
         .thenReturn(List.of(carga(1L, 1L, 3, "300"), carga(2L, 1L, 1, "50")));
@@ -597,6 +777,7 @@ class SimulacionBalanceoTest {
     ParametroChute parametro = new ParametroChute();
     parametro.setId(new ParametroChuteId(10L, chuteId));
     parametro.setOperarios(operarios);
+    parametro.setOperariosOriginal(operarios);
     return parametro;
   }
 

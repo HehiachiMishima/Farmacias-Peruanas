@@ -93,6 +93,28 @@ class SimulacionExcelTest {
   }
 
   @Test
+  void sumaLasUnidadesDeUnaFilaSinBultosASuRuta() {
+    String csv =
+        "RUTA,CLUSTER,CHUTE,TIPO,BULTOS,UNIDADES\n"
+            + "3030,CL1,CHUTE 1,B2C,10,100\n"
+            + "3030,CL1,CHUTE 1,B2C,0,50\n"
+            + "3031,CL1,CHUTE 1,B2C,0,40\n";
+
+    SimulacionExcel.Analisis analisis = SimulacionExcel.analizar(csv(csv));
+
+    // 3031 no tiene bultos: no hay carga que balancear y se descarta.
+    assertEquals(1, analisis.rutas().size());
+    assertEquals("150.00", analisis.rutas().get(0).unidades().toPlainString());
+  }
+
+  @Test
+  void aceptaElTipoConEspacioNoSeparable() {
+    String csv = "RUTA,CLUSTER,CHUTE,TIPO,BULTOS\n3030,CL1,CHUTE 1,B2C\u00A0,5\n";
+
+    assertEquals(TipoRuta.B2C, SimulacionExcel.analizar(csv(csv)).rutas().get(0).tipo());
+  }
+
+  @Test
   void rechazaUnTipoDistintoDeB2CYB2B() {
     String csv = "RUTA,CLUSTER,CHUTE,TIPO,BULTOS\n3030,CL1,CHUTE 1,B2X,5\n";
 

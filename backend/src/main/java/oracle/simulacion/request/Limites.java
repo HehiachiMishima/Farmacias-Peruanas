@@ -3,7 +3,7 @@ package oracle.simulacion.request;
 /** Topes de los parámetros de simulación (validación de requests y balanceo). */
 public final class Limites {
 
-  /** Operarios por chute: el balanceo tampoco supera este tope. */
+  /** Operarios por chute que se pueden declarar (tope técnico de validación). */
   public static final int MAX_OPERARIOS = 50;
   /** Operarios totales que se pueden declarar disponibles en un registro. */
   public static final int MAX_OPERARIOS_TOTAL = 10_000;

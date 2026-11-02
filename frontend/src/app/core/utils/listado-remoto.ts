@@ -52,7 +52,9 @@ export class ListadoRemoto<T> {
         switchMap(() =>
           fuente().pipe(
             map((pagina): Resultado<T> => ({ ok: true, pagina })),
-            catchError((err: unknown) => of<Resultado<T>>({ ok: false, error: mensajeDeError(err) })),
+            catchError((err: unknown) =>
+              of<Resultado<T>>({ ok: false, error: mensajeDeError(err) }),
+            ),
           ),
         ),
         takeUntilDestroyed(inject(DestroyRef)),
@@ -77,6 +79,17 @@ export class ListadoRemoto<T> {
 
   recargar(): void {
     this.disparador.next();
+  }
+
+  /**
+   * Olvida las filas actuales (p. ej. al cambiar de registro): así un fallo
+   * de la siguiente carga no deja a la vista datos de otro contexto.
+   */
+  vaciar(): void {
+    this.items.set([]);
+    this.total.set(0);
+    this.error.set(null);
+    this.listo.set(false);
   }
 }
 

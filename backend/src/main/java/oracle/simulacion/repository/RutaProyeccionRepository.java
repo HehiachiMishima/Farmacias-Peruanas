@@ -101,38 +101,69 @@ public interface RutaProyeccionRepository
       """)
   int restaurarChutes(@Param("archivoId") Long archivoId);
 
-  /**
-   * Totales de un lado de los chutes elegidos en una sola consulta: el detalle
-   * muestra los del conjunto filtrado, no solo de la página. Con antes = true
-   * cuenta las rutas que tenían al cargar el Excel; si no, las que tienen hoy.
-   */
-  @Query(
-      value =
-          """
-          SELECT COUNT(*) AS rutas,
-                 COALESCE(SUM(CASE WHEN tipo = 'B2C' THEN 1 ELSE 0 END), 0) AS rutasB2c,
-                 COALESCE(SUM(CASE WHEN tipo = 'B2B' THEN 1 ELSE 0 END), 0) AS rutasB2b,
-                 COALESCE(SUM(CASE WHEN chute_id <> chute_original_id THEN 1 ELSE 0 END), 0)
-                     AS cambios,
-                 COALESCE(SUM(total_bultos), 0) AS bultos,
-                 COALESCE(SUM(total_unidades), 0) AS unidades,
-                 COALESCE(SUM(total_lineas), 0) AS lineas,
-                 COALESCE(SUM(conteo_cod), 0) AS cod
-            FROM rutas_proyeccion
-           WHERE archivo_id = :archivoId
-             AND (:texto IS NULL OR codigo_ruta LIKE :texto)
-             AND (:tipo IS NULL OR tipo = :tipo)
-             AND (CASE WHEN :antes THEN chute_original_id ELSE chute_id END) IN (:chuteIds)
-             AND (:clusterId IS NULL OR cluster_id = :clusterId)
-             AND (:soloCambios = FALSE OR chute_id <> chute_original_id)
-          """,
-      nativeQuery = true)
-  ResumenRutasFiltro resumenFiltrado(
+  /** Rutas que hoy están en un chute distinto al de la carga (define si el registro está balanceado). */
+  @Query("""
+      SELECT COUNT(r)
+        FROM RutaProyeccion r
+       WHERE r.archivoId = :archivoId
+         AND r.chuteId <> r.chuteOriginalId
+      """)
+  long contarFueraDeOrigen(@Param("archivoId") Long archivoId);
+
+  /** Totales del detalle de rutas; cada lado añade su filtro de chute (ver abajo). */
+  String RESUMEN =
+      """
+      SELECT COUNT(*) AS rutas,
+             COALESCE(SUM(CASE WHEN tipo = 'B2C' THEN 1 ELSE 0 END), 0) AS rutasB2c,
+             COALESCE(SUM(CASE WHEN tipo = 'B2B' THEN 1 ELSE 0 END), 0) AS rutasB2b,
+             COALESCE(SUM(CASE WHEN chute_id <> chute_original_id THEN 1 ELSE 0 END), 0)
+                 AS cambios,
+             COALESCE(SUM(total_bultos), 0) AS bultos,
+             COALESCE(SUM(total_unidades), 0) AS unidades,
+             COALESCE(SUM(total_lineas), 0) AS lineas,
+             COALESCE(SUM(conteo_cod), 0) AS cod
+        FROM rutas_proyeccion
+       WHERE archivo_id = :archivoId
+         AND (:texto IS NULL OR codigo_ruta LIKE :texto)
+         AND (:tipo IS NULL OR tipo = :tipo)
+         AND (:clusterId IS NULL OR cluster_id = :clusterId)
+         AND (:soloCambios = FALSE OR chute_id <> chute_original_id)
+      """;
+
+  /** Rutas que los chutes tenían al cargar el Excel (usa idx_rutas_archivo_chute_original). */
+  @Query(value = RESUMEN + " AND chute_original_id IN (:chuteIds)", nativeQuery = true)
+  ResumenRutasFiltro resumenAntes(
       @Param("archivoId") Long archivoId,
       @Param("texto") String texto,
       @Param("tipo") String tipo,
       @Param("chuteIds") List<Long> chuteIds,
-      @Param("antes") boolean antes,
       @Param("clusterId") Long clusterId,
       @Param("soloCambios") boolean soloCambios);
+
+  /** Rutas que los chutes tienen hoy (usa idx_rutas_archivo_chute). */
+  @Query(value = RESUMEN + " AND chute_id IN (:chuteIds)", nativeQuery = true)
+  ResumenRutasFiltro resumenDespues(
+      @Param("archivoId") Long archivoId,
+      @Param("texto") String texto,
+      @Param("tipo") String tipo,
+      @Param("chuteIds") List<Long> chuteIds,
+      @Param("clusterId") Long clusterId,
+      @Param("soloCambios") boolean soloCambios);
+
+  /**
+   * Totales de un lado de los chutes elegidos: el detalle muestra los del
+   * conjunto filtrado, no solo de la página.
+   */
+  default ResumenRutasFiltro resumenFiltrado(
+      Long archivoId,
+      String texto,
+      String tipo,
+      List<Long> chuteIds,
+      boolean antes,
+      Long clusterId,
+      boolean soloCambios) {
+    return antes
+        ? resumenAntes(archivoId, texto, tipo, chuteIds, clusterId, soloCambios)
+        : resumenDespues(archivoId, texto, tipo, chuteIds, clusterId, soloCambios);
+  }
 }

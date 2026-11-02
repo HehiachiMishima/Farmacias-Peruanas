@@ -16,5 +16,7 @@ public record ConfiguracionActualizarRequest(
         BigDecimal velocidadBase,
     /** Tope global de operarios disponibles; nulo conserva el valor actual. */
     @Min(1) @Max(Limites.MAX_OPERARIOS_TOTAL) Integer operariosMaximos,
+    /** Máximo de operarios en un chute; nulo = reparto parejo del máximo global. */
+    @Min(1) @Max(Limites.MAX_OPERARIOS) Integer operariosPorChute,
     @Valid @Size(max = Limites.MAX_PARAMETROS) List<ClusterLimiteRequest> clusters,
     @Valid @Size(max = Limites.MAX_PARAMETROS) List<ChuteOperariosRequest> chutes) {}

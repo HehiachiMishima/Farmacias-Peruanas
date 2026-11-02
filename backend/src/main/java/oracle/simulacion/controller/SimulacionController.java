@@ -5,6 +5,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import oracle.common.exception.ApiError;
+import oracle.common.exception.SolicitudInvalidaException;
 import oracle.common.response.ApiResponse;
 import oracle.common.response.PaginaResponse;
 import oracle.simulacion.model.TipoRuta;
@@ -190,12 +191,17 @@ public class SimulacionController {
       @RequestParam(defaultValue = "1") int pagina,
       @RequestParam(defaultValue = "25") int tamano,
       @RequestParam(required = false) String texto,
-      @RequestParam(required = false) TipoRuta tipo,
+      @RequestParam(required = false) String tipo,
       @RequestParam @Size(min = 1, max = Limites.MAX_CHUTES_DETALLE) List<Long> chuteIds,
       @RequestParam(defaultValue = "DESPUES") LadoChute lado,
       @RequestParam(required = false) Long clusterId,
       @RequestParam(defaultValue = "false") boolean soloCambios) {
+    // Mismo criterio que el Excel: «b2c» o « B2C » también valen.
+    TipoRuta tipoRuta = TipoRuta.desdeTexto(tipo);
+    if (tipo != null && !tipo.isBlank() && tipoRuta == null) {
+      throw new SolicitudInvalidaException("El tipo de ruta debe ser B2C o B2B.");
+    }
     return configuracionService.rutasDashboard(
-        id, pagina, tamano, texto, tipo, chuteIds, lado, clusterId, soloCambios);
+        id, pagina, tamano, texto, tipoRuta, chuteIds, lado, clusterId, soloCambios);
   }
 }

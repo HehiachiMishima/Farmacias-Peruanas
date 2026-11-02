@@ -10,7 +10,11 @@ import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 
-/** Movimiento realizado por el balanceo (ruta movida u operario añadido). */
+/**
+ * Cambio sobre el registro: ruta movida, operario reasignado u operario
+ * añadido, hecho por el balanceo (ajuste de tiempos o separación de CL1 y CL2)
+ * o a mano por el usuario.
+ */
 @Entity
 @Table(name = "historial_balanceo")
 @Getter
@@ -20,6 +24,10 @@ public class HistorialBalanceo {
   public static final String ACCION_MOVER_RUTA = "MOVER_RUTA";
   public static final String ACCION_ANADIR_OPERARIO = "AÑADIR_OPERARIO";
   public static final String ACCION_MOVER_OPERARIO = "MOVER_OPERARIO";
+
+  public static final String MOTIVO_BALANCEO = "BALANCEO";
+  public static final String MOTIVO_SEPARACION = "SEPARACION";
+  public static final String MOTIVO_MANUAL = "MANUAL";
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -42,6 +50,17 @@ public class HistorialBalanceo {
 
   @Column(name = "chute_modificado_id")
   private Long chuteModificadoId;
+
+  @Column(name = "motivo", length = 20, nullable = false)
+  private String motivo = MOTIVO_BALANCEO;
+
+  /** Operarios del chute de origen después de la acción. */
+  @Column(name = "operarios_origen")
+  private Integer operariosOrigen;
+
+  /** Operarios del chute de destino (o del modificado) después de la acción. */
+  @Column(name = "operarios_destino")
+  private Integer operariosDestino;
 
   @Column(name = "creado_por", nullable = false)
   private Long creadoPor;

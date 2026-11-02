@@ -25,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import oracle.common.config.Transacciones;
 import oracle.common.exception.ConflictoException;
 import oracle.common.exception.RecursoNoEncontradoException;
+import oracle.common.exception.SolicitudInvalidaException;
 import oracle.common.response.ApiResponse;
 import oracle.common.response.PaginaResponse;
 import oracle.common.support.ActorActual;
@@ -51,6 +52,7 @@ import oracle.simulacion.repository.ParametroClusterRepository;
 import oracle.simulacion.repository.ResumenRutasFiltro;
 import oracle.simulacion.repository.RutaProyeccionRepository;
 import oracle.simulacion.repository.SimulacionConfigRepository;
+import oracle.simulacion.repository.SimulacionLotesRepository;
 import oracle.simulacion.request.ChuteOperariosRequest;
 import oracle.simulacion.request.ClusterLimiteRequest;
 import oracle.simulacion.request.ConfiguracionActualizarRequest;
@@ -94,8 +96,6 @@ import reactor.core.scheduler.Schedulers;
 @Service
 public class SimulacionConfiguracionService {
 
-  private static final BigDecimal VELOCIDAD_INICIAL = new BigDecimal("100.00");
-  private static final int OPERARIOS_INICIALES = 1;
   private static final BigDecimal TOLERANCIA = new BigDecimal("0.01");
   private static final int MAX_ITERACIONES = 1000;
   private static final int MAX_TAMANO_PAGINA = 100;
@@ -120,6 +120,7 @@ public class SimulacionConfiguracionService {
   private final ParametroChuteRepository parametroChuteRepo;
   private final RutaProyeccionRepository rutaRepo;
   private final HistorialBalanceoRepository historialRepo;
+  private final SimulacionLotesRepository lotes;
   private final Transacciones transacciones;
 
   public SimulacionConfiguracionService(
@@ -131,6 +132,7 @@ public class SimulacionConfiguracionService {
       ParametroChuteRepository parametroChuteRepo,
       RutaProyeccionRepository rutaRepo,
       HistorialBalanceoRepository historialRepo,
+      SimulacionLotesRepository lotes,
       Transacciones transacciones) {
     this.archivoRepo = archivoRepo;
     this.configRepo = configRepo;
@@ -140,6 +142,7 @@ public class SimulacionConfiguracionService {
     this.parametroChuteRepo = parametroChuteRepo;
     this.rutaRepo = rutaRepo;
     this.historialRepo = historialRepo;
+    this.lotes = lotes;
     this.transacciones = transacciones;
   }
 
@@ -162,7 +165,7 @@ public class SimulacionConfiguracionService {
     PageRequest pageable =
         PageRequest.of(p, t, Sort.by("codigoRuta").ascending().and(Sort.by("id").ascending()));
     String termino = Filtros.normalizar(texto);
-    // Prefijo (no "contiene"): usa idx_rutas_archivo_codigo en lugar de recorrer
+    // Prefijo (no "contiene"): usa uq_rutas_archivo_ruta_tipo en lugar de recorrer
     // todas las rutas del archivo. La colación ignora mayúsculas y tildes.
     Specification<RutaProyeccion> spec =
         (root, query, cb) -> {
@@ -297,13 +300,18 @@ public class SimulacionConfiguracionService {
             Auditoria.alActualizar(config, actor);
           }
           config.setVelocidadBase(req.velocidadBase());
+          // Nulo = reparto parejo: el usuario puede volver a dejarlo vacío.
+          config.setOperariosPorChute(req.operariosPorChute());
+          if (req.operariosMaximos() != null) {
+            config.setOperariosMaximos(req.operariosMaximos());
+          }
           configRepo.save(config);
 
           if (req.clusters() != null) {
             for (ClusterLimiteRequest limite : req.clusters()) {
               ParametroCluster parametro = ctx.parametrosCluster().get(limite.clusterId());
               if (parametro == null) {
-                throw new ConflictoException(
+                throw new SolicitudInvalidaException(
                     "El cluster " + limite.clusterId() + " no pertenece al registro.");
               }
               parametro.setLimiteHoras(limite.limiteHoras());
@@ -313,39 +321,58 @@ public class SimulacionConfiguracionService {
             for (ChuteOperariosRequest operarios : req.chutes()) {
               ParametroChute parametro = ctx.parametrosChute().get(operarios.chuteId());
               if (parametro == null) {
-                throw new ConflictoException(
+                throw new SolicitudInvalidaException(
                     "El chute " + operarios.chuteId() + " no pertenece al registro.");
               }
-              parametro.setOperarios(operarios.operarios());
+              // Un cambio hecho a mano pasa a ser la base de ese chute: el
+              // comparativo y «Restablecer» lo respetan.
+              if (operariosActuales(parametro) != operarios.operarios()) {
+                parametro.setOperarios(operarios.operarios());
+                parametro.setOperariosOriginal(operarios.operarios());
+              }
             }
           }
-          int asignados =
-              ctx.parametrosChute().values().stream()
-                  .mapToInt(
-                      (p) ->
-                          p.getOperarios() == null
-                              ? OPERARIOS_INICIALES
-                              : Math.max(1, p.getOperarios()))
-                  .sum();
-          Integer maximo =
-              req.operariosMaximos() != null ? req.operariosMaximos() : config.getOperariosMaximos();
-          if (maximo != null && asignados > maximo) {
-            throw new ConflictoException(
-                "Los operarios asignados ("
-                    + asignados
-                    + ") superan el máximo disponible ("
-                    + maximo
-                    + "). Ajusta los chutes o sube el máximo.");
-          }
-          if (req.operariosMaximos() != null) {
-            config.setOperariosMaximos(req.operariosMaximos());
-          }
-          // El estado no cambia al guardar parámetros: si el registro ya estaba
-          // balanceado, las rutas movidas siguen siendo válidas.
+          validarOperarios(ctx);
+          actualizarEstado(ctx, rutaRepo.contarFueraDeOrigen(archivoId));
           tocar(ctx.archivo(), actor);
           return aConfiguracion(ctx);
         },
         "Parámetros guardados.");
+  }
+
+  /**
+   * Los operarios asignados (y los que dejaría «Restablecer») no pueden pasar
+   * del máximo global ni del máximo por chute definido.
+   */
+  private static void validarOperarios(Contexto ctx) {
+    Integer maximo = ctx.config().getOperariosMaximos();
+    int asignados = ctx.parametrosChute().values().stream().mapToInt(SimulacionConfiguracionService::operariosActuales).sum();
+    if (maximo != null && asignados > maximo) {
+      throw new ConflictoException(
+          "Los operarios asignados ("
+              + asignados
+              + ") superan el máximo disponible ("
+              + maximo
+              + "). Ajusta los chutes o sube el máximo.");
+    }
+    Integer porChute = ctx.config().getOperariosPorChute();
+    if (porChute == null) {
+      return;
+    }
+    ctx.parametrosChute()
+        .forEach(
+            (chuteId, p) -> {
+              int mayor = Math.max(operariosActuales(p), operariosOriginal(p));
+              if (mayor > porChute) {
+                throw new ConflictoException(
+                    ctx.nombreChute(chuteId)
+                        + " tiene "
+                        + mayor
+                        + " operario(s) y el máximo por chute es "
+                        + porChute
+                        + ". Ajusta ese chute, sube el máximo o restablece el balanceo.");
+              }
+            });
   }
 
   public Mono<ApiResponse<ConfiguracionSimulacionResponse>> mover(
@@ -361,7 +388,7 @@ public class SimulacionConfiguracionService {
                   .orElseThrow(
                       () -> new RecursoNoEncontradoException("No existe la ruta " + rutaId + "."));
           if (!ctx.parametrosChute().containsKey(req.chuteId())) {
-            throw new ConflictoException(
+            throw new SolicitudInvalidaException(
                 "El chute " + req.chuteId() + " no pertenece al registro.");
           }
           if (ruta.getChuteId().equals(req.chuteId())) {
@@ -385,12 +412,18 @@ public class SimulacionConfiguracionService {
                     + ctx.nombreCluster(ruta.getClusterId())
                     + ".");
           }
-          historialRepo.save(
-              movimiento(archivoId, ruta.getId(), ruta.getChuteId(), req.chuteId(), actor));
+          Long origen = ruta.getChuteId();
           ruta.setChuteId(req.chuteId());
-          // BALANCEADO = los datos ya no son la proyección original (ver
-          // archivos_excel.estado): un movimiento manual también lo cumple.
-          ctx.archivo().setEstado(ArchivoExcel.ESTADO_BALANCEADO);
+          historialRepo.save(
+              movimiento(
+                  archivoId,
+                  new Traslado(ruta, origen),
+                  HistorialBalanceo.MOTIVO_MANUAL,
+                  actor,
+                  Instant.now()));
+          // Devolver la ruta a su chute original puede dejar el registro como
+          // la proyección: el estado sale de los datos, no del último gesto.
+          actualizarEstado(ctx, rutaRepo.contarFueraDeOrigen(archivoId));
           tocar(ctx.archivo(), actor);
           return aConfiguracion(ctx);
         },
@@ -439,22 +472,30 @@ public class SimulacionConfiguracionService {
                   rutaIds.add(log.getRutaId());
                 }
               });
-          Map<Long, String> codigos =
+          Map<Long, RutaProyeccion> rutas =
               rutaRepo.findAllById(rutaIds).stream()
-                  .collect(Collectors.toMap(RutaProyeccion::getId, RutaProyeccion::getCodigoRuta));
+                  .collect(Collectors.toMap(RutaProyeccion::getId, Function.identity()));
           return logs.stream()
               .map(
-                  (log) ->
-                      new HistorialSimulacionResponse(
-                          log.getId(),
-                          log.getTipoAccion(),
-                          log.getRutaId(),
-                          log.getRutaId() == null ? null : codigos.get(log.getRutaId()),
-                          ctx.nombreChute(log.getChuteOrigenId()),
-                          ctx.nombreChute(log.getChuteDestinoId()),
-                          ctx.nombreChute(log.getChuteModificadoId()),
-                          log.getCreadoEn(),
-                          log.getCreadoPor()))
+                  (log) -> {
+                    RutaProyeccion ruta = log.getRutaId() == null ? null : rutas.get(log.getRutaId());
+                    return new HistorialSimulacionResponse(
+                        log.getId(),
+                        log.getTipoAccion(),
+                        log.getMotivo(),
+                        log.getRutaId(),
+                        ruta == null ? null : ruta.getCodigoRuta(),
+                        ruta == null ? null : ctx.nombreCluster(ruta.getClusterId()),
+                        ruta == null || ruta.getTipo() == null ? null : ruta.getTipo().name(),
+                        ruta == null ? null : ruta.getTotalBultos(),
+                        ctx.nombreChute(log.getChuteOrigenId()),
+                        ctx.nombreChute(log.getChuteDestinoId()),
+                        ctx.nombreChute(log.getChuteModificadoId()),
+                        log.getOperariosOrigen(),
+                        log.getOperariosDestino(),
+                        log.getCreadoEn(),
+                        log.getCreadoPor());
+                  })
               .toList();
         },
         "Historial de balanceo.");
@@ -482,61 +523,66 @@ public class SimulacionConfiguracionService {
       throw new ConflictoException(
           "Define al menos un límite de horas por cluster antes de balancear.");
     }
-    Integer maxOperarios = ctx.config().getOperariosMaximos();
+    Map<Long, Integer> operariosActuales = operarios(ctx);
+    int maximoGlobal = operariosMaximos(ctx, operariosActuales);
+    int topeChute = topePorChute(ctx, operariosActuales);
 
     Balanceador balanceador =
         new Balanceador(
             rutaRepo.findByArchivoIdOrderByIdAsc(archivoId),
-            operarios(ctx),
+            operariosActuales,
             velocidad,
             limites,
-            maxOperarios,
+            maximoGlobal,
+            topeChute,
             numerosCluster(ctx.clusters()));
+    // Todos los cambios de una ejecución comparten fecha: el historial los agrupa.
+    Instant momento = Instant.now();
     List<HistorialBalanceo> logs = new ArrayList<>();
     // CL1 y CL2 no pueden compartir chute: antes de atender tiempos se separan
     // las mezclas que trae el Excel, aunque eso no mejore ningún tiempo.
-    Traslado separada;
-    while ((separada = balanceador.separarMezcla()) != null) {
+    Traslado traslado;
+    while ((traslado = balanceador.separarMezcla()) != null) {
       logs.add(
           movimiento(
-              archivoId,
-              separada.ruta().getId(),
-              separada.origen(),
-              separada.ruta().getChuteId(),
-              actor));
+              archivoId, traslado, HistorialBalanceo.MOTIVO_SEPARACION, actor, momento));
     }
-    Long chuteSaturado = null;
-    boolean topeOperarios = false;
+    // Un cluster que no se puede mejorar se aparta y se sigue con los demás.
+    Set<Long> sinSolucion = new HashSet<>();
     int iteraciones = 0;
     while (iteraciones++ < MAX_ITERACIONES) {
-      Long cluster = balanceador.peorCluster(limites);
+      Long cluster = balanceador.peorCluster(sinSolucion);
       if (cluster == null) {
         break;
       }
       Long cuello = balanceador.chuteMasLento(cluster);
-      RutaProyeccion movida = balanceador.moverMayorRuta(cluster, cuello);
-      if (movida != null) {
-        logs.add(movimiento(archivoId, movida.getId(), cuello, movida.getChuteId(), actor));
+      traslado = balanceador.moverRuta(cluster, cuello);
+      if (traslado != null) {
+        logs.add(
+            movimiento(archivoId, traslado, HistorialBalanceo.MOTIVO_BALANCEO, actor, momento));
         continue;
-      }
-      if (balanceador.operarios(cuello) >= Limites.MAX_OPERARIOS) {
-        chuteSaturado = cuello;
-        break;
       }
       // Primero reasigna un operario con holgura; solo añade si no hay ninguno
-      // disponible dentro del tope global del registro.
+      // y queda cupo (máximo global y tope por chute).
       Long donante = balanceador.moverOperario(cuello);
       if (donante != null) {
-        logs.add(operarioMovido(archivoId, donante, cuello, actor));
+        logs.add(
+            operarioMovido(
+                archivoId,
+                donante,
+                balanceador.operarios(donante),
+                cuello,
+                balanceador.operarios(cuello),
+                actor,
+                momento));
         continue;
       }
-      if (balanceador.hayCupo()) {
+      if (balanceador.puedeAgregar(cuello)) {
         balanceador.agregarOperario(cuello);
-        logs.add(operario(archivoId, cuello, actor));
+        logs.add(operario(archivoId, cuello, balanceador.operarios(cuello), actor, momento));
         continue;
       }
-      topeOperarios = true;
-      break;
+      sinSolucion.add(cluster);
     }
 
     balanceador
@@ -548,75 +594,117 @@ public class SimulacionConfiguracionService {
                 parametro.setOperarios(total);
               }
             });
-    if (!logs.isEmpty()) {
-      historialRepo.saveAll(logs);
-      // Sin cambios el registro conserva su estado: sigue siendo la proyección original.
-      ctx.archivo().setEstado(ArchivoExcel.ESTADO_BALANCEADO);
-    }
+    lotes.insertarHistorial(logs);
+    actualizarEstado(ctx, balanceador.rutasFueraDeOrigen());
     tocar(ctx.archivo(), actor);
 
-    int movidas = (int) logs.stream().filter(HistorialBalanceo::esMovimiento).count();
+    int rutasMovidas =
+        (int)
+            logs.stream()
+                .filter(HistorialBalanceo::esMovimiento)
+                .map(HistorialBalanceo::getRutaId)
+                .distinct()
+                .count();
     int movidos = (int) logs.stream().filter(HistorialBalanceo::esMovimientoOperario).count();
-    int agregados = logs.size() - movidas - movidos;
+    int agregados =
+        (int)
+            logs.stream()
+                .filter((log) -> HistorialBalanceo.ACCION_ANADIR_OPERARIO.equals(log.getTipoAccion()))
+                .count();
     return new BalanceoResponse(
-        movidas,
+        rutasMovidas,
         agregados,
         movidos,
         mensajeBalanceo(
-            movidas, agregados, movidos, ctx, chuteSaturado, topeOperarios, maxOperarios,
-            iteraciones, balanceador.mezclasSinSalida()));
+            new Resultado(
+                rutasMovidas,
+                agregados,
+                movidos,
+                balanceador.fueraDeLimite(),
+                iteraciones > MAX_ITERACIONES,
+                balanceador.mezclasSinSalida(),
+                maximoGlobal,
+                topeChute,
+                limites),
+            ctx));
   }
 
-  private String mensajeBalanceo(
-      int movidas,
+  /** Lo que dejó una ejecución del balanceo, para armar el mensaje. */
+  private record Resultado(
+      int rutasMovidas,
       int agregados,
       int movidos,
-      Contexto ctx,
-      Long chuteSaturado,
-      boolean topeOperarios,
-      Integer maxOperarios,
-      int iteraciones,
-      Set<Long> mezclasSinSalida) {
+      Map<Long, BigDecimal> fueraDeLimite,
+      boolean agotoIteraciones,
+      Set<Long> mezclasSinSalida,
+      int maximoGlobal,
+      int topeChute,
+      Map<Long, BigDecimal> limites) {}
+
+  /**
+   * Mensaje del balanceo según el estado final: «ya cumplían» solo si ningún
+   * cluster quedó fuera de su límite; si alguno quedó, se nombra con su tiempo
+   * y se explica qué tope lo impidió.
+   */
+  private static String mensajeBalanceo(Resultado r, Contexto ctx) {
     StringBuilder texto = new StringBuilder();
-    if (movidas == 0 && agregados == 0 && movidos == 0) {
-      texto.append("Los clusters ya cumplían sus límites de tiempo.");
+    boolean huboCambios = r.rutasMovidas() > 0 || r.agregados() > 0 || r.movidos() > 0;
+    if (!huboCambios) {
+      texto.append(
+          r.fueraDeLimite().isEmpty()
+              ? "Los clusters ya cumplían sus límites de tiempo."
+              : "No se pudo mejorar ningún cluster.");
     } else {
       texto.append("Balanceo finalizado.");
-      if (movidas > 0) {
-        texto.append(" ").append(movidas).append(" ruta(s) movida(s).");
+      if (r.rutasMovidas() > 0) {
+        texto.append(" ").append(r.rutasMovidas()).append(" ruta(s) movida(s).");
       }
-      if (movidos > 0) {
-        texto.append(" ").append(movidos).append(" operario(s) reasignado(s).");
+      if (r.movidos() > 0) {
+        texto.append(" ").append(r.movidos()).append(" operario(s) reasignado(s).");
       }
-      if (agregados > 0) {
-        texto.append(" ").append(agregados).append(" operario(s) añadido(s).");
+      if (r.agregados() > 0) {
+        texto.append(" ").append(r.agregados()).append(" operario(s) añadido(s).");
       }
     }
-    if (chuteSaturado != null) {
+    if (!r.fueraDeLimite().isEmpty()) {
       texto
-          .append(" ")
-          .append(ctx.nombreChute(chuteSaturado))
-          .append(" llegó al máximo de ")
-          .append(Limites.MAX_OPERARIOS)
-          .append(" operarios por chute: revisa los límites de horas.");
-    } else if (topeOperarios) {
-      texto
-          .append(" Se alcanzó el máximo de ")
-          .append(maxOperarios == null ? "operarios" : maxOperarios + " operario(s)")
-          .append(" disponibles y ningún chute tiene holgura para ceder uno: sube el máximo o");
-      texto.append(" revisa los límites de horas.");
-    } else if (iteraciones > MAX_ITERACIONES) {
+          .append(" Siguen fuera de su límite: ")
+          .append(
+              r.fueraDeLimite().entrySet().stream()
+                  .sorted(
+                      Comparator.comparing(
+                          (Map.Entry<Long, BigDecimal> e) -> ctx.nombreCluster(e.getKey()),
+                          ORDEN_NATURAL))
+                  .map(
+                      (e) ->
+                          ctx.nombreCluster(e.getKey())
+                              + " ("
+                              + e.getValue().setScale(2, RoundingMode.HALF_UP).toPlainString()
+                              + " h de "
+                              + r.limites()
+                                  .getOrDefault(e.getKey(), BigDecimal.ZERO)
+                                  .setScale(2, RoundingMode.HALF_UP)
+                                  .toPlainString()
+                              + " h)")
+                  .collect(Collectors.joining(", ")))
+          .append(". No hay rutas que se puedan mover ni operarios disponibles con el máximo de ")
+          .append(r.maximoGlobal())
+          .append(" operario(s) y el tope de ")
+          .append(r.topeChute())
+          .append(" por chute: sube alguno de los dos o revisa los límites de horas.");
+    }
+    if (r.agotoIteraciones()) {
       texto.append(" Se alcanzó el máximo de ajustes por ejecución; vuelve a balancear.");
     }
-    if (!mezclasSinSalida.isEmpty()) {
+    if (!r.mezclasSinSalida().isEmpty()) {
       texto
           .append(" No se pudo separar CL1 y CL2 en ")
           .append(
-              mezclasSinSalida.stream()
+              r.mezclasSinSalida().stream()
                   .map(ctx::nombreChute)
                   .sorted(ORDEN_NATURAL)
                   .collect(Collectors.joining(", ")))
-          .append(": no hay otro chute libre de ese cluster.");
+          .append(": no hay otro chute libre de esos clusters.");
     }
     return texto.toString();
   }
@@ -626,12 +714,18 @@ public class SimulacionConfiguracionService {
    * dos chutes, así que no se recalculan todas las rutas en cada iteración.
    */
   private static final class Balanceador {
+    /** Rutas del cuello que se evalúan por iteración, de mayor a menor. */
+    private static final int CANDIDATOS_RUTA = 25;
+
     private final BigDecimal velocidad;
     private final Map<Long, Integer> operarios;
     private final Map<Long, Integer> operariosIniciales;
     private final Map<Long, BigDecimal> limites;
-    /** Tope global de operarios del registro; {@code null} = sin tope global. */
-    private final Integer maxOperarios;
+    /** Tope global de operarios del registro. */
+    private final int maximoGlobal;
+    /** Máximo de operarios en un chute (definido o reparto parejo). */
+    private final int topeChute;
+    private final List<RutaProyeccion> rutas;
     private final Map<Long, BigDecimal> bultosChute = new HashMap<>();
     /** Rutas de cada cluster por chute (cuántas). */
     private final Map<Long, Map<Long, Integer>> conteo = new HashMap<>();
@@ -648,15 +742,18 @@ public class SimulacionConfiguracionService {
         Map<Long, Integer> operarios,
         BigDecimal velocidad,
         Map<Long, BigDecimal> limites,
-        Integer maxOperarios,
+        int maximoGlobal,
+        int topeChute,
         Map<Long, Integer> numerosCluster) {
       this.velocidad = velocidad;
       this.operarios = new HashMap<>(operarios);
       this.limites = limites;
-      this.maxOperarios = maxOperarios != null && maxOperarios > 0 ? maxOperarios : null;
+      this.maximoGlobal = maximoGlobal;
+      this.topeChute = topeChute;
       this.numerosCluster = numerosCluster;
+      this.rutas = rutas;
       for (RutaProyeccion ruta : rutas) {
-        this.operarios.putIfAbsent(ruta.getChuteId(), OPERARIOS_INICIALES);
+        this.operarios.putIfAbsent(ruta.getChuteId(), ParametroChute.OPERARIOS_INICIALES);
         bultosChute.merge(ruta.getChuteId(), ruta.getTotalBultos(), BigDecimal::add);
         conteo
             .computeIfAbsent(ruta.getClusterId(), (id) -> new HashMap<>())
@@ -693,17 +790,20 @@ public class SimulacionConfiguracionService {
         if (chute.equals(chuteB)) {
           operarios = operariosB;
         }
-        maximo = maximo.max(horas(bultosChute.getOrDefault(chute, BigDecimal.ZERO), velocidad, operarios));
+        maximo =
+            maximo.max(
+                horas(bultosChute.getOrDefault(chute, BigDecimal.ZERO), velocidad, operarios));
       }
       return maximo;
     }
 
-    Long peorCluster(Map<Long, BigDecimal> limites) {
+    /** Cluster con mayor déficit sobre su límite, sin contar los que ya no tienen solución. */
+    Long peorCluster(Set<Long> excluidos) {
       Long peor = null;
       BigDecimal mayorDeficit = BigDecimal.ZERO;
       for (Long cluster : conteo.keySet()) {
         BigDecimal limite = limites.getOrDefault(cluster, BigDecimal.ZERO);
-        if (limite.signum() <= 0) {
+        if (limite.signum() <= 0 || excluidos.contains(cluster)) {
           continue;
         }
         BigDecimal deficit = tiempoCluster(cluster).subtract(limite);
@@ -713,6 +813,19 @@ public class SimulacionConfiguracionService {
         }
       }
       return peor;
+    }
+
+    /** Clusters que siguen por encima de su límite, con su tiempo de cierre. */
+    Map<Long, BigDecimal> fueraDeLimite() {
+      Map<Long, BigDecimal> fuera = new HashMap<>();
+      for (Long cluster : conteo.keySet()) {
+        BigDecimal limite = limites.getOrDefault(cluster, BigDecimal.ZERO);
+        BigDecimal tiempo = tiempoCluster(cluster);
+        if (limite.signum() > 0 && tiempo.subtract(limite).compareTo(TOLERANCIA) > 0) {
+          fuera.put(cluster, tiempo);
+        }
+      }
+      return fuera;
     }
 
     Long chuteMasLento(Long cluster) {
@@ -729,47 +842,50 @@ public class SimulacionConfiguracionService {
     }
 
     /**
-     * Mueve la ruta más grande del cluster en el chute cuello al chute más
-     * rápido, si con ello el destino queda por debajo del cuello. Devuelve la
-     * ruta movida o null si no conviene mover.
+     * Mueve una ruta del cluster en el chute cuello al chute más rápido que la
+     * admita: se prueban de mayor a menor hasta encontrar una con la que el
+     * destino quede por debajo del cuello sin sacar de su límite a otro cluster.
+     * Devuelve el traslado o null si ninguna conviene.
      */
-    RutaProyeccion moverMayorRuta(Long cluster, Long cuello) {
-      RutaProyeccion ruta =
+    Traslado moverRuta(Long cluster, Long cuello) {
+      BigDecimal tiempoCuello = tiempo(cuello);
+      List<RutaProyeccion> candidatas =
           rutasCluster.get(cluster).stream()
               .filter((r) -> r.getChuteId().equals(cuello))
-              .max(Comparator.comparing(RutaProyeccion::getTotalBultos))
-              .orElse(null);
-      if (ruta == null) {
-        return null;
-      }
-      Long rapido = null;
-      BigDecimal menor = null;
-      for (Long chute : operarios.keySet()) {
-        if (chute.equals(cuello) || !admite(chute, cluster)) {
-          continue;
+              .sorted(Comparator.comparing(RutaProyeccion::getTotalBultos).reversed())
+              .limit(CANDIDATOS_RUTA)
+              .toList();
+      for (RutaProyeccion ruta : candidatas) {
+        Long rapido = null;
+        BigDecimal menor = null;
+        for (Long chute : operarios.keySet()) {
+          if (chute.equals(cuello) || !admite(chute, cluster)) {
+            continue;
+          }
+          BigDecimal tiempo = tiempoCon(chute, ruta);
+          // El destino no puede dejar fuera de su límite a otro cluster que ya
+          // usa ese chute: sería trasladar el problema.
+          if (!respetaLimitesAjenos(chute, cluster, tiempo)) {
+            continue;
+          }
+          if (menor == null || tiempo.compareTo(menor) < 0) {
+            menor = tiempo;
+            rapido = chute;
+          }
         }
-        BigDecimal tiempo = tiempoCon(chute, ruta);
-        // El destino no puede dejar fuera de su límite a otro cluster que ya
-        // usa ese chute: sería trasladar el problema.
-        if (!respetaLimitesAjenos(chute, cluster, tiempo)) {
-          continue;
-        }
-        if (menor == null || tiempo.compareTo(menor) < 0) {
-          menor = tiempo;
-          rapido = chute;
+        if (rapido != null && menor.compareTo(tiempoCuello) < 0) {
+          trasladar(ruta, cluster, cuello, rapido);
+          return new Traslado(ruta, cuello);
         }
       }
-      if (rapido == null || menor.compareTo(tiempo(cuello)) >= 0) {
-        return null;
-      }
-      trasladar(ruta, cluster, cuello, rapido);
-      return ruta;
+      return null;
     }
 
     /**
-     * Saca del primer chute que mezcla CL1 y CL2 una ruta del cluster con
-     * menos rutas allí y la lleva al chute compatible más rápido. Devuelve el
-     * traslado, o null cuando ya no quedan mezclas que se puedan separar.
+     * Saca del primer chute que mezcla CL1 y CL2 una ruta de uno de los dos
+     * clusters y la lleva al chute compatible más rápido. Se prefiere mover el
+     * cluster con menos rutas allí; si no tiene destino, se prueba con el otro.
+     * Devuelve el traslado, o null cuando ya no quedan mezclas que separar.
      */
     Traslado separarMezcla() {
       List<Long> chutes = new ArrayList<>(clustersPorChute.keySet());
@@ -778,33 +894,32 @@ public class SimulacionConfiguracionService {
         if (mezclasSinSalida.contains(chute)) {
           continue;
         }
-        Long saliente = clusterSaliente(chute);
-        if (saliente == null) {
-          continue;
-        }
-        RutaProyeccion ruta =
-            rutasCluster.get(saliente).stream()
-                .filter((r) -> r.getChuteId().equals(chute))
-                .max(Comparator.comparing(RutaProyeccion::getTotalBultos))
-                .orElseThrow();
-        Long destino = null;
-        BigDecimal menor = null;
-        for (Long candidato : operarios.keySet()) {
-          if (candidato.equals(chute) || !admite(candidato, saliente)) {
-            continue;
+        for (Long saliente : salientes(chute)) {
+          RutaProyeccion ruta =
+              rutasCluster.get(saliente).stream()
+                  .filter((r) -> r.getChuteId().equals(chute))
+                  .max(Comparator.comparing(RutaProyeccion::getTotalBultos))
+                  .orElseThrow();
+          Long destino = null;
+          BigDecimal menor = null;
+          for (Long candidato : operarios.keySet()) {
+            if (candidato.equals(chute) || !admite(candidato, saliente)) {
+              continue;
+            }
+            BigDecimal tiempo = tiempoCon(candidato, ruta);
+            if (menor == null || tiempo.compareTo(menor) < 0) {
+              menor = tiempo;
+              destino = candidato;
+            }
           }
-          BigDecimal tiempo = tiempoCon(candidato, ruta);
-          if (menor == null || tiempo.compareTo(menor) < 0) {
-            menor = tiempo;
-            destino = candidato;
+          if (destino != null) {
+            trasladar(ruta, saliente, chute, destino);
+            return new Traslado(ruta, chute);
           }
         }
-        if (destino == null) {
+        if (!salientes(chute).isEmpty()) {
           mezclasSinSalida.add(chute);
-          continue;
         }
-        trasladar(ruta, saliente, chute, destino);
-        return new Traslado(ruta, chute);
       }
       return null;
     }
@@ -814,27 +929,27 @@ public class SimulacionConfiguracionService {
     }
 
     /**
-     * Cluster que debe dejar un chute mezclado: entre los incompatibles
-     * presentes, el que tiene menos rutas allí (menos movimientos). Null si el
-     * chute no mezcla CL1 con CL2.
+     * Clusters de CL1/CL2 presentes en un chute que los mezcla, del que tiene
+     * menos rutas allí (menos movimientos) al que tiene más. Vacío si el chute
+     * no mezcla CL1 con CL2.
      */
-    private Long clusterSaliente(Long chute) {
-      Long saliente = null;
-      int menos = Integer.MAX_VALUE;
+    private List<Long> salientes(Long chute) {
+      List<Long> incompatibles = new ArrayList<>();
       Set<Integer> numeros = new HashSet<>();
-      for (Long cluster : clustersPorChute.get(chute)) {
+      for (Long cluster : clustersPorChute.getOrDefault(chute, Set.of())) {
         Integer numero = numerosCluster.get(cluster);
-        if (numero == null || !CLUSTERS_INCOMPATIBLES.contains(numero)) {
-          continue;
-        }
-        numeros.add(numero);
-        int rutas = conteo.get(cluster).getOrDefault(chute, 0);
-        if (rutas < menos || (rutas == menos && cluster < saliente)) {
-          menos = rutas;
-          saliente = cluster;
+        if (numero != null && CLUSTERS_INCOMPATIBLES.contains(numero)) {
+          numeros.add(numero);
+          incompatibles.add(cluster);
         }
       }
-      return numeros.size() > 1 ? saliente : null;
+      if (numeros.size() < 2) {
+        return List.of();
+      }
+      incompatibles.sort(
+          Comparator.comparingInt((Long cluster) -> conteo.get(cluster).getOrDefault(chute, 0))
+              .thenComparing(Comparator.naturalOrder()));
+      return incompatibles;
     }
 
     /** CL1 y CL2 no pueden quedar juntos: el chute admite al cluster si no crea esa mezcla. */
@@ -881,15 +996,16 @@ public class SimulacionConfiguracionService {
     }
 
     int operarios(Long chute) {
-      return operarios.getOrDefault(chute, OPERARIOS_INICIALES);
+      return operarios.getOrDefault(chute, ParametroChute.OPERARIOS_INICIALES);
     }
 
-    int totalOperarios() {
+    private int totalOperarios() {
       return operarios.values().stream().mapToInt(Integer::intValue).sum();
     }
 
-    boolean hayCupo() {
-      return maxOperarios == null || totalOperarios() < maxOperarios;
+    /** Cabe un operario más en el chute: hay cupo global y no pasa el tope por chute. */
+    boolean puedeAgregar(Long chute) {
+      return totalOperarios() < maximoGlobal && operarios(chute) < topeChute;
     }
 
     void agregarOperario(Long chute) {
@@ -898,14 +1014,15 @@ public class SimulacionConfiguracionService {
 
     /**
      * Reasigna un operario desde el chute con más holgura al cuello de
-     * botella. Solo cede quien puede hacerlo sin que su cluster empeore: si
-     * tiene límite debe seguir cumpliéndolo, y en ningún caso puede quedar por
-     * encima del cuello actual (sería trasladar el problema). Devuelve el
-     * chute donante o null si no hay ninguno viable.
+     * botella, si el cuello no está ya en el tope por chute. Solo cede quien
+     * puede hacerlo sin trasladar el problema: su cluster debe seguir dentro de
+     * su límite (si lo tiene) y en ningún caso puede quedar por encima del
+     * tiempo actual del cuello. Devuelve el chute donante o null si no hay
+     * ninguno viable.
      */
     Long moverOperario(Long cuello) {
       int operariosCuello = operarios(cuello);
-      if (operariosCuello >= Limites.MAX_OPERARIOS) {
+      if (operariosCuello >= topeChute) {
         return null;
       }
       int operariosCuelloDespues = operariosCuello + 1;
@@ -919,27 +1036,20 @@ public class SimulacionConfiguracionService {
           continue;
         }
         int operariosDonanteDespues = operariosDonante - 1;
-        Set<Long> clusters = clustersPorChute.getOrDefault(donante, Set.of());
         boolean viable = true;
         BigDecimal holgura = null;
-        for (Long cluster : clusters) {
+        for (Long cluster : clustersPorChute.getOrDefault(donante, Set.of())) {
           BigDecimal tiempo =
               tiempoClusterCon(
                   cluster, donante, operariosDonanteDespues, cuello, operariosCuelloDespues);
           BigDecimal limite = limites.getOrDefault(cluster, BigDecimal.ZERO);
-          if (limite.signum() > 0 && tiempo.compareTo(limite.add(TOLERANCIA)) > 0) {
-            viable = false;
-            break;
-          }
-          BigDecimal techo = limite.signum() > 0 ? limite : tiempoCuelloActual;
+          BigDecimal techo =
+              limite.signum() > 0 ? limite.min(tiempoCuelloActual) : tiempoCuelloActual;
           if (tiempo.compareTo(techo.add(TOLERANCIA)) > 0) {
             viable = false;
             break;
           }
-          BigDecimal disponible =
-              limite.signum() > 0
-                  ? limite.subtract(tiempo)
-                  : BigDecimal.valueOf(1_000_000).subtract(tiempo);
+          BigDecimal disponible = techo.subtract(tiempo);
           holgura = holgura == null ? disponible : holgura.min(disponible);
         }
         if (!viable) {
@@ -973,29 +1083,44 @@ public class SimulacionConfiguracionService {
           });
       return cambios;
     }
+
+    /** Rutas que, tras el balanceo, están en un chute distinto al de la carga. */
+    long rutasFueraDeOrigen() {
+      return rutas.stream()
+          .filter((ruta) -> !ruta.getChuteId().equals(ruta.getChuteOriginalId()))
+          .count();
+    }
   }
 
+  /**
+   * Devuelve las rutas a su chute original y los operarios a los que fijó el
+   * usuario ({@code operarios_original}), y borra el historial.
+   */
   private void deshacerHistorial(Contexto ctx, Long actor) {
     Long archivoId = ctx.archivo().getId();
-    List<HistorialBalanceo> logs = historialRepo.findByArchivoIdOrderByIdAsc(archivoId);
     // El chute original quedó congelado al cargar el Excel, así que basta un
     // UPDATE masivo (sin depender de reconstruir el historial movimiento a movimiento).
     rutaRepo.restaurarChutes(archivoId);
-    operariosNetos(logs)
-        .forEach(
-            (chuteId, neto) -> {
-              ParametroChute parametro = ctx.parametrosChute().get(chuteId);
-              if (parametro != null) {
-                int actual =
-                    parametro.getOperarios() == null
-                        ? OPERARIOS_INICIALES
-                        : parametro.getOperarios();
-                parametro.setOperarios(Math.max(1, actual - neto));
-              }
-            });
+    ctx.parametrosChute().values().forEach((p) -> p.setOperarios(operariosOriginal(p)));
     historialRepo.borrarPorArchivo(archivoId);
     ctx.archivo().setEstado(ArchivoExcel.ESTADO_PROYECCION);
     tocar(ctx.archivo(), actor);
+  }
+
+  /**
+   * BALANCEADO = los datos ya no son la proyección original: hay rutas fuera
+   * de su chute o chutes con operarios distintos a los que fijó el usuario.
+   * Si un cambio manual lo deshace todo, el registro vuelve a PROYECCION.
+   */
+  private static void actualizarEstado(Contexto ctx, long rutasFueraDeOrigen) {
+    boolean operariosCambiados =
+        ctx.parametrosChute().values().stream()
+            .anyMatch((p) -> operariosActuales(p) != operariosOriginal(p));
+    ctx.archivo()
+        .setEstado(
+            rutasFueraDeOrigen > 0 || operariosCambiados
+                ? ArchivoExcel.ESTADO_BALANCEADO
+                : ArchivoExcel.ESTADO_PROYECCION);
   }
 
   // ------------------------------------------------------------------
@@ -1005,24 +1130,16 @@ public class SimulacionConfiguracionService {
   /**
    * Comparativo original vs. actual sobre la carga agregada por (cluster,
    * chute). La carga original sale del chute congelado al cargar el Excel
-   * ({@code chute_original_id}); los operarios originales, del historial.
+   * ({@code chute_original_id}); los operarios originales, de los que fijó el
+   * usuario ({@code operarios_original}). Los indicadores salen del estado, no
+   * de contar entradas del historial.
    */
   private DashboardSimulacionResponse calcularDashboard(Contexto ctx) {
     Long archivoId = ctx.archivo().getId();
     BigDecimal velocidad = ctx.config().getVelocidadBase();
     if (velocidad == null || velocidad.signum() <= 0) {
-      velocidad = VELOCIDAD_INICIAL;
+      velocidad = SimulacionConfig.VELOCIDAD_INICIAL;
     }
-    List<HistorialBalanceo> logs = historialRepo.findByArchivoIdOrderByIdAsc(archivoId);
-    Map<Long, Integer> netosPorChute = operariosNetos(logs);
-    int rutasMovidas = (int) logs.stream().filter(HistorialBalanceo::esMovimiento).count();
-    int operariosMovidos = (int) logs.stream().filter(HistorialBalanceo::esMovimientoOperario).count();
-    int operariosAgregados =
-        (int)
-            logs.stream()
-                .filter(
-                    (log) -> HistorialBalanceo.ACCION_ANADIR_OPERARIO.equals(log.getTipoAccion()))
-                .count();
 
     Map<Par, Estadistica> cargaActual = new HashMap<>();
     for (CargaRutas fila : rutaRepo.cargaPorArchivo(archivoId)) {
@@ -1037,21 +1154,31 @@ public class SimulacionConfiguracionService {
 
     Map<Long, Integer> salieron = new HashMap<>();
     Map<Long, Integer> llegaron = new HashMap<>();
+    int rutasMovidas = 0;
     List<MovimientoChuteResponse> movimientos = new ArrayList<>();
     for (MovimientoRutas movimiento : rutaRepo.movimientosPorArchivo(archivoId)) {
       int rutas = Math.toIntExact(movimiento.getRutas());
       salieron.merge(movimiento.getOrigen(), rutas, Integer::sum);
       llegaron.merge(movimiento.getDestino(), rutas, Integer::sum);
+      rutasMovidas += rutas;
       movimientos.add(
           new MovimientoChuteResponse(movimiento.getOrigen(), movimiento.getDestino(), rutas));
     }
 
     Map<Long, Integer> operariosActuales = operarios(ctx);
     Map<Long, Integer> operariosOriginales = new HashMap<>();
-    operariosActuales.forEach(
-        (chuteId, total) ->
-            operariosOriginales.put(
-                chuteId, Math.max(1, total - netosPorChute.getOrDefault(chuteId, 0))));
+    int operariosAgregados = 0;
+    int operariosMovidos = 0;
+    for (Map.Entry<Long, ParametroChute> entrada : ctx.parametrosChute().entrySet()) {
+      int original = operariosOriginal(entrada.getValue());
+      int actualChute = operariosActuales(entrada.getValue());
+      operariosOriginales.put(entrada.getKey(), original);
+      operariosAgregados += actualChute - original;
+      // Cada operario que un chute tiene de menos fue cedido a otro.
+      operariosMovidos += Math.max(0, original - actualChute);
+    }
+    // Lo cedido se cuenta como reasignado, no como añadido.
+    operariosAgregados = Math.max(0, operariosAgregados);
 
     Metricas actual = Metricas.de(cargaActual, operariosActuales, velocidad);
     Metricas original = Metricas.de(cargaOriginal, operariosOriginales, velocidad);
@@ -1123,8 +1250,8 @@ public class SimulacionConfiguracionService {
                   return new ChuteComparativoResponse(
                       chuteId,
                       ctx.nombreChute(chuteId),
-                      operariosOriginales.getOrDefault(chuteId, OPERARIOS_INICIALES),
-                      operariosActuales.getOrDefault(chuteId, OPERARIOS_INICIALES),
+                      operariosOriginales.getOrDefault(chuteId, ParametroChute.OPERARIOS_INICIALES),
+                      operariosActuales.getOrDefault(chuteId, ParametroChute.OPERARIOS_INICIALES),
                       Math.toIntExact(antes.rutas()),
                       Math.toIntExact(despues.rutas()),
                       salieron.getOrDefault(chuteId, 0),
@@ -1144,7 +1271,9 @@ public class SimulacionConfiguracionService {
                       nombresCluster(clustersOriginales.get(chuteId), ctx),
                       nombresCluster(clustersActuales.get(chuteId), ctx),
                       mezclaIncompatible(clustersOriginales.get(chuteId), numeros),
-                      mezclaIncompatible(clustersActuales.get(chuteId), numeros));
+                      mezclaIncompatible(clustersActuales.get(chuteId), numeros),
+                      clustersSeparados(
+                          clustersOriginales.get(chuteId), clustersActuales.get(chuteId), numeros, ctx));
                 })
             .toList();
 
@@ -1218,6 +1347,24 @@ public class SimulacionConfiguracionService {
     return clusters == null
         ? List.of()
         : clusters.stream().map(ctx::nombreCluster).sorted(ORDEN_NATURAL).toList();
+  }
+
+  /**
+   * Clusters CL1/CL2 que el chute tenía mezclados al cargar y que ya no están
+   * en él: salieron para cumplir la regla. Vacío si no había mezcla.
+   */
+  private static List<String> clustersSeparados(
+      Set<Long> originales, Set<Long> actuales, Map<Long, Integer> numeros, Contexto ctx) {
+    if (!mezclaIncompatible(originales, numeros)) {
+      return List.of();
+    }
+    Set<Long> ahora = actuales == null ? Set.of() : actuales;
+    return originales.stream()
+        .filter((cluster) -> !ahora.contains(cluster))
+        .filter((cluster) -> CLUSTERS_INCOMPATIBLES.contains(numeros.get(cluster)))
+        .map(ctx::nombreCluster)
+        .sorted(ORDEN_NATURAL)
+        .toList();
   }
 
   /** True si entre los clusters hay más de uno de {@link #CLUSTERS_INCOMPATIBLES} (CL1 con CL2). */
@@ -1337,7 +1484,10 @@ public class SimulacionConfiguracionService {
           (chute, valor) ->
               tiemposChute.put(
                   chute,
-                  horas(valor.bultos(), velocidad, operarios.getOrDefault(chute, OPERARIOS_INICIALES))));
+                  horas(
+                      valor.bultos(),
+                      velocidad,
+                      operarios.getOrDefault(chute, ParametroChute.OPERARIOS_INICIALES))));
       Map<Long, BigDecimal> tiemposCluster = new HashMap<>();
       carga.forEach(
           (par, valor) -> {
@@ -1404,7 +1554,7 @@ public class SimulacionConfiguracionService {
                 () -> {
                   SimulacionConfig inicial = new SimulacionConfig();
                   inicial.setArchivoId(archivoId);
-                  inicial.setVelocidadBase(VELOCIDAD_INICIAL);
+                  inicial.setVelocidadBase(SimulacionConfig.VELOCIDAD_INICIAL);
                   return inicial;
                 });
     Map<Long, ParametroCluster> parametrosCluster =
@@ -1430,17 +1580,41 @@ public class SimulacionConfiguracionService {
     List<CargaRutas> carga = rutaRepo.cargaPorArchivo(ctx.archivo().getId());
     Map<Long, BigDecimal> limites = limites(ctx);
     Map<Long, Integer> operarios = operarios(ctx);
+    Map<Long, Integer> numeros = numerosCluster(ctx.clusters());
     List<ClusterParametroResponse> clusters =
         ctx.parametrosCluster().keySet().stream()
             .map(
                 (id) ->
                     new ClusterParametroResponse(
-                        id, ctx.nombreCluster(id), limites.getOrDefault(id, BigDecimal.ZERO)))
+                        id,
+                        ctx.nombreCluster(id),
+                        limites.getOrDefault(id, BigDecimal.ZERO),
+                        ctx.parametrosCluster().keySet().stream()
+                            .filter(
+                                (otro) ->
+                                    clusterEnConflicto(List.of(otro), id, numeros) != null)
+                            .toList()))
             .sorted(Comparator.comparing(ClusterParametroResponse::nombre, ORDEN_NATURAL))
             .toList();
+    Map<Long, List<Long>> clustersEnChute = new HashMap<>();
+    carga.forEach(
+        (fila) -> {
+          if (fila.getRutas() > 0) {
+            clustersEnChute
+                .computeIfAbsent(fila.getChuteId(), (id) -> new ArrayList<>())
+                .add(fila.getClusterId());
+          }
+        });
     List<ChuteParametroResponse> chutes =
-        ctx.parametrosChute().keySet().stream()
-            .map((id) -> new ChuteParametroResponse(id, ctx.nombreChute(id), operarios.get(id)))
+        ctx.parametrosChute().entrySet().stream()
+            .map(
+                (entrada) ->
+                    new ChuteParametroResponse(
+                        entrada.getKey(),
+                        ctx.nombreChute(entrada.getKey()),
+                        operarios.get(entrada.getKey()),
+                        operariosOriginal(entrada.getValue()),
+                        clustersEnChute.getOrDefault(entrada.getKey(), List.of())))
             .sorted(Comparator.comparing(ChuteParametroResponse::nombre, ORDEN_NATURAL))
             .toList();
     List<CargaSimulacionResponse> cargaResponse =
@@ -1460,6 +1634,8 @@ public class SimulacionConfiguracionService {
         aArchivo(ctx.archivo(), carga),
         ctx.config().getVelocidadBase(),
         operariosMaximos(ctx, operarios),
+        ctx.config().getOperariosPorChute(),
+        topePorChute(ctx, operarios),
         clusters,
         chutes,
         cargaResponse,
@@ -1515,34 +1691,35 @@ public class SimulacionConfiguracionService {
 
   private static Map<Long, Integer> operarios(Contexto ctx) {
     Map<Long, Integer> operarios = new HashMap<>();
-    ctx.parametrosChute()
-        .forEach(
-            (id, p) ->
-                operarios.put(
-                    id, Math.max(1, p.getOperarios() == null ? OPERARIOS_INICIALES : p.getOperarios())));
+    ctx.parametrosChute().forEach((id, p) -> operarios.put(id, operariosActuales(p)));
     return operarios;
   }
 
+  private static int operariosActuales(ParametroChute p) {
+    return Math.max(1, p.getOperarios() == null ? ParametroChute.OPERARIOS_INICIALES : p.getOperarios());
+  }
+
+  private static int operariosOriginal(ParametroChute p) {
+    return Math.max(
+        1,
+        p.getOperariosOriginal() == null
+            ? operariosActuales(p)
+            : p.getOperariosOriginal());
+  }
+
   /**
-   * Cambio neto de operarios por chute que produjo el historial. Un operario
-   * añadido suma 1; uno reasignado resta 1 al origen y suma 1 al destino.
+   * Máximo de operarios en un chute que aplica el balanceo: el que definió el
+   * usuario o, si no hay, el reparto parejo del máximo global entre los chutes
+   * (redondeado hacia arriba, mínimo 1).
    */
-  private static Map<Long, Integer> operariosNetos(List<HistorialBalanceo> logs) {
-    Map<Long, Integer> netos = new HashMap<>();
-    for (HistorialBalanceo log : logs) {
-      if (log.esMovimientoOperario()) {
-        if (log.getChuteOrigenId() != null) {
-          netos.merge(log.getChuteOrigenId(), -1, Integer::sum);
-        }
-        if (log.getChuteDestinoId() != null) {
-          netos.merge(log.getChuteDestinoId(), 1, Integer::sum);
-        }
-      } else if (HistorialBalanceo.ACCION_ANADIR_OPERARIO.equals(log.getTipoAccion())
-          && log.getChuteModificadoId() != null) {
-        netos.merge(log.getChuteModificadoId(), 1, Integer::sum);
-      }
+  private static int topePorChute(Contexto ctx, Map<Long, Integer> operarios) {
+    Integer definido = ctx.config().getOperariosPorChute();
+    if (definido != null && definido > 0) {
+      return Math.min(definido, Limites.MAX_OPERARIOS);
     }
-    return netos;
+    int chutes = Math.max(1, ctx.parametrosChute().size());
+    int global = operariosMaximos(ctx, operarios);
+    return Math.max(1, Math.min(Limites.MAX_OPERARIOS, (global + chutes - 1) / chutes));
   }
 
   /** Tope global del registro; si nunca se definió, la suma asignada actual. */
@@ -1600,34 +1777,59 @@ public class SimulacionConfiguracionService {
   }
 
   private static HistorialBalanceo movimiento(
-      Long archivoId, Long rutaId, Long origen, Long destino, Long actor) {
-    HistorialBalanceo log = nuevoLog(archivoId, HistorialBalanceo.ACCION_MOVER_RUTA, actor);
-    log.setRutaId(rutaId);
-    log.setChuteOrigenId(origen);
-    log.setChuteDestinoId(destino);
+      Long archivoId, Traslado traslado, String motivo, Long actor, Instant momento) {
+    HistorialBalanceo log =
+        nuevoLog(archivoId, HistorialBalanceo.ACCION_MOVER_RUTA, motivo, actor, momento);
+    log.setRutaId(traslado.ruta().getId());
+    log.setChuteOrigenId(traslado.origen());
+    log.setChuteDestinoId(traslado.ruta().getChuteId());
     return log;
   }
 
-  private static HistorialBalanceo operario(Long archivoId, Long chuteId, Long actor) {
-    HistorialBalanceo log = nuevoLog(archivoId, HistorialBalanceo.ACCION_ANADIR_OPERARIO, actor);
+  private static HistorialBalanceo operario(
+      Long archivoId, Long chuteId, int operariosDespues, Long actor, Instant momento) {
+    HistorialBalanceo log =
+        nuevoLog(
+            archivoId,
+            HistorialBalanceo.ACCION_ANADIR_OPERARIO,
+            HistorialBalanceo.MOTIVO_BALANCEO,
+            actor,
+            momento);
     log.setChuteModificadoId(chuteId);
+    log.setOperariosDestino(operariosDespues);
     return log;
   }
 
   private static HistorialBalanceo operarioMovido(
-      Long archivoId, Long origen, Long destino, Long actor) {
-    HistorialBalanceo log = nuevoLog(archivoId, HistorialBalanceo.ACCION_MOVER_OPERARIO, actor);
+      Long archivoId,
+      Long origen,
+      int operariosOrigen,
+      Long destino,
+      int operariosDestino,
+      Long actor,
+      Instant momento) {
+    HistorialBalanceo log =
+        nuevoLog(
+            archivoId,
+            HistorialBalanceo.ACCION_MOVER_OPERARIO,
+            HistorialBalanceo.MOTIVO_BALANCEO,
+            actor,
+            momento);
     log.setChuteOrigenId(origen);
     log.setChuteDestinoId(destino);
+    log.setOperariosOrigen(operariosOrigen);
+    log.setOperariosDestino(operariosDestino);
     return log;
   }
 
-  private static HistorialBalanceo nuevoLog(Long archivoId, String accion, Long actor) {
+  private static HistorialBalanceo nuevoLog(
+      Long archivoId, String accion, String motivo, Long actor, Instant momento) {
     HistorialBalanceo log = new HistorialBalanceo();
     log.setArchivoId(archivoId);
     log.setTipoAccion(accion);
+    log.setMotivo(motivo);
     log.setCreadoPor(actor);
-    log.setCreadoEn(Instant.now());
+    log.setCreadoEn(momento);
     return log;
   }
 

@@ -24,12 +24,18 @@ export interface ClusterParametroSimulacion {
   id: number;
   nombre: string;
   limiteHoras: number;
+  /** Clusters con los que no puede compartir chute (CL1 con CL2). */
+  incompatibles: number[];
 }
 
 export interface ChuteParametroSimulacion {
   id: number;
   nombre: string;
   operarios: number;
+  /** Operarios que fijó el usuario: base del comparativo y de «Restablecer». */
+  operariosOriginal: number;
+  /** Clusters con rutas hoy en el chute. */
+  clusterIds: number[];
 }
 
 export interface RutaSimulacion {
@@ -67,6 +73,10 @@ export interface ConfiguracionSimulacion {
   velocidadBase: number;
   /** Tope global de operarios disponibles para todo el registro. */
   operariosMaximos: number;
+  /** Máximo de operarios en un chute definido por el usuario; null = reparto parejo. */
+  operariosPorChute: number | null;
+  /** Tope por chute que aplica el balanceo (el definido o el reparto parejo). */
+  topePorChute: number;
   clusters: ClusterParametroSimulacion[];
   chutes: ChuteParametroSimulacion[];
   carga: CargaSimulacion[];
@@ -101,6 +111,8 @@ export interface ChuteOperariosRequest {
 export interface ConfiguracionSimulacionRequest {
   velocidadBase: number;
   operariosMaximos: number;
+  /** null = reparto parejo del máximo global. */
+  operariosPorChute: number | null;
   clusters: ClusterLimiteRequest[];
   chutes: ChuteOperariosRequest[];
 }
@@ -108,11 +120,19 @@ export interface ConfiguracionSimulacionRequest {
 export interface HistorialSimulacion {
   id: number;
   tipoAccion: 'MOVER_RUTA' | 'AÑADIR_OPERARIO' | 'MOVER_OPERARIO' | string;
+  /** BALANCEO: ajuste de tiempos; SEPARACION: CL1 y CL2; MANUAL: hecho por el usuario. */
+  motivo: 'BALANCEO' | 'SEPARACION' | 'MANUAL' | string;
   rutaId: number | null;
   ruta: string | null;
+  cluster: string | null;
+  tipo: string | null;
+  bultos: number | null;
   chuteOrigen: string | null;
   chuteDestino: string | null;
   chuteModificado: string | null;
+  /** Operarios después de la acción en el chute de origen y en el de destino o modificado. */
+  operariosOrigen: number | null;
+  operariosDestino: number | null;
   creadoEn: string;
   creadoPor: number | null;
 }
@@ -130,8 +150,11 @@ export interface SimulacionKpis {
   tiempoOriginal: number;
   tiempoBalanceado: number;
   tiempoAhorrado: number;
+  /** Rutas que hoy están en un chute distinto al original. */
   rutasMovidas: number;
+  /** Operarios por encima de los que fijó el usuario. */
   operariosAgregados: number;
+  /** Operarios que un chute cedió a otro. */
   operariosMovidos: number;
   bultos: number;
   unidades: number;
@@ -184,6 +207,8 @@ export interface ChuteComparativoSimulacion {
   /** El chute junta CL1 y CL2 (no permitido) al cargar el Excel / tras el balanceo. */
   mezclaOriginal: boolean;
   mezclaBalanceada: boolean;
+  /** Clusters de CL1/CL2 que salieron del chute para dejar de compartirlo. */
+  clustersSeparados: string[];
 }
 
 /** Rutas que pasaron de un chute a otro (por chute original y actual). */
