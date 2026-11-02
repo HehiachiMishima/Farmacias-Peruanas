@@ -20,7 +20,6 @@ import oracle.common.response.ApiResponse;
 import oracle.simulacion.model.ArchivoExcel;
 import oracle.simulacion.model.Chute;
 import oracle.simulacion.model.Cluster;
-import oracle.simulacion.model.HistorialBalanceo;
 import oracle.simulacion.model.ParametroChute;
 import oracle.simulacion.model.ParametroChuteId;
 import oracle.simulacion.model.ParametroCluster;

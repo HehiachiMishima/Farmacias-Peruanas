@@ -1,3 +1,4 @@
+-- Active: 1791863596251@@mysql-hehiachi-mishima-servidor-local.g.aivencloud.com@25590@farmacias_peruanas
 -- ############################################################
 -- 4. Panel Simulación: registros Excel, clusters, chutes, rutas e historial
 --    (origen: panel.simulacion.sql)
@@ -12,6 +13,14 @@ USE farmacias_peruanas;
 -- ============================================================
 -- 1) archivos_excel (Cabecera del archivo subido)
 -- ============================================================
+DROP TABLE IF EXISTS archivos_excel CASCADE;
+drop table if exists simulacion_config CASCADE;
+drop table if exists parametros_clusters CASCADE;
+drop table if exists parametros_chutes CASCADE;
+drop table if exists rutas_proyeccion CASCADE;
+drop table if exists historial_balanceo CASCADE;
+drop table if exists clusters CASCADE;
+drop table if exists chutes CASCADE;
 CREATE TABLE IF NOT EXISTS archivos_excel (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     nombre_registro VARCHAR(150) NOT NULL COMMENT 'Nombre del registro (Ej: Ventas Enero).',

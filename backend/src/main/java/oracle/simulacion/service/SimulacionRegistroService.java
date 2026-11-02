@@ -3,7 +3,6 @@ package oracle.simulacion.service;
 import jakarta.persistence.criteria.Predicate;
 import java.io.IOException;
 import java.io.InputStream;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
