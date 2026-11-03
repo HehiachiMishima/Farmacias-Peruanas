@@ -4,7 +4,6 @@ import oracle.common.config.Transacciones;
 import oracle.common.security.AutorizacionCache;
 import oracle.common.support.ActorActual;
 import oracle.common.support.Auditoria;
-import oracle.common.support.Filtros;
 import oracle.common.support.Listas;
 import oracle.common.support.Trazas;
 
@@ -17,7 +16,6 @@ import oracle.admin.repository.PermisoRepository;
 import oracle.admin.request.CambiarEstadoRequest;
 import oracle.admin.request.PermisoActualizarRequest;
 import oracle.admin.request.PermisoCrearRequest;
-import oracle.admin.request.PermisoFiltroRequest;
 import oracle.common.response.ApiResponse;
 import oracle.admin.response.PermisoResponse;
 import org.springframework.stereotype.Service;
@@ -55,23 +53,6 @@ public class PermisoService {
                     })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Permisos listados.", lista));
-    }
-
-    public Mono<ApiResponse<List<PermisoResponse>>> buscar(PermisoFiltroRequest filtro) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "PermisoService.buscar", () -> transacciones.consultar(() ->
-                        permisoRepository.buscarConFiltros(
-                                        Filtros.normalizar(filtro.nombre()),
-                                        Filtros.normalizar(filtro.descripcion()),
-                                        filtro.activo())
-                                .stream().map(PermisoResponse::of).toList())))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(lista -> ApiResponse.ok("Permisos encontrados.", lista));
-    }
-
-    public Mono<ApiResponse<PermisoResponse>> obtenerPorId(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "PermisoService.obtenerPorId id=" + id, () -> transacciones.consultar(() ->
-                        ApiResponse.ok("Permiso encontrado.", PermisoResponse.of(obtenerPermiso(id))))))
-                .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<PermisoResponse>> crear(PermisoCrearRequest peticion) {

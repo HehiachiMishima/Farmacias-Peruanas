@@ -2,19 +2,19 @@ package oracle.bitacora.controller;
 
 import oracle.bitacora.response.AnaliticaBitacoraResponse;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.io.IOException;
 import java.time.LocalDate;
 import oracle.bitacora.request.FiltroIncidencia;
 import oracle.bitacora.request.IncidenciaActualizarRequest;
 import oracle.bitacora.request.IncidenciaCrearRequest;
 import oracle.common.response.ApiResponse;
-import oracle.bitacora.response.EstadisticaResponse;
 import oracle.bitacora.response.IncidenciaResponse;
 import oracle.common.response.PaginaResponse;
 import oracle.bitacora.service.IncidenciaService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,7 +25,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import reactor.core.publisher.Mono;
 
 /** CRUD de incidencias (bitácora), con listado paginado y filtrado en el servidor. */
@@ -61,10 +60,14 @@ public class IncidenciaController {
      * Exporta en flujo (chunked) el JSON completo del filtro. El envoltorio es
      * el mismo que el de una respuesta normal, pero las filas se escriben por
      * lotes en vez de cargarse todas en memoria.
+     *
+     * Se escribe en el hilo de la petición (virtual) y no como
+     * StreamingResponseBody asíncrono: el timeout async (15 s) cortaba a la
+     * mitad los exports grandes y el cliente recibía un JSON truncado.
      */
     @GetMapping("/exportar")
     @PreAuthorize("hasAuthority('VER_INCIDENCIAS')")
-    public ResponseEntity<StreamingResponseBody> exportar(
+    public void exportar(
             @RequestParam(required = false) Long centro,
             @RequestParam(required = false) Long sistema,
             @RequestParam(required = false) Long area,
@@ -72,26 +75,12 @@ public class IncidenciaController {
             @RequestParam(required = false) Long tipo,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
-            @RequestParam(required = false) String texto) {
-        return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(incidenciaService.exportarEnFlujo(
-                        new FiltroIncidencia(centro, sistema, area, responsable, tipo, desde, hasta, texto)));
-    }
-
-    @GetMapping("/estadisticas")
-    @PreAuthorize("hasAuthority('VER_DASHBOARD')")
-    public Mono<ApiResponse<EstadisticaResponse>> estadisticas(
-            @RequestParam(required = false) Long centro,
-            @RequestParam(required = false) Long sistema,
-            @RequestParam(required = false) Long area,
-            @RequestParam(required = false) Long responsable,
-            @RequestParam(required = false) Long tipo,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
-            @RequestParam(required = false) String texto) {
-        return incidenciaService.estadisticas(
-                new FiltroIncidencia(centro, sistema, area, responsable, tipo, desde, hasta, texto));
+            @RequestParam(required = false) String texto,
+            HttpServletResponse respuesta) throws IOException {
+        respuesta.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        incidenciaService.exportarEnFlujo(
+                        new FiltroIncidencia(centro, sistema, area, responsable, tipo, desde, hasta, texto))
+                .writeTo(respuesta.getOutputStream());
     }
 
     /** Analitica del dashboard (KPIs, rankings y cruces) para el filtro. */
@@ -108,12 +97,6 @@ public class IncidenciaController {
             @RequestParam(required = false) String texto) {
         return incidenciaService.analitica(
                 new FiltroIncidencia(centro, sistema, area, responsable, tipo, desde, hasta, texto));
-    }
-
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('VER_INCIDENCIAS')")
-    public Mono<ApiResponse<IncidenciaResponse>> obtener(@PathVariable Long id) {
-        return incidenciaService.obtenerPorId(id);
     }
 
     @PostMapping

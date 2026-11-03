@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import oracle.common.response.ApiResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -37,6 +39,32 @@ class ExportacionJsonTest {
 
         assertThat(sinTimestamp(real)).isEqualTo(sinTimestamp(esperado));
         assertThat(real).contains("\"datos\":[]");
+    }
+
+    @Test
+    @DisplayName("el export por lotes pide cada lote desde la ultima fila (cursor) y escribe todas")
+    void enLotesRecorrePorCursor() throws Exception {
+        int total = ExportacionJson.TAMANO_LOTE * 2 + 5;
+        List<Ejemplo> filas = new ArrayList<>();
+        for (long i = 1; i <= total; i++) {
+            filas.add(new Ejemplo(i, "Fila " + i));
+        }
+        List<Long> cursores = new ArrayList<>();
+        ExportacionJson.LectorLotes<Ejemplo> lector = (ultima, tamano) -> {
+            cursores.add(ultima == null ? null : ultima.id());
+            int desde = ultima == null ? 0 : ultima.id().intValue();
+            return filas.subList(desde, Math.min(desde + tamano, filas.size()));
+        };
+
+        ByteArrayOutputStream salida = new ByteArrayOutputStream();
+        ExportacionJson.enLotes(json, "OK", lector, () -> fila -> fila,
+                LoggerFactory.getLogger(ExportacionJsonTest.class), "prueba").writeTo(salida);
+        String real = salida.toString(StandardCharsets.UTF_8);
+        String esperado = json.writeValueAsString(ApiResponse.ok("OK", filas));
+
+        assertThat(sinTimestamp(real)).isEqualTo(sinTimestamp(esperado));
+        assertThat(cursores).containsExactly(null, (long) ExportacionJson.TAMANO_LOTE,
+                (long) ExportacionJson.TAMANO_LOTE * 2);
     }
 
     private String exportar(String mensaje, List<Ejemplo> filas) {

@@ -6,9 +6,4 @@ public record FiltroIncidenciaInbound(
     LocalDate desde,
     LocalDate hasta,
     String texto
-) {
-  public boolean vacio() {
-    return proveedor == null && tipo == null && desde == null && hasta == null
-        && (texto == null || texto.isBlank());
-  }
-}
+) {}

@@ -1,7 +1,6 @@
 package oracle.malla.controller;
 
 import jakarta.validation.Valid;
-import java.util.List;
 import oracle.common.response.ApiResponse;
 import oracle.malla.request.MallaReglaActualizarRequest;
 import oracle.malla.response.EvaluacionMallaResponse;
@@ -13,13 +12,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
 /**
- * Módulo Configuración de la Malla Operativa: catálogo de reglas, evaluación
- * vigente y ajuste de parámetros. Reutiliza los permisos del panel
- * ({@code VER_MALLA} y {@code MODIFICAR_MALLA}); no crea permisos nuevos.
+ * Validación de la Malla Operativa: evaluación de las reglas (de todos los
+ * centros o de uno) y ajuste de sus parámetros. Ver exige {@code VER_MALLA};
+ * cambiar una regla, {@code CONFIGURAR_REGLAS_MALLA}.
  */
 @RestController
 @RequestMapping("/api/malla/configuracion")
@@ -31,20 +31,16 @@ public class MallaConfiguracionController {
         this.service = service;
     }
 
-    @GetMapping("/reglas")
-    @PreAuthorize("hasAuthority('VER_MALLA')")
-    public Mono<ApiResponse<List<ReglaMallaResponse>>> reglas() {
-        return service.listarReglas();
-    }
-
     @GetMapping("/evaluacion")
     @PreAuthorize("hasAuthority('VER_MALLA')")
-    public Mono<ApiResponse<EvaluacionMallaResponse>> evaluacion() {
-        return service.evaluar();
+    public Mono<ApiResponse<EvaluacionMallaResponse>> evaluacion(
+            @RequestParam(required = false) Long centroId) {
+        return service.evaluar(centroId);
     }
 
+    /** Activar o ajustar reglas cambia qué se considera correcto: tiene su propio permiso. */
     @PutMapping("/reglas/{id}")
-    @PreAuthorize("hasAuthority('MODIFICAR_MALLA')")
+    @PreAuthorize("hasAuthority('CONFIGURAR_REGLAS_MALLA')")
     public Mono<ApiResponse<ReglaMallaResponse>> actualizar(@PathVariable Long id,
             @Valid @RequestBody MallaReglaActualizarRequest req) {
         return service.actualizar(id, req);

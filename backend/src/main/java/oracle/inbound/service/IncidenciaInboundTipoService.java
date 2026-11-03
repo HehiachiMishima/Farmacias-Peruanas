@@ -72,7 +72,7 @@ public class IncidenciaInboundTipoService {
         Long actor = ActorActual.id();
         return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaInboundTipoService.crear", () -> transacciones.ejecutar(() -> {
                     String nombre = req.incidenciaInbound().trim();
-                    if (repo.existsByIncidenciaInboundIgnoreCase(nombre)) {
+                    if (repo.existsByIncidenciaInbound(nombre)) {
                         throw new ConflictoException("Ya existe un tipo de incidencia con el nombre '" + nombre + "'.");
                     }
                     DataIncidenciaInbound p = new DataIncidenciaInbound();
@@ -91,7 +91,7 @@ public class IncidenciaInboundTipoService {
                     DataIncidenciaInbound p = obtener(id);
                     if (req.incidenciaInbound() != null && !req.incidenciaInbound().isBlank()) {
                         String nombre = req.incidenciaInbound().trim();
-                        if (repo.existsByIncidenciaInboundIgnoreCaseAndIdNot(nombre, id)) {
+                        if (repo.existsByIncidenciaInboundAndIdNot(nombre, id)) {
                             throw new ConflictoException("Ya existe otro tipo de incidencia con el nombre '" + nombre + "'.");
                         }
                         p.setIncidenciaInbound(nombre);

@@ -1,20 +1,9 @@
 import { Service, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import {
-  Permiso,
-  PermisoEfectivo,
-  PermisoFinal,
-  UsuarioPermisoDetalle,
-  UsuarioPermisoOverride,
-} from './permiso.model';
+import { PermisoEfectivo, UsuarioPermisoDetalle, UsuarioPermisoOverride } from './permiso.model';
 import { Rol } from './rol.model';
 import { Usuario } from '../../../../core/models';
-import {
-  UsuarioActualizarRequest,
-  UsuarioCrearRequest,
-  UsuarioFiltro,
-  UsuarioResumen,
-} from './usuario.model';
+import { UsuarioActualizarRequest, UsuarioCrearRequest, UsuarioResumen } from './usuario.model';
 import { Api } from '../../../../core/services/api';
 
 @Service()
@@ -28,14 +17,6 @@ export class UsuariosApi {
   /** Roles y permisos efectivos de todos los usuarios en una sola petición. */
   resumen(): Observable<UsuarioResumen[]> {
     return this.api.get<UsuarioResumen[]>('/usuarios/resumen');
-  }
-
-  buscar(filtro: UsuarioFiltro): Observable<Usuario[]> {
-    return this.api.get<Usuario[]>('/usuarios/buscar', { ...filtro });
-  }
-
-  obtener(id: number): Observable<Usuario> {
-    return this.api.get<Usuario>(`/usuarios/${id}`);
   }
 
   crear(peticion: UsuarioCrearRequest): Observable<Usuario> {
@@ -71,16 +52,6 @@ export class UsuariosApi {
     return this.api.get<UsuarioPermisoDetalle[]>(`/usuarios/${id}/permisos`);
   }
 
-  /** Overrides que deniegan un permiso al usuario. */
-  permisosDenegados(id: number): Observable<UsuarioPermisoDetalle[]> {
-    return this.api.get<UsuarioPermisoDetalle[]>(`/usuarios/${id}/permisos/denegados`);
-  }
-
-  /** Permisos del catálogo que tienen algún override para el usuario. */
-  permisosConOverride(id: number): Observable<Permiso[]> {
-    return this.api.get<Permiso[]>(`/usuarios/${id}/permisos/con-override`);
-  }
-
   /** Concede (otorgado=true) o deniega (otorgado=false) un permiso al usuario. */
   otorgarPermiso(id: number, override: UsuarioPermisoOverride): Observable<UsuarioPermisoDetalle> {
     return this.api.put<UsuarioPermisoDetalle>(`/usuarios/${id}/permisos`, override);
@@ -94,10 +65,5 @@ export class UsuariosApi {
   /** Resolución: aportes del rol y de los overrides, antes de aplicar MIN(). */
   resolucionEfectivos(id: number): Observable<PermisoEfectivo[]> {
     return this.api.get<PermisoEfectivo[]>(`/resolucion/usuarios/${id}/efectivos`);
-  }
-
-  /** Resolución final: permitido = MIN(otorgado) => deny-wins ya aplicado. */
-  resolucionFinales(id: number): Observable<PermisoFinal[]> {
-    return this.api.get<PermisoFinal[]>(`/resolucion/usuarios/${id}/finales`);
   }
 }

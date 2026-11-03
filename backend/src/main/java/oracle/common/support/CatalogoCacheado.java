@@ -17,12 +17,18 @@ public abstract class CatalogoCacheado<S> {
     private final SnapshotCache<S> cache;
     private final Transacciones transacciones;
     private final CacheRespuestas cacheRespuestas;
+    private final String espacioRespuestas;
 
+    /**
+     * @param espacioRespuestas espacio de {@link CacheRespuestas} con los agregados
+     *        del panel que muestran nombres de este catalogo (se invalida con el).
+     */
     protected CatalogoCacheado(String nombre, Supplier<S> cargador,
-            Transacciones transacciones, CacheRespuestas cacheRespuestas) {
+            Transacciones transacciones, CacheRespuestas cacheRespuestas, String espacioRespuestas) {
         this.cache = new SnapshotCache<>(nombre, cargador);
         this.transacciones = transacciones;
         this.cacheRespuestas = cacheRespuestas;
+        this.espacioRespuestas = espacioRespuestas;
     }
 
     /** Snapshot vigente (lo carga si fue invalidado). */
@@ -32,12 +38,13 @@ public abstract class CatalogoCacheado<S> {
 
     /**
      * Un cambio de catalogo invalida los nombres cacheados y los agregados del
-     * dashboard, una vez confirmada la transaccion en curso.
+     * dashboard de su panel (no los de otros paneles), una vez confirmada la
+     * transaccion en curso.
      */
     public void registrarCambio() {
         transacciones.alConfirmar(() -> {
             cache.invalidar();
-            cacheRespuestas.invalidarTodo();
+            cacheRespuestas.invalidarEspacio(espacioRespuestas);
         });
     }
 

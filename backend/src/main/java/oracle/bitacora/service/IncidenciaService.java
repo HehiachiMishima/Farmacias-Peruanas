@@ -1,8 +1,10 @@
 package oracle.bitacora.service;
 
 import oracle.bitacora.repository.AnaliticaIncidenciaRepository;
+import oracle.bitacora.repository.ReferenciasIncidenciaRepository;
 import oracle.bitacora.response.AnaliticaBitacoraResponse;
 import oracle.common.config.ZonaNegocio;
+import oracle.common.support.CursorRecientes;
 import oracle.common.support.EjecutorAnalitica;
 
 import oracle.common.support.ActorActual;
@@ -13,34 +15,23 @@ import oracle.common.support.Trazas;
 
 import jakarta.persistence.criteria.Predicate;
 import tools.jackson.databind.ObjectMapper;
-import java.time.Duration;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import oracle.common.exception.ConflictoException;
 import oracle.common.exception.RecursoNoEncontradoException;
-import oracle.bitacora.model.DataIncidencia;
-import oracle.bitacora.model.DataResponsable;
 import oracle.bitacora.model.Incidencia;
-import oracle.bitacora.repository.DataAreaRepository;
-import oracle.bitacora.repository.DataCentroRepository;
-import oracle.bitacora.repository.DataIncidenciaRepository;
-import oracle.bitacora.repository.DataResponsableRepository;
-import oracle.bitacora.repository.DataSistemaRepository;
-import oracle.bitacora.repository.EstadisticaIncidenciaRepository;
 import oracle.bitacora.repository.IncidenciaRepository;
 import oracle.bitacora.request.FiltroIncidencia;
 import oracle.bitacora.request.IncidenciaActualizarRequest;
 import oracle.bitacora.request.IncidenciaCrearRequest;
 import oracle.common.response.ApiResponse;
-import oracle.bitacora.response.EstadisticaResponse;
 import oracle.bitacora.response.IncidenciaResponse;
 import oracle.common.response.PaginaResponse;
 import oracle.common.config.CacheRespuestas;
 import oracle.common.config.Transacciones;
-import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
@@ -61,16 +52,17 @@ import reactor.core.scheduler.Schedulers;
 @Service
 public class IncidenciaService {
 
+    /**
+     * Espacio de CacheRespuestas de Bitácora (analítica y conteos del listado):
+     * lo invalidan las escrituras de incidencias y de catálogos.
+     */
+    static final String ESPACIO_CACHE = "bitacora";
+
     /** Tope de filas por página que acepta el servidor. */
     private static final int MAX_TAMANO_PAGINA = 200;
 
     private final IncidenciaRepository incidenciaRepository;
-    private final DataCentroRepository dataCentroRepository;
-    private final DataSistemaRepository dataSistemaRepository;
-    private final DataIncidenciaRepository dataIncidenciaRepository;
-    private final DataAreaRepository dataAreaRepository;
-    private final DataResponsableRepository dataResponsableRepository;
-    private final EstadisticaIncidenciaRepository estadisticaRepository;
+    private final ReferenciasIncidenciaRepository referenciasRepository;
     private final CatalogoBitacora catalogo;
     private final CacheRespuestas cacheRespuestas;
     private final Transacciones transacciones;
@@ -80,52 +72,47 @@ public class IncidenciaService {
     private final ZonaNegocio zonaNegocio;
 
     public IncidenciaService(IncidenciaRepository incidenciaRepository,
-            DataCentroRepository dataCentroRepository,
-            DataSistemaRepository dataSistemaRepository,
-            DataIncidenciaRepository dataIncidenciaRepository,
-            DataAreaRepository dataAreaRepository,
-            DataResponsableRepository dataResponsableRepository,
-            EstadisticaIncidenciaRepository estadisticaRepository,
-        CatalogoBitacora catalogo,
-        CacheRespuestas cacheRespuestas,
-        Transacciones transacciones,
-        ObjectMapper json,
-        AnaliticaIncidenciaRepository analiticaRepository,
-        EjecutorAnalitica ejecutor,
-        ZonaNegocio zonaNegocio) {
-        this.analiticaRepository = analiticaRepository;
-        this.zonaNegocio = zonaNegocio;
-        this.ejecutor = ejecutor;
+            ReferenciasIncidenciaRepository referenciasRepository,
+            CatalogoBitacora catalogo,
+            CacheRespuestas cacheRespuestas,
+            Transacciones transacciones,
+            ObjectMapper json,
+            AnaliticaIncidenciaRepository analiticaRepository,
+            EjecutorAnalitica ejecutor,
+            ZonaNegocio zonaNegocio) {
         this.incidenciaRepository = incidenciaRepository;
-        this.dataCentroRepository = dataCentroRepository;
-        this.dataSistemaRepository = dataSistemaRepository;
-        this.dataIncidenciaRepository = dataIncidenciaRepository;
-        this.dataAreaRepository = dataAreaRepository;
-        this.dataResponsableRepository = dataResponsableRepository;
-        this.estadisticaRepository = estadisticaRepository;
+        this.referenciasRepository = referenciasRepository;
         this.catalogo = catalogo;
         this.cacheRespuestas = cacheRespuestas;
         this.transacciones = transacciones;
         this.json = json;
+        this.analiticaRepository = analiticaRepository;
+        this.ejecutor = ejecutor;
+        this.zonaNegocio = zonaNegocio;
     }
 
     public Mono<ApiResponse<PaginaResponse<IncidenciaResponse>>> listar(FiltroIncidencia filtro, int pagina,
             int tamano) {
+        PageRequest pageable = Paginacion.pagina(pagina, tamano, MAX_TAMANO_PAGINA, Paginacion.RECIENTES);
+        Specification<Incidencia> spec = especificacion(filtro);
         return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.listar", () -> {
-                    Page<Incidencia> resultado = incidenciaRepository.findAll(especificacion(filtro),
-                            Paginacion.pagina(pagina, tamano, MAX_TAMANO_PAGINA, Paginacion.RECIENTES));
-                    List<IncidenciaResponse> contenido = resolverLista(resultado.getContent());
-                    return ApiResponse.ok("Incidencias listadas.",
-                            PaginaResponse.de(resultado, contenido));
+                    // La página se lee siempre; el total (COUNT sobre todo el filtro, lo
+                    // caro al paginar) se cachea por filtro hasta la próxima escritura.
+                    List<Incidencia> filas = incidenciaRepository.findBy(spec, q -> q.slice(pageable)).getContent();
+                    long total = cacheRespuestas.obtener(ESPACIO_CACHE + ":conteo:" + filtro,
+                            () -> incidenciaRepository.count(spec));
+                    return ApiResponse.ok("Incidencias listadas.", PaginaResponse.of(resolverLista(filas), total,
+                            pageable.getPageNumber() + 1, pageable.getPageSize()));
                 }))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
     /**
      * Exporta el filtro completo escribiendo el JSON directamente al flujo de
-     * respuesta: lee por lotes de {@value ExportacionJson#TAMANO_LOTE} filas y nunca
-     * materializa la lista completa, así el pico de memoria queda acotado
-     * aunque el filtro devuelva cientos de miles de filas.
+     * respuesta: lee por lotes de {@value ExportacionJson#TAMANO_LOTE} filas
+     * (por cursor, sin OFFSET ni COUNT) y nunca materializa la lista completa,
+     * así el pico de memoria queda acotado aunque el filtro devuelva cientos de
+     * miles de filas.
      *
      * Produce exactamente el mismo envoltorio que
      * {@code ApiResponse&lt;List&lt;IncidenciaResponse&gt;&gt;} (exito, mensaje,
@@ -133,16 +120,10 @@ public class IncidenciaService {
      */
     public StreamingResponseBody exportarEnFlujo(FiltroIncidencia filtro) {
         Specification<Incidencia> spec = especificacion(filtro);
-        return ExportacionJson.enLotes(json, "Incidencias exportadas.", Paginacion.RECIENTES,
-                pageable -> incidenciaRepository.findAll(spec, pageable), this::conversor, log, "incidencias");
-    }
-
-    public Mono<ApiResponse<EstadisticaResponse>> estadisticas(FiltroIncidencia filtro) {
-        String clave = "incidencia:" + filtro;
-        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.estadisticas", () ->
-                        ApiResponse.ok("Estadísticas calculadas.",
-                                cacheRespuestas.obtener(clave, () -> calcularEstadisticas(filtro)))))
-                .subscribeOn(Schedulers.boundedElastic());
+        return ExportacionJson.enLotes(json, "Incidencias exportadas.",
+                (ultima, tamano) -> incidenciaRepository.findBy(siguientes(spec, ultima),
+                        q -> q.sortBy(Paginacion.RECIENTES).limit(tamano).all()),
+                this::conversor, log, "incidencias");
     }
 
     /**
@@ -150,7 +131,7 @@ public class IncidenciaService {
      * ejecutor analitico, cacheadas por filtro (single-flight por clave).
      */
     public Mono<ApiResponse<AnaliticaBitacoraResponse>> analitica(FiltroIncidencia filtro) {
-        String clave = "bitacora-analitica:" + filtro;
+        String clave = ESPACIO_CACHE + ":analitica:" + filtro;
         return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.analitica", () ->
                         cacheRespuestas.obtener(clave, () -> ejecutor.esperar(calcularAnalitica(filtro)))))
                 .subscribeOn(Schedulers.boundedElastic())
@@ -169,32 +150,11 @@ public class IncidenciaService {
                         r.getT1(), r.getT2(), r.getT3(), r.getT4(), r.getT5(), r.getT6()));
     }
 
-    private EstadisticaResponse calcularEstadisticas(FiltroIncidencia filtro) {
-        long[] totales = estadisticaRepository.totales(filtro);
-        return new EstadisticaResponse(
-                totales[0], totales[1],
-                estadisticaRepository.porSistema(filtro),
-                estadisticaRepository.porTipo(filtro),
-                estadisticaRepository.porCentro(filtro),
-                estadisticaRepository.porArea(filtro));
-    }
-
-    public Mono<ApiResponse<IncidenciaResponse>> obtenerPorId(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.obtenerPorId id=" + id, () -> {
-                    Incidencia incidencia = obtenerIncidencia(id);
-                    return ApiResponse.ok("Incidencia encontrada.", resolver(incidencia));
-                }))
-                .subscribeOn(Schedulers.boundedElastic());
-    }
-
     public Mono<ApiResponse<IncidenciaResponse>> crear(IncidenciaCrearRequest peticion) {
         Long actor = ActorActual.id();
         return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.crear ticket=" + peticion.ticket(), () -> transacciones.ejecutar(() -> {
             validarReferencias(peticion.idDataCentro(), peticion.idDataSistema(), peticion.idDataIncidencia(),
-                    peticion.idDataArea(), peticion.idDataResponsable());
-            if (incidenciaRepository.existsByTicket(peticion.ticket().trim())) {
-                throw new ConflictoException("Ya existe una incidencia con el ticket '" + peticion.ticket() + "'.");
-            }
+                    peticion.idDataArea(), peticion.idDataResponsable(), peticion.ticket(), null);
 
             Incidencia incidencia = new Incidencia();
             aplicarCampos(incidencia, peticion.idDataCentro(), peticion.idDataSistema(), peticion.idDataIncidencia(),
@@ -203,7 +163,7 @@ public class IncidenciaService {
             Auditoria.alCrear(incidencia, actor);
             incidencia.setCreadoEn(zonaNegocio.instante(peticion.fecha(), peticion.horaInicio()));
             incidenciaRepository.save(incidencia);
-            transacciones.alConfirmar(cacheRespuestas::invalidarTodo);
+            invalidarCacheAlConfirmar();
 
             return ApiResponse.ok("Incidencia registrada.", resolver(incidencia));
         }))).subscribeOn(Schedulers.boundedElastic());
@@ -214,10 +174,7 @@ public class IncidenciaService {
         return Mono.fromCallable(() -> Trazas.medir(log, "IncidenciaService.actualizar id=" + id, () -> transacciones.ejecutar(() -> {
             Incidencia incidencia = obtenerIncidencia(id);
             validarReferencias(peticion.idDataCentro(), peticion.idDataSistema(), peticion.idDataIncidencia(),
-                    peticion.idDataArea(), peticion.idDataResponsable());
-            if (incidenciaRepository.existsByTicketAndIdNot(peticion.ticket().trim(), id)) {
-                throw new ConflictoException("Ya existe otra incidencia con el ticket '" + peticion.ticket() + "'.");
-            }
+                    peticion.idDataArea(), peticion.idDataResponsable(), peticion.ticket(), id);
 
             aplicarCampos(incidencia, peticion.idDataCentro(), peticion.idDataSistema(), peticion.idDataIncidencia(),
                     peticion.ticket(), peticion.idDataArea(), peticion.idDataResponsable(), peticion.descripcion(),
@@ -225,7 +182,7 @@ public class IncidenciaService {
             Auditoria.alActualizar(incidencia, actor);
             incidencia.setCreadoEn(zonaNegocio.instante(peticion.fecha(), peticion.horaInicio()));
             incidenciaRepository.save(incidencia);
-            transacciones.alConfirmar(cacheRespuestas::invalidarTodo);
+            invalidarCacheAlConfirmar();
 
             return ApiResponse.ok("Incidencia actualizada.", resolver(incidencia));
         }))).subscribeOn(Schedulers.boundedElastic());
@@ -235,11 +192,16 @@ public class IncidenciaService {
         return Mono.<Void>fromRunnable(() -> Trazas.medir(log, "IncidenciaService.eliminar id=" + id, () -> transacciones.ejecutar(() -> {
                     Incidencia incidencia = obtenerIncidencia(id);
                     incidenciaRepository.delete(incidencia);
-                    transacciones.alConfirmar(cacheRespuestas::invalidarTodo);
+                    invalidarCacheAlConfirmar();
                     return null;
                 })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .then(Mono.fromSupplier(() -> ApiResponse.<Void>ok("Incidencia eliminada.", null)));
+    }
+
+    /** Tras el commit, descarta solo la caché de Bitácora (no la de otros paneles). */
+    private void invalidarCacheAlConfirmar() {
+        transacciones.alConfirmar(() -> cacheRespuestas.invalidarEspacio(ESPACIO_CACHE));
     }
 
     /**
@@ -286,6 +248,15 @@ public class IncidenciaService {
         };
     }
 
+    /** Filtro del export restringido a las filas posteriores a la última ya escrita. */
+    private static Specification<Incidencia> siguientes(Specification<Incidencia> spec, Incidencia ultima) {
+        if (ultima == null) {
+            return spec;
+        }
+        Specification<Incidencia> cursor = CursorRecientes.despuesDe(ultima.getCreadoEn(), ultima.getId());
+        return spec.and(cursor);
+    }
+
     /** Resuelve los nombres de catálogo de una página en un solo lote de consultas. */
     private List<IncidenciaResponse> resolverLista(List<Incidencia> incidencias) {
         if (incidencias.isEmpty()) {
@@ -325,55 +296,25 @@ public class IncidenciaService {
         incidencia.setDescripcion(descripcion.trim());
         incidencia.setHoraInicio(horaInicio);
         incidencia.setHoraFin(horaFin);
-        incidencia.setTiempoSolucionSeg(calcularTiempoSolucion(horaInicio, horaFin));
+        incidencia.setTiempoSolucionSeg(TiempoSolucion.segundos(horaInicio, horaFin));
     }
 
     /**
-     * Verifica que las referencias existen y que las FK compuestas del esquema
-     * son coherentes (tipo pertenece al sistema, responsable pertenece al área).
+     * Verifica en una sola consulta que las referencias existen, que las FK
+     * compuestas del esquema son coherentes (tipo pertenece al sistema,
+     * responsable pertenece al área) y que el ticket no lo usa otra incidencia.
+     *
+     * @param idEditada incidencia en edición (null al crear).
      */
-    private void validarReferencias(Long idCentro, Long idSistema, Long idTipo, Long idArea, Long idResponsable) {
-        dataCentroRepository.findById(idCentro)
-                .orElseThrow(() -> new RecursoNoEncontradoException("No existe el centro con id " + idCentro + "."));
-        dataSistemaRepository.findById(idSistema)
-                .orElseThrow(() -> new RecursoNoEncontradoException("No existe el sistema con id " + idSistema + "."));
-        dataAreaRepository.findById(idArea)
-                .orElseThrow(() -> new RecursoNoEncontradoException("No existe el área con id " + idArea + "."));
-
-        DataIncidencia tipo = dataIncidenciaRepository.findById(idTipo)
-                .orElseThrow(() -> new RecursoNoEncontradoException(
-                        "No existe el tipo de incidencia con id " + idTipo + "."));
-        if (!idSistema.equals(tipo.getIdDataSistema())) {
-            throw new ConflictoException("El tipo de incidencia con id " + idTipo
-                    + " no pertenece al sistema con id " + idSistema + ".");
-        }
-
-        DataResponsable responsable = dataResponsableRepository.findById(idResponsable)
-                .orElseThrow(() -> new RecursoNoEncontradoException(
-                        "No existe el responsable con id " + idResponsable + "."));
-        if (!idArea.equals(responsable.getIdDataArea())) {
-            throw new ConflictoException("El responsable con id " + idResponsable
-                    + " no pertenece al área con id " + idArea + ".");
-        }
+    private void validarReferencias(Long idCentro, Long idSistema, Long idTipo, Long idArea, Long idResponsable,
+            String ticket, Long idEditada) {
+        ValidacionIncidencia.validar(idCentro, idSistema, idTipo, idArea, idResponsable, ticket, idEditada != null,
+                referenciasRepository.consultar(idCentro, idSistema, idArea, idTipo, idResponsable, ticket.trim(),
+                        idEditada == null ? 0L : idEditada));
     }
 
     /** Resuelve una incidencia con los nombres del catalogo cacheado (sin consultas extra). */
     private IncidenciaResponse resolver(Incidencia incidencia) {
         return resolverLista(List.of(incidencia)).get(0);
-    }
-
-    /** Tiempo de solución en segundos = hora de fin - hora de inicio (cruce de medianoche +24h). */
-    private Integer calcularTiempoSolucion(LocalTime inicio, LocalTime fin) {
-        if (inicio == null || fin == null) {
-            return null;
-        }
-        long segundos = Duration.between(inicio, fin).getSeconds();
-        if (segundos < 0) {
-            segundos += 86_400L;
-        }
-        if (segundos >= 86_400L) {
-            return null;
-        }
-        return (int) segundos;
     }
 }

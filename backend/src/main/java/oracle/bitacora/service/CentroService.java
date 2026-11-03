@@ -49,12 +49,6 @@ public class CentroService {
                 .map(lista -> ApiResponse.ok("Centros listados.", lista));
     }
 
-    public Mono<ApiResponse<CentroResponse>> obtenerPorId(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.obtenerPorId id=" + id, () -> transacciones.consultar(() ->
-                        ApiResponse.ok("Centro encontrado.", CentroResponse.of(obtenerCentro(id))))))
-                .subscribeOn(Schedulers.boundedElastic());
-    }
-
     public Mono<ApiResponse<CentroResponse>> crear(CentroCrearRequest peticion) {
         Long actor = ActorActual.id();
         return Mono.fromCallable(() -> Trazas.medir(log, "CentroService.crear centro=" + peticion.centro(), () -> transacciones.ejecutar(() -> {

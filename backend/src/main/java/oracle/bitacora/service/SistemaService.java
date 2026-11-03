@@ -57,12 +57,6 @@ public class SistemaService {
                 .map(lista -> ApiResponse.ok("Sistemas listados.", lista));
     }
 
-    public Mono<ApiResponse<SistemaResponse>> obtenerPorId(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.obtenerPorId id=" + id, () -> transacciones.consultar(() ->
-                        ApiResponse.ok("Sistema encontrado.", SistemaResponse.of(obtenerSistema(id))))))
-                .subscribeOn(Schedulers.boundedElastic());
-    }
-
     public Mono<ApiResponse<SistemaResponse>> crear(SistemaCrearRequest peticion) {
         Long actor = ActorActual.id();
         return Mono.fromCallable(() -> Trazas.medir(log, "SistemaService.crear sistema=" + peticion.sistema(), () -> transacciones.ejecutar(() -> {

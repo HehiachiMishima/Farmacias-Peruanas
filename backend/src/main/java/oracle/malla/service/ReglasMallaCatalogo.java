@@ -12,7 +12,17 @@ import java.util.Map;
  */
 public final class ReglasMallaCatalogo {
 
-    public record ParametroDef(String clave, String etiqueta, String tipo, String porDefecto) {
+    /** Un parámetro de regla; min y max acotan los ENTERO (null en los demás tipos). */
+    public record ParametroDef(String clave, String etiqueta, String tipo, String porDefecto,
+            Integer min, Integer max) {
+
+        static ParametroDef entero(String clave, String etiqueta, String porDefecto, int min, int max) {
+            return new ParametroDef(clave, etiqueta, "ENTERO", porDefecto, min, max);
+        }
+
+        static ParametroDef de(String clave, String etiqueta, String tipo, String porDefecto) {
+            return new ParametroDef(clave, etiqueta, tipo, porDefecto, null, null);
+        }
     }
 
     public static final String OLA_LANZAMIENTO = "OLA_LANZAMIENTO";
@@ -35,18 +45,18 @@ public final class ReglasMallaCatalogo {
     public static List<ParametroDef> parametros(String codigo) {
         return switch (codigo) {
             case OLA_LANZAMIENTO -> List.of(
-                    new ParametroDef("limites", "Hora límite por ola", "LISTA_HORAS", "07:00,15:00"),
-                    new ParametroDef("toleranciaMin", "Tolerancia (min)", "ENTERO", "0"));
+                    ParametroDef.de("limites", "Hora límite por ola", "LISTA_HORAS", "07:00,15:00"),
+                    ParametroDef.entero("toleranciaMin", "Tolerancia (min)", "0", 0, 240));
             case OLA_MAX_PICKING -> List.of(
-                    new ParametroDef("horasMax", "Máximo de picking (h)", "ENTERO", "8"));
+                    ParametroDef.entero("horasMax", "Máximo de picking (h)", "8", 1, 24));
             case TURNO_COBERTURA -> List.of(
-                    new ParametroDef("minutosGapMax", "Hueco permitido (min)", "ENTERO", "0"));
+                    ParametroDef.entero("minutosGapMax", "Hueco permitido (min)", "0", 0, 720));
             case TURNO_REFRIGERIO -> List.of(
-                    new ParametroDef("exigirRefrigerio", "Exigir refrigerio", "BOOLEANO", "true"));
+                    ParametroDef.de("exigirRefrigerio", "Exigir refrigerio", "BOOLEANO", "true"));
             case FLUJO_VENTANA_TURNO -> List.of(
-                    new ParametroDef("incluirIL", "Evaluar también pasos de IL", "BOOLEANO", "false"));
+                    ParametroDef.de("incluirIL", "Evaluar también pasos de IL", "BOOLEANO", "false"));
             case FLUJO_DURACION -> List.of(
-                    new ParametroDef("horasMax", "Duración máxima (h)", "ENTERO", "12"));
+                    ParametroDef.entero("horasMax", "Duración máxima (h)", "12", 1, 24));
             default -> List.of();
         };
     }

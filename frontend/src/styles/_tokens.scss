@@ -62,9 +62,7 @@
   --chart-otros: #94a3b8;
 
   /* Alias heredados usados por componentes */
-  --color-graphite: #64748b;
   --color-link-blue: var(--accent);
-  --gradient-iridescent-spectrum: linear-gradient(120deg, #1d63ed 0%, #7c3aed 45%, #e11d2e 100%);
   --gradient-brand: linear-gradient(135deg, #ff3b4e 0%, #e11d2e 45%, #a50d1a 100%);
 
   /* ===== Superficies ===== */
@@ -84,7 +82,6 @@
   /* ===== Cromo (sidebar, cabeceras, barras) ===== */
   --chrome-bg: #0a1628;
   --chrome-bg-2: #0f2140;
-  --chrome-bg-3: #16305a;
   --chrome-fg: #a9b7ce;
   --chrome-fg-strong: #ffffff;
   --chrome-border: rgba(255, 255, 255, 0.08);
@@ -175,8 +172,6 @@
   --chart-6: #22d3ee;
   --chart-otros: #64748b;
 
-  --color-graphite: #8a9ab5;
-
   --bg: #060d1a;
   --surface: #0d1829;
   --surface-2: #112038;
@@ -192,7 +187,6 @@
 
   --chrome-bg: #050b16;
   --chrome-bg-2: #0a1730;
-  --chrome-bg-3: #12264a;
 
   --sidebar-active-bg: rgba(255, 59, 78, 0.18);
 

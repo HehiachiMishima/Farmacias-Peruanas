@@ -20,9 +20,3 @@ export interface RolActualizarRequest {
   descripcion?: string | null;
   activo?: boolean;
 }
-
-export interface RolFiltro {
-  nombre?: string;
-  descripcion?: string;
-  activo?: boolean;
-}

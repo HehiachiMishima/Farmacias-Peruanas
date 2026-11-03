@@ -1,4 +1,4 @@
-import { DatePipe, formatDate } from '@angular/common';
+import { DatePipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -14,7 +14,6 @@ import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { exportarCsv } from '../../../../../core/utils/csv.util';
 import { valorNumero, valorTexto } from '../../../../../core/utils/evento.util';
-import { CONFIG } from '../../../../../core/config/configuracion';
 import { diaDeInstante, duracionHhmm, hoy } from '../../../../../core/utils/fecha.util';
 import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
 import { OpcionesDependientes } from '../../../../../core/utils/opciones-dependientes';
@@ -46,6 +45,7 @@ import {
 import { FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
+import { CABECERAS_EXPORT, filaExportacion, hhmm, normalizarHora } from './incidencias.logica';
 
 type CampoFormulario =
   | 'idDataCentro'
@@ -58,23 +58,6 @@ type CampoFormulario =
   | 'horaInicio'
   | 'horaFin'
   | 'fecha';
-
-const CABECERAS_EXPORT = [
-  'Ticket',
-  'Descripción',
-  'Centro',
-  'Sistema',
-  'Tipo',
-  'Área',
-  'Responsable',
-  'Hora inicio',
-  'Hora fin',
-  'Tiempo de solución',
-  'Creado',
-  'Creado por',
-  'Actualizado',
-  'Actualizado por',
-];
 
 @Component({
   selector: 'app-bitacora-incidencias',
@@ -271,12 +254,9 @@ export class Incidencias {
     };
   }
 
-  /** Formateador de la plantilla: duración en segundos → «HH:MM». */
+  /** Formateadores de la plantilla: duración en segundos y hora → «HH:MM». */
   readonly duracionHhmm = duracionHhmm;
-
-  hhmm(valor: string | null): string {
-    return valor ? valor.slice(0, 5) : '—';
-  }
+  readonly hhmm = hhmm;
 
   exportar(): void {
     if (this.exportando() || this.total() === 0) {
@@ -288,29 +268,9 @@ export class Incidencias {
       .pipe(finalize(() => this.exportando.set(false)))
       .subscribe({
         next: (lista) => {
-          const filas = lista.map((incidencia) => [
-            incidencia.ticket,
-            incidencia.descripcion,
-            incidencia.centro ?? '—',
-            incidencia.sistema ?? '—',
-            incidencia.tipoIncidencia ?? '—',
-            incidencia.area ?? '—',
-            incidencia.responsable ?? '—',
-            incidencia.horaInicio,
-            incidencia.horaFin,
-            duracionHhmm(incidencia.tiempoSolucionSeg),
-            formatDate(incidencia.creadoEn, 'dd/MM/yyyy HH:mm', this.locale, CONFIG.zonaHoraria),
-            this.directorio.etiqueta(incidencia.creadoPor),
-            incidencia.actualizadoEn
-              ? formatDate(
-                  incidencia.actualizadoEn,
-                  'dd/MM/yyyy HH:mm',
-                  this.locale,
-                  CONFIG.zonaHoraria,
-                )
-              : '—',
-            this.directorio.etiqueta(incidencia.actualizadoPor),
-          ]);
+          const filas = lista.map((incidencia) =>
+            filaExportacion(incidencia, this.locale, (id) => this.directorio.etiqueta(id)),
+          );
           exportarCsv(`incidencias_${hoy()}.csv`, CABECERAS_EXPORT, filas);
           this.notificaciones.exito(
             'Exportado',
@@ -434,8 +394,8 @@ export class Incidencias {
       idDataArea: incidencia.idDataArea,
       idDataResponsable: incidencia.idDataResponsable,
       descripcion: incidencia.descripcion,
-      horaInicio: this.hhmm(incidencia.horaInicio),
-      horaFin: this.hhmm(incidencia.horaFin),
+      horaInicio: hhmm(incidencia.horaInicio),
+      horaFin: hhmm(incidencia.horaFin),
       fecha: diaDeInstante(incidencia.creadoEn),
     });
     this.formAbierto.set(true);
@@ -466,8 +426,8 @@ export class Incidencias {
       idDataArea: valores.idDataArea!,
       idDataResponsable: valores.idDataResponsable!,
       descripcion: valores.descripcion,
-      horaInicio: this.normalizarHora(valores.horaInicio),
-      horaFin: this.normalizarHora(valores.horaFin),
+      horaInicio: normalizarHora(valores.horaInicio),
+      horaFin: normalizarHora(valores.horaFin),
       fecha: valores.fecha,
     };
 
@@ -524,9 +484,5 @@ export class Incidencias {
         error: (err: unknown) =>
           this.notificaciones.error('No se pudo eliminar', mensajeDeError(err)),
       });
-  }
-
-  private normalizarHora(valor: string): string {
-    return valor.length === 5 ? `${valor}:00` : valor;
   }
 }

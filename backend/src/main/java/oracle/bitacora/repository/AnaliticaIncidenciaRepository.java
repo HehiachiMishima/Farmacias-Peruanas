@@ -1,7 +1,5 @@
 package oracle.bitacora.repository;
 
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import oracle.bitacora.request.FiltroIncidencia;
 import oracle.bitacora.response.AnaliticaBitacoraResponse.Grupo;
@@ -10,6 +8,7 @@ import oracle.bitacora.response.AnaliticaBitacoraResponse.Tipo;
 import oracle.common.response.CeldaMatriz;
 import oracle.common.config.ZonaNegocio;
 import oracle.common.support.CondicionSql;
+import oracle.common.support.Periodos;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -108,13 +107,11 @@ public class AnaliticaIncidenciaRepository {
 
     /** Mismo filtro desplazado al periodo anterior de igual duracion (requiere desde y hasta). */
     private static FiltroIncidencia periodoAnterior(FiltroIncidencia f) {
-        if (f == null || f.desde() == null || f.hasta() == null || f.hasta().isBefore(f.desde())) {
+        Periodos.Rango previo = f == null ? null : Periodos.anterior(f.desde(), f.hasta());
+        if (previo == null) {
             return null;
         }
-        long dias = ChronoUnit.DAYS.between(f.desde(), f.hasta()) + 1;
-        LocalDate hasta = f.desde().minusDays(1);
-        LocalDate desde = hasta.minusDays(dias - 1);
-        return new FiltroIncidencia(f.centro(), f.sistema(), f.area(), f.responsable(), f.tipo(), desde, hasta,
-                f.texto());
+        return new FiltroIncidencia(f.centro(), f.sistema(), f.area(), f.responsable(), f.tipo(),
+                previo.desde(), previo.hasta(), f.texto());
     }
 }

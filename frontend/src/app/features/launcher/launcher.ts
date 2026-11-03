@@ -4,6 +4,8 @@ import { PANELES, PanelDef, modulosAccesibles, panelAccesible } from '../../core
 import { Auth } from '../../core/services/auth';
 import { Notificaciones } from '../../core/services/notificaciones';
 import { TemaService } from '../../core/services/tema';
+import { saludoSegunHora } from '../../core/utils/fecha.util';
+import { iniciales } from '../../core/utils/texto.util';
 import { Icon } from '../../shared/ui/icon/icon';
 
 @Component({
@@ -23,14 +25,26 @@ export class Launcher {
   readonly usuario = this.auth.usuario;
   readonly permisos = this.auth.permisos;
 
-  readonly accesibles = computed(
-    () => this.paneles.filter((panel) => panelAccesible(panel, this.permisos())).length,
-  );
-
-  readonly saludo = computed(() => {
-    const hora = new Date().getHours();
-    return hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
+  /**
+   * Tarjeta de cada panel con su acceso ya resuelto: la plantilla no vuelve a
+   * evaluar los permisos en cada detección de cambios. Los chips muestran los
+   * módulos accesibles, o todos si el panel está bloqueado.
+   */
+  readonly tarjetas = computed(() => {
+    const permisos = this.permisos();
+    return this.paneles.map((panel) => {
+      const accesible = panelAccesible(panel, permisos);
+      return {
+        panel,
+        accesible,
+        modulos: accesible ? modulosAccesibles(panel, permisos) : panel.modulos,
+      };
+    });
   });
+
+  readonly accesibles = computed(() => this.tarjetas().filter((t) => t.accesible).length);
+
+  readonly saludo = saludoSegunHora();
 
   readonly fecha = new Date().toLocaleDateString('es-PE', {
     weekday: 'long',
@@ -39,25 +53,10 @@ export class Launcher {
     year: 'numeric',
   });
 
-  /** Módulos del panel a los que el usuario tiene acceso (chips de la tarjeta). */
-  modulosDe(panel: PanelDef) {
-    return modulosAccesibles(panel, this.permisos());
-  }
+  readonly iniciales = computed(() => iniciales(this.usuario()));
 
-  readonly iniciales = computed(() => {
-    const usuario = this.usuario();
-    if (!usuario) {
-      return '?';
-    }
-    return `${usuario.nombre?.[0] ?? ''}${usuario.apellido?.[0] ?? ''}`.toUpperCase() || '?';
-  });
-
-  accesible(panel: PanelDef): boolean {
-    return panelAccesible(panel, this.permisos());
-  }
-
-  abrir(panel: PanelDef): void {
-    if (this.accesible(panel)) {
+  abrir(panel: PanelDef, accesible: boolean): void {
+    if (accesible) {
       void this.router.navigateByUrl(panel.ruta);
       return;
     }

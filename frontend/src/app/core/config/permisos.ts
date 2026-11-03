@@ -64,6 +64,7 @@ export const PERMISOS = {
   VER_MALLA: 'VER_MALLA',
   MODIFICAR_MALLA: 'MODIFICAR_MALLA',
   EXPORTAR_MALLA: 'EXPORTAR_MALLA',
+  CONFIGURAR_REGLAS_MALLA: 'CONFIGURAR_REGLAS_MALLA',
 
   // Paneles en construcción (sin lógica todavía). Quedan públicos hasta que se
   // les asigne permisos reales en el backend.

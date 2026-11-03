@@ -2,7 +2,6 @@ package oracle.admin.service;
 
 import oracle.common.support.ActorActual;
 import oracle.common.support.Auditoria;
-import oracle.common.support.Filtros;
 import oracle.common.support.Listas;
 import oracle.common.support.Trazas;
 
@@ -17,13 +16,10 @@ import oracle.common.exception.OperacionNoPermitidaException;
 import oracle.common.exception.RecursoNoEncontradoException;
 import oracle.admin.model.Usuario;
 import oracle.admin.repository.UsuarioRepository;
-import oracle.admin.repository.UsuarioRolRepository;
 import oracle.admin.request.CambiarEstadoRequest;
 import oracle.admin.request.UsuarioActualizarRequest;
 import oracle.admin.request.UsuarioCrearRequest;
-import oracle.admin.request.UsuarioFiltroRequest;
 import oracle.common.response.ApiResponse;
-import oracle.admin.response.RolResponse;
 import oracle.admin.response.UsuarioResponse;
 import oracle.common.security.AutorizacionCache;
 import oracle.common.config.Transacciones;
@@ -42,7 +38,6 @@ import reactor.core.scheduler.Schedulers;
 public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
-    private final UsuarioRolRepository usuarioRolRepository;
     private final AutorizacionCache autorizacionCache;
     private final PasswordEncoder passwordEncoder;
     private final Transacciones transacciones;
@@ -50,46 +45,34 @@ public class UsuarioService {
 
     public UsuarioService(
             UsuarioRepository usuarioRepository,
-            UsuarioRolRepository usuarioRolRepository,
             AutorizacionCache autorizacionCache,
             PasswordEncoder passwordEncoder,
             Transacciones transacciones,
             ResolucionRepository resolucionRepository) {
         this.resolucionRepository = resolucionRepository;
         this.usuarioRepository = usuarioRepository;
-        this.usuarioRolRepository = usuarioRolRepository;
         this.autorizacionCache = autorizacionCache;
         this.passwordEncoder = passwordEncoder;
         this.transacciones = transacciones;
     }
 
     public Mono<ApiResponse<List<UsuarioResponse>>> listar() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "UsuarioService.listar", () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "UsuarioService.listar", () -> transacciones.consultar(() -> {
                         List<UsuarioResponse> lista = usuarioRepository.findAll(Listas.limitado()).stream()
                                 .map(UsuarioResponse::of).toList();
                         Listas.avisarSiCorto(log, lista.size(), "UsuarioService.listar");
                         return lista;
-                    }))
+                    })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Usuarios listados.", lista));
     }
 
-    public Mono<ApiResponse<List<UsuarioResponse>>> buscar(UsuarioFiltroRequest filtro) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "UsuarioService.buscar", () ->
-                        usuarioRepository.buscarConFiltros(
-                                        Filtros.normalizar(filtro.usuario()),
-                                        Filtros.normalizar(filtro.nombre()),
-                                        Filtros.normalizar(filtro.apellido()),
-                                        Filtros.normalizar(filtro.email()),
-                                        filtro.activo())
-                                .stream().map(UsuarioResponse::of).toList()))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(lista -> ApiResponse.ok("Usuarios encontrados.", lista));
-    }
-
-    /** Roles y permisos efectivos de todos los usuarios (2 consultas en total). */
+    /**
+     * Roles y permisos efectivos de todos los usuarios (2 consultas en total,
+     * en la misma transaccion de solo lectura para que ambas vean el mismo estado).
+     */
     public Mono<ApiResponse<List<UsuarioResumenResponse>>> resumen() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "UsuarioService.resumen", () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "UsuarioService.resumen", () -> transacciones.consultar(() -> {
                     Map<Long, List<String>> roles = resolucionRepository.rolesPorUsuario();
                     Map<Long, List<String>> permisos = resolucionRepository.permitidosPorUsuario();
                     Set<Long> ids = new LinkedHashSet<>(roles.keySet());
@@ -99,15 +82,9 @@ public class UsuarioService {
                                     roles.getOrDefault(id, List.of()),
                                     permisos.getOrDefault(id, List.of())))
                             .toList();
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Resumen de usuarios.", lista));
-    }
-
-    public Mono<ApiResponse<UsuarioResponse>> obtenerPorId(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "UsuarioService.obtenerPorId id=" + id, () ->
-                        ApiResponse.ok("Usuario encontrado.", UsuarioResponse.of(obtenerUsuario(id)))))
-                .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<UsuarioResponse>> crear(UsuarioCrearRequest peticion) {
@@ -201,15 +178,6 @@ public class UsuarioService {
             String mensaje = peticion.activo() ? "Usuario activado." : "Usuario desactivado.";
             return ApiResponse.ok(mensaje, UsuarioResponse.of(usuario));
         }))).subscribeOn(Schedulers.boundedElastic());
-    }
-
-    public Mono<ApiResponse<List<RolResponse>>> rolesDeUsuario(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "UsuarioService.rolesDeUsuario id=" + id, () -> {
-                    obtenerUsuario(id);
-                    return usuarioRolRepository.rolesDeUsuario(id).stream().map(RolResponse::of).toList();
-                }))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(lista -> ApiResponse.ok("Roles del usuario.", lista));
     }
 
     private Usuario obtenerUsuario(Long id) {

@@ -1,17 +1,12 @@
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { forkJoin, finalize } from 'rxjs';
-import { esAccesoDenegado, mensajeDeError } from '../../../../../core/errors/error.util';
+import { finalize } from 'rxjs';
+import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { PERMISOS } from '../../../../../core/config/permisos';
-import { Auth } from '../../../../../core/services/auth';
 import { DirectorioUsuarios } from '../../../../../core/services/directorio-usuarios';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
-import { PermisosApi } from '../../data/permisos.api';
-import { RolesApi } from '../../data/roles.api';
 import { UsuariosApi } from '../../data/usuarios.api';
-import { Permiso } from '../../data/permiso.model';
-import { Rol } from '../../data/rol.model';
 import { Usuario } from '../../../../../core/models';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
 import { ColumnasRedimensionables } from '../../../../../shared/directives/columnas-redimensionables.directive';
@@ -19,19 +14,14 @@ import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
-import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
-import {
-  FiltroEstado,
-  OPCIONES_ESTADO,
-  chipEstado,
-  chipPeriodo,
-  cumpleEstado,
-  enPeriodo,
-} from '../../../../../shared/ui/panel-filtros/filtro-registro';
+import { FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
-import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
+import { RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
-import { contieneTexto } from '../../../../../core/utils/texto.util';
+import { iniciales } from '../../../../../core/utils/texto.util';
+import { ListadoRegistros } from '../../state/listado-registros';
+import { PermisosUsuario } from './permisos-usuario/permisos-usuario';
+import { RolesUsuario } from './roles-usuario/roles-usuario';
 
 interface ResumenUsuario {
   roles: string[];
@@ -57,6 +47,8 @@ const SIN_ROL = '__sin_rol__';
     PanelFiltros,
     FiltrosActivos,
     RangoRapido,
+    RolesUsuario,
+    PermisosUsuario,
   ],
   templateUrl: './usuarios.html',
   styleUrl: './usuarios.scss',
@@ -64,36 +56,58 @@ const SIN_ROL = '__sin_rol__';
 export class Usuarios {
   private readonly fb = inject(FormBuilder);
   private readonly usuariosApi = inject(UsuariosApi);
-  private readonly rolesApi = inject(RolesApi);
-  private readonly permisosApi = inject(PermisosApi);
   private readonly notificaciones = inject(Notificaciones);
-  private readonly auth = inject(Auth);
   private readonly directorio = inject(DirectorioUsuarios);
 
   readonly permisos = PERMISOS;
-  readonly permisosSesion = this.auth.permisos;
-
-  readonly cargando = signal(true);
-  readonly error = signal<string | null>(null);
-  readonly usuarios = signal<Usuario[]>([]);
-  readonly busqueda = signal('');
-
-  private readonly coincidenBusqueda = computed(() => {
-    const termino = this.busqueda();
-    return this.usuarios().filter((usuario) =>
-      contieneTexto([usuario.usuario, usuario.nombre, usuario.apellido, usuario.email], termino),
-    );
-  });
-
-  // ---------------- Filtros del panel ----------------
-  readonly filtroEstado = signal<FiltroEstado>('todos');
-  readonly filtrosAbierto = signal(false);
   readonly sinRol = SIN_ROL;
 
-  readonly estados = OPCIONES_ESTADO;
+  /** Filtro por rol asignado (nombre del rol o SIN_ROL). */
   readonly filtroRol = signal<string | null>(null);
-  readonly filtroDesde = signal('');
-  readonly filtroHasta = signal('');
+
+  readonly listado = new ListadoRegistros<Usuario>({
+    fuente: () => this.usuariosApi.listar(),
+    campos: (usuario) => [usuario.usuario, usuario.nombre, usuario.apellido, usuario.email],
+    alCargar: (lista) => {
+      this.directorio.establecer(lista);
+      this.cargarResumen(lista);
+    },
+    extra: {
+      clave: 'rol',
+      chip: () => {
+        const rol = this.filtroRol();
+        return rol === null
+          ? null
+          : {
+              clave: 'rol',
+              etiqueta: 'Rol',
+              valor: rol === SIN_ROL ? 'Sin rol' : rol,
+              icono: 'roles',
+            };
+      },
+      condicion: () => {
+        const rol = this.filtroRol();
+        // Sin resumen de roles (cargando o con error) el filtro de rol no se
+        // aplica: daría «todos sin rol» o «ninguno con el rol» por falta de datos.
+        if (rol === null || !this.resumenDisponible()) {
+          return null;
+        }
+        return rol === SIN_ROL
+          ? (usuario) => this.rolesDe(usuario.id).length === 0
+          : (usuario) => this.rolesDe(usuario.id).includes(rol);
+      },
+      limpiar: () => this.filtroRol.set(null),
+    },
+  });
+
+  /** Resumen por usuario (roles asignados y permisos efectivos) para las columnas Rol/Permisos. */
+  readonly cargandoResumen = signal(false);
+  readonly errorResumen = signal(false);
+  readonly resumen = signal<Map<number, ResumenUsuario>>(new Map());
+  /** El filtro por rol solo es fiable con el resumen cargado sin error. */
+  readonly resumenDisponible = computed(() => !this.cargandoResumen() && !this.errorResumen());
+  /** Descarta la respuesta de un resumen pedido antes (p. ej. al recargar dos veces). */
+  private solicitudResumen = 0;
 
   /** Roles presentes en el listado (desde el resumen agregado). */
   readonly opcionesRol = computed(() =>
@@ -102,127 +116,21 @@ export class Usuarios {
     ),
   );
 
-  /** Búsqueda + filtros del panel (todo en cliente: el listado ya está en memoria). */
-  readonly filtrados = computed(() => {
-    const estado = this.filtroEstado();
-    const rol = this.filtroRol();
-    const desde = this.filtroDesde();
-    const hasta = this.filtroHasta();
-    // Sin resumen de roles (cargando o con error) el filtro de rol no se
-    // aplica: daría «todos sin rol» o «ninguno con el rol» por falta de datos.
-    const aplicarRol = rol !== null && this.resumenDisponible();
-    return this.coincidenBusqueda().filter(
-      (item) =>
-        cumpleEstado(estado, item.activo) &&
-        (!aplicarRol ||
-          (rol === SIN_ROL
-            ? this.rolesDe(item.id).length === 0
-            : this.rolesDe(item.id).includes(rol))) &&
-        enPeriodo(item.creadoEn, desde, hasta),
-    );
+  /** Filas de la página visible con sus datos derivados ya calculados. */
+  readonly filas = computed(() => {
+    const resumen = this.resumen();
+    return this.listado.paginados().map((usuario) => {
+      const datos = resumen.get(usuario.id);
+      return {
+        usuario,
+        iniciales: iniciales(usuario),
+        conResumen: datos !== undefined,
+        roles: datos?.roles ?? [],
+        permisos: datos?.permisos ?? [],
+        permisosTitulo: datos?.permisos.join(', ') ?? '',
+      };
+    });
   });
-
-  readonly chips = computed<ChipFiltro[]>(() => {
-    const rol = this.filtroRol();
-    const chipRol: ChipFiltro | null =
-      rol === null
-        ? null
-        : {
-            clave: 'rol',
-            etiqueta: 'Rol',
-            valor: rol === SIN_ROL ? 'Sin rol' : rol,
-            icono: 'roles',
-          };
-    return [
-      chipEstado(this.filtroEstado()),
-      chipRol,
-      chipPeriodo(this.filtroDesde(), this.filtroHasta()),
-    ].filter((chip): chip is ChipFiltro => chip !== null);
-  });
-
-  readonly filtrosActivos = computed(() => this.chips().length);
-
-  alternarFiltros(): void {
-    this.filtrosAbierto.update((abierto) => !abierto);
-  }
-
-  setEstado(estado: FiltroEstado): void {
-    this.filtroEstado.set(estado);
-    this.pagina.set(1);
-  }
-
-  setRol(evento: Event): void {
-    const valor = (evento.target as HTMLSelectElement).value;
-    this.filtroRol.set(valor || null);
-    this.pagina.set(1);
-  }
-
-  setRango(rango: RangoFechas): void {
-    this.filtroDesde.set(rango.desde);
-    this.filtroHasta.set(rango.hasta);
-    this.pagina.set(1);
-  }
-
-  setFiltroDesde(evento: Event): void {
-    this.filtroDesde.set((evento.target as HTMLInputElement).value);
-    this.pagina.set(1);
-  }
-
-  setFiltroHasta(evento: Event): void {
-    this.filtroHasta.set((evento.target as HTMLInputElement).value);
-    this.pagina.set(1);
-  }
-
-  quitarFiltro(clave: string): void {
-    if (clave === 'estado') this.filtroEstado.set('todos');
-    if (clave === 'rol') this.filtroRol.set(null);
-    if (clave === 'periodo') {
-      this.filtroDesde.set('');
-      this.filtroHasta.set('');
-    }
-    this.pagina.set(1);
-  }
-
-  limpiarFiltros(): void {
-    this.filtroEstado.set('todos');
-    this.filtroRol.set(null);
-    this.filtroDesde.set('');
-    this.filtroHasta.set('');
-    this.pagina.set(1);
-  }
-
-  readonly pagina = signal(1);
-  readonly porPagina = signal(10);
-
-  readonly totalPaginas = computed(() =>
-    Math.max(1, Math.ceil(this.filtrados().length / this.porPagina())),
-  );
-
-  readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
-
-  readonly paginados = computed(() => {
-    const inicio = (this.paginaActual() - 1) * this.porPagina();
-    return this.filtrados().slice(inicio, inicio + this.porPagina());
-  });
-
-  buscar(valor: string): void {
-    this.busqueda.set(valor);
-    this.pagina.set(1);
-  }
-
-  cambiarPorPagina(valor: number): void {
-    this.porPagina.set(valor);
-    this.pagina.set(1);
-  }
-
-  /** Resumen por usuario (roles asignados y permisos efectivos) para las columnas Rol/Permisos. */
-  readonly cargandoResumen = signal(false);
-  readonly errorResumen = signal(false);
-  readonly resumen = signal<Map<number, ResumenUsuario>>(new Map());
-  /** El filtro por rol solo es fiable con el resumen cargado sin error. */
-  readonly resumenDisponible = computed(() => !this.cargandoResumen() && !this.errorResumen());
-  /** Hubo cambios de roles/permisos en un modal: el resumen se recarga al cerrarlo. */
-  private resumenDesactualizado = false;
 
   readonly formAbierto = signal(false);
   readonly editando = signal<Usuario | null>(null);
@@ -242,35 +150,29 @@ export class Usuarios {
   readonly aEliminar = signal<Usuario | null>(null);
   readonly eliminando = signal(false);
 
-  readonly rolesAbierto = signal(false);
+  /** Usuario con el modal de roles / de permisos individuales abierto. */
   readonly usuarioRoles = signal<Usuario | null>(null);
-  readonly cargandoRoles = signal(false);
-  readonly catalogoRoles = signal<Rol[]>([]);
-  readonly rolesAsignados = signal<Set<number>>(new Set());
-  readonly cambiandoRol = signal<number | null>(null);
+  readonly usuarioPermisos = signal<Usuario | null>(null);
 
   constructor() {
     this.cargar();
   }
 
   cargar(): void {
-    this.cargando.set(true);
-    this.error.set(null);
-    this.usuariosApi
-      .listar()
-      .pipe(finalize(() => this.cargando.set(false)))
-      .subscribe({
-        next: (lista) => {
-          this.usuarios.set(lista);
-          this.directorio.establecer(lista);
-          this.cargarResumen(lista);
-        },
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
-      });
+    this.listado.recargar();
+  }
+
+  setRol(evento: Event): void {
+    const valor = (evento.target as HTMLSelectElement).value;
+    this.filtroRol.set(valor || null);
+    this.listado.irAPrimeraPagina();
   }
 
   private cargarResumen(lista: Usuario[]): void {
+    const solicitud = ++this.solicitudResumen;
+    const vigente = () => solicitud === this.solicitudResumen;
     if (lista.length === 0) {
+      this.cargandoResumen.set(false);
       this.resumen.set(new Map());
       return;
     }
@@ -278,9 +180,18 @@ export class Usuarios {
     this.errorResumen.set(false);
     this.usuariosApi
       .resumen()
-      .pipe(finalize(() => this.cargandoResumen.set(false)))
+      .pipe(
+        finalize(() => {
+          if (vigente()) {
+            this.cargandoResumen.set(false);
+          }
+        }),
+      )
       .subscribe({
         next: (filas) => {
+          if (!vigente()) {
+            return;
+          }
           const mapa = new Map<number, ResumenUsuario>();
           for (const usuario of lista) {
             mapa.set(usuario.id, { roles: [], permisos: [] });
@@ -297,6 +208,9 @@ export class Usuarios {
           }
         },
         error: () => {
+          if (!vigente()) {
+            return;
+          }
           this.resumen.set(new Map());
           this.errorResumen.set(true);
           this.filtroRol.set(null);
@@ -304,20 +218,8 @@ export class Usuarios {
       });
   }
 
-  tieneResumen(id: number): boolean {
-    return this.resumen().has(id);
-  }
-
-  rolesDe(id: number): string[] {
+  private rolesDe(id: number): string[] {
     return this.resumen().get(id)?.roles ?? [];
-  }
-
-  permisosDe(id: number): string[] {
-    return this.resumen().get(id)?.permisos ?? [];
-  }
-
-  iniciales(usuario: Usuario): string {
-    return `${usuario.nombre?.[0] ?? ''}${usuario.apellido?.[0] ?? ''}`.toUpperCase() || '?';
   }
 
   campoInvalido(
@@ -381,30 +283,26 @@ export class Usuarios {
     this.guardando.set(true);
 
     const peticion = editando
-      ? this.usuariosApi
-          .actualizar(editando.id, {
-            usuario: valores.usuario,
-            nombre: valores.nombre,
-            apellido: valores.apellido,
-            email: valores.email,
-            telefono: valores.telefono || null,
-            activo: valores.activo,
-            ...(valores.contrasena ? { contrasena: valores.contrasena } : {}),
-          })
-          .pipe(finalize(() => this.guardando.set(false)))
-      : this.usuariosApi
-          .crear({
-            usuario: valores.usuario,
-            contrasena: valores.contrasena,
-            nombre: valores.nombre,
-            apellido: valores.apellido,
-            email: valores.email,
-            telefono: valores.telefono || null,
-            activo: valores.activo,
-          })
-          .pipe(finalize(() => this.guardando.set(false)));
+      ? this.usuariosApi.actualizar(editando.id, {
+          usuario: valores.usuario,
+          nombre: valores.nombre,
+          apellido: valores.apellido,
+          email: valores.email,
+          telefono: valores.telefono || null,
+          activo: valores.activo,
+          ...(valores.contrasena ? { contrasena: valores.contrasena } : {}),
+        })
+      : this.usuariosApi.crear({
+          usuario: valores.usuario,
+          contrasena: valores.contrasena,
+          nombre: valores.nombre,
+          apellido: valores.apellido,
+          email: valores.email,
+          telefono: valores.telefono || null,
+          activo: valores.activo,
+        });
 
-    peticion.subscribe({
+    peticion.pipe(finalize(() => this.guardando.set(false))).subscribe({
       next: (usuario) => {
         this.notificaciones.exito(
           'Guardado',
@@ -420,9 +318,7 @@ export class Usuarios {
   alternarActivo(usuario: Usuario): void {
     this.usuariosApi.cambiarActivo(usuario.id, !usuario.activo).subscribe({
       next: (actualizado) => {
-        this.usuarios.update((lista) =>
-          lista.map((item) => (item.id === actualizado.id ? actualizado : item)),
-        );
+        this.listado.reemplazar(actualizado);
         this.notificaciones.info(
           usuario.activo ? 'Usuario desactivado' : 'Usuario activado',
           usuario.usuario,
@@ -448,7 +344,7 @@ export class Usuarios {
       .pipe(finalize(() => this.eliminando.set(false)))
       .subscribe({
         next: () => {
-          this.usuarios.update((lista) => lista.filter((item) => item.id !== usuario.id));
+          this.listado.quitar(usuario.id);
           this.notificaciones.exito('Eliminado', `Usuario ${usuario.usuario} eliminado.`);
           this.eliminarAbierto.set(false);
           this.aEliminar.set(null);
@@ -458,214 +354,12 @@ export class Usuarios {
       });
   }
 
-  abrirRoles(usuario: Usuario): void {
-    this.usuarioRoles.set(usuario);
-    this.rolesAbierto.set(true);
-    this.cargandoRoles.set(true);
-    forkJoin({
-      catalogo: this.rolesApi.listar(),
-      asignados: this.usuariosApi.roles(usuario.id),
-    })
-      .pipe(finalize(() => this.cargandoRoles.set(false)))
-      .subscribe({
-        next: ({ catalogo, asignados }) => {
-          this.catalogoRoles.set(catalogo);
-          this.rolesAsignados.set(new Set(asignados.map((rol) => rol.id)));
-        },
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudieron cargar los roles', mensajeDeError(err)),
-      });
-  }
-
   /** Cierra el modal de roles o de permisos y refresca las columnas/filtro de rol si hubo cambios. */
-  cerrarAsignaciones(): void {
-    this.rolesAbierto.set(false);
-    this.permisosAbierto.set(false);
-    if (this.resumenDesactualizado) {
-      this.resumenDesactualizado = false;
-      this.cargarResumen(this.usuarios());
+  cerrarAsignaciones(huboCambios: boolean): void {
+    this.usuarioRoles.set(null);
+    this.usuarioPermisos.set(null);
+    if (huboCambios) {
+      this.cargarResumen(this.listado.items());
     }
-  }
-
-  estaAsignado(rolId: number): boolean {
-    return this.rolesAsignados().has(rolId);
-  }
-
-  alternarRol(rol: Rol): void {
-    const usuario = this.usuarioRoles();
-    if (!usuario || this.cambiandoRol()) {
-      return;
-    }
-    this.cambiandoRol.set(rol.id);
-    const asignado = this.estaAsignado(rol.id);
-    const peticion = asignado
-      ? this.usuariosApi.quitarRol(usuario.id, rol.id)
-      : this.usuariosApi.asignarRol(usuario.id, rol.id);
-
-    peticion.pipe(finalize(() => this.cambiandoRol.set(null))).subscribe({
-      next: () => {
-        this.rolesAsignados.update((set) => {
-          const copia = new Set(set);
-          if (asignado) {
-            copia.delete(rol.id);
-          } else {
-            copia.add(rol.id);
-          }
-          return copia;
-        });
-        this.resumenDesactualizado = true;
-        this.notificaciones.info(asignado ? 'Rol quitado' : 'Rol asignado', rol.nombre);
-      },
-      error: (err: unknown) =>
-        this.notificaciones.error('No se pudo actualizar el rol', mensajeDeError(err)),
-    });
-  }
-
-  // --- Overrides de permisos por usuario (grant/deny) ---
-
-  readonly permisosAbierto = signal(false);
-  readonly usuarioPermisos = signal<Usuario | null>(null);
-  readonly cargandoPermisos = signal(false);
-  readonly catalogoPermisos = signal<Permiso[]>([]);
-  readonly filtroPermisos = signal('');
-  readonly cambiandoPermiso = signal<number | null>(null);
-
-  private readonly overrides = signal<Map<number, boolean>>(new Map());
-  private readonly otorgaRol = signal<Set<number>>(new Set());
-
-  readonly permisosFiltrados = computed(() => {
-    const termino = this.filtroPermisos();
-    return this.catalogoPermisos().filter((permiso) =>
-      contieneTexto([permiso.nombre, permiso.descripcion], termino),
-    );
-  });
-
-  readonly totalEfectivos = computed(
-    () => this.catalogoPermisos().filter((permiso) => this.permitidoDe(permiso.id)).length,
-  );
-
-  readonly totalConcedidos = computed(
-    () => [...this.overrides().values()].filter((otorgado) => otorgado).length,
-  );
-
-  readonly totalDenegados = computed(
-    () => [...this.overrides().values()].filter((otorgado) => !otorgado).length,
-  );
-
-  permiteOverride(): boolean {
-    return this.permisosSesion().includes(PERMISOS.ASIGNAR_PERMISOS);
-  }
-
-  overrideDe(permisoId: number): boolean | undefined {
-    return this.overrides().get(permisoId);
-  }
-
-  permitidoDe(permisoId: number): boolean {
-    const override = this.overrides().get(permisoId);
-    return override ?? this.otorgaRol().has(permisoId);
-  }
-
-  origenDe(permisoId: number): 'concedido' | 'denegado' | 'heredado' | 'sin' {
-    const override = this.overrides().get(permisoId);
-    if (override === true) {
-      return 'concedido';
-    }
-    if (override === false) {
-      return 'denegado';
-    }
-    return this.otorgaRol().has(permisoId) ? 'heredado' : 'sin';
-  }
-
-  abrirPermisos(usuario: Usuario): void {
-    this.usuarioPermisos.set(usuario);
-    this.filtroPermisos.set('');
-    this.permisosAbierto.set(true);
-    this.cargandoPermisos.set(true);
-    forkJoin({
-      catalogo: this.permisosApi.listar(),
-      overrides: this.usuariosApi.permisos(usuario.id),
-      efectivos: this.usuariosApi.resolucionEfectivos(usuario.id),
-    })
-      .pipe(finalize(() => this.cargandoPermisos.set(false)))
-      .subscribe({
-        next: ({ catalogo, overrides, efectivos }) => {
-          this.catalogoPermisos.set(catalogo);
-          this.overrides.set(new Map(overrides.map((item) => [item.permisoId, item.otorgado])));
-          this.otorgaRol.set(
-            new Set(
-              efectivos
-                .filter((fila) => fila.origen === 'ROL' && fila.otorgado)
-                .map((fila) => fila.permisoId),
-            ),
-          );
-        },
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudieron cargar los permisos', mensajeDeError(err)),
-      });
-  }
-
-  conceder(permiso: Permiso): void {
-    this.aplicarOverride(permiso, true);
-  }
-
-  denegar(permiso: Permiso): void {
-    this.aplicarOverride(permiso, false);
-  }
-
-  heredar(permiso: Permiso): void {
-    const usuario = this.usuarioPermisos();
-    if (!usuario || this.cambiandoPermiso() !== null || !this.overrides().has(permiso.id)) {
-      return;
-    }
-    this.cambiandoPermiso.set(permiso.id);
-    this.usuariosApi
-      .quitarPermiso(usuario.id, permiso.id)
-      .pipe(finalize(() => this.cambiandoPermiso.set(null)))
-      .subscribe({
-        next: () => {
-          this.overrides.update((mapa) => {
-            const copia = new Map(mapa);
-            copia.delete(permiso.id);
-            return copia;
-          });
-          this.resumenDesactualizado = true;
-          this.notificaciones.info('Permiso heredado del rol', permiso.nombre);
-        },
-        error: (err: unknown) => {
-          if (!esAccesoDenegado(err)) {
-            this.notificaciones.error('No se pudo actualizar', mensajeDeError(err));
-          }
-        },
-      });
-  }
-
-  private aplicarOverride(permiso: Permiso, otorgado: boolean): void {
-    const usuario = this.usuarioPermisos();
-    if (
-      !usuario ||
-      this.cambiandoPermiso() !== null ||
-      this.overrides().get(permiso.id) === otorgado
-    ) {
-      return;
-    }
-    this.cambiandoPermiso.set(permiso.id);
-    this.usuariosApi
-      .otorgarPermiso(usuario.id, { permisoId: permiso.id, otorgado })
-      .pipe(finalize(() => this.cambiandoPermiso.set(null)))
-      .subscribe({
-        next: () => {
-          this.overrides.update((mapa) => new Map(mapa).set(permiso.id, otorgado));
-          this.resumenDesactualizado = true;
-          this.notificaciones.info(
-            otorgado ? 'Permiso concedido' : 'Permiso denegado',
-            permiso.nombre,
-          );
-        },
-        error: (err: unknown) => {
-          if (!esAccesoDenegado(err)) {
-            this.notificaciones.error('No se pudo actualizar', mensajeDeError(err));
-          }
-        },
-      });
   }
 }

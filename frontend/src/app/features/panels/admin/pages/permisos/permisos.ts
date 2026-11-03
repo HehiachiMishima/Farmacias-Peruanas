@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
@@ -15,19 +15,12 @@ import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { Paginador } from '../../../../../shared/ui/paginador/paginador';
-import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
-import {
-  FiltroEstado,
-  OPCIONES_ESTADO,
-  chipEstado,
-  chipPeriodo,
-  cumpleEstado,
-  enPeriodo,
-} from '../../../../../shared/ui/panel-filtros/filtro-registro';
-import { contieneTexto } from '../../../../../core/utils/texto.util';
+import { FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
-import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
+import { RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
+import { ListadoRegistros } from '../../state/listado-registros';
+import { ListaAsignacion } from '../../ui/lista-asignacion';
 
 @Component({
   selector: 'app-admin-permisos',
@@ -45,6 +38,7 @@ import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
     PanelFiltros,
     FiltrosActivos,
     RangoRapido,
+    ListaAsignacion,
   ],
   templateUrl: './permisos.html',
   styleUrl: './permisos.scss',
@@ -57,107 +51,10 @@ export class Permisos {
 
   readonly permisos = PERMISOS;
 
-  readonly cargando = signal(true);
-  readonly error = signal<string | null>(null);
-  readonly permisosLista = signal<Permiso[]>([]);
-  readonly busqueda = signal('');
-
-  private readonly coincidenBusqueda = computed(() => {
-    const termino = this.busqueda();
-    return this.permisosLista().filter((permiso) =>
-      contieneTexto([permiso.nombre, permiso.descripcion], termino),
-    );
+  readonly listado = new ListadoRegistros<Permiso>({
+    fuente: () => this.permisosApi.listar(),
+    campos: (permiso) => [permiso.nombre, permiso.descripcion],
   });
-
-  // ---------------- Filtros del panel ----------------
-  readonly filtroEstado = signal<FiltroEstado>('todos');
-  readonly filtroDesde = signal('');
-  readonly filtroHasta = signal('');
-  readonly filtrosAbierto = signal(false);
-  readonly estados = OPCIONES_ESTADO;
-
-  /** Búsqueda + filtros del panel (todo en cliente: el listado ya está en memoria). */
-  readonly filtrados = computed(() => {
-    const estado = this.filtroEstado();
-    const desde = this.filtroDesde();
-    const hasta = this.filtroHasta();
-    return this.coincidenBusqueda().filter(
-      (item) => cumpleEstado(estado, item.activo) && enPeriodo(item.creadoEn, desde, hasta),
-    );
-  });
-
-  readonly chips = computed<ChipFiltro[]>(() =>
-    [chipEstado(this.filtroEstado()), chipPeriodo(this.filtroDesde(), this.filtroHasta())].filter(
-      (chip): chip is ChipFiltro => chip !== null,
-    ),
-  );
-
-  readonly filtrosActivos = computed(() => this.chips().length);
-
-  alternarFiltros(): void {
-    this.filtrosAbierto.update((abierto) => !abierto);
-  }
-
-  setEstado(estado: FiltroEstado): void {
-    this.filtroEstado.set(estado);
-    this.pagina.set(1);
-  }
-
-  setRango(rango: RangoFechas): void {
-    this.filtroDesde.set(rango.desde);
-    this.filtroHasta.set(rango.hasta);
-    this.pagina.set(1);
-  }
-
-  setFiltroDesde(evento: Event): void {
-    this.filtroDesde.set((evento.target as HTMLInputElement).value);
-    this.pagina.set(1);
-  }
-
-  setFiltroHasta(evento: Event): void {
-    this.filtroHasta.set((evento.target as HTMLInputElement).value);
-    this.pagina.set(1);
-  }
-
-  quitarFiltro(clave: string): void {
-    if (clave === 'estado') this.filtroEstado.set('todos');
-    if (clave === 'periodo') {
-      this.filtroDesde.set('');
-      this.filtroHasta.set('');
-    }
-    this.pagina.set(1);
-  }
-
-  limpiarFiltros(): void {
-    this.filtroEstado.set('todos');
-    this.filtroDesde.set('');
-    this.filtroHasta.set('');
-    this.pagina.set(1);
-  }
-
-  readonly pagina = signal(1);
-  readonly porPagina = signal(10);
-
-  readonly totalPaginas = computed(() =>
-    Math.max(1, Math.ceil(this.filtrados().length / this.porPagina())),
-  );
-
-  readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
-
-  readonly paginados = computed(() => {
-    const inicio = (this.paginaActual() - 1) * this.porPagina();
-    return this.filtrados().slice(inicio, inicio + this.porPagina());
-  });
-
-  buscar(valor: string): void {
-    this.busqueda.set(valor);
-    this.pagina.set(1);
-  }
-
-  cambiarPorPagina(valor: number): void {
-    this.porPagina.set(valor);
-    this.pagina.set(1);
-  }
 
   readonly formAbierto = signal(false);
   readonly editando = signal<Permiso | null>(null);
@@ -176,7 +73,10 @@ export class Permisos {
   readonly rolesAbierto = signal(false);
   readonly permisoRoles = signal<Permiso | null>(null);
   readonly cargandoRoles = signal(false);
+  readonly errorRoles = signal<string | null>(null);
   readonly rolesConPermiso = signal<Rol[]>([]);
+  /** Descarta la respuesta de un modal abierto antes (otro permiso). */
+  private solicitudRoles = 0;
 
   constructor() {
     this.directorio.cargar();
@@ -184,15 +84,7 @@ export class Permisos {
   }
 
   cargar(): void {
-    this.cargando.set(true);
-    this.error.set(null);
-    this.permisosApi
-      .listar()
-      .pipe(finalize(() => this.cargando.set(false)))
-      .subscribe({
-        next: (lista) => this.permisosLista.set(lista),
-        error: (err: unknown) => this.error.set(mensajeDeError(err)),
-      });
+    this.listado.recargar();
   }
 
   campoInvalido(campo: 'nombre'): boolean {
@@ -259,9 +151,7 @@ export class Permisos {
   toggleActivo(permiso: Permiso): void {
     this.permisosApi.cambiarActivo(permiso.id, !permiso.activo).subscribe({
       next: (actualizado) => {
-        this.permisosLista.update((lista) =>
-          lista.map((item) => (item.id === actualizado.id ? actualizado : item)),
-        );
+        this.listado.reemplazar(actualizado);
         this.notificaciones.info(
           actualizado.activo ? 'Permiso activado' : 'Permiso desactivado',
           actualizado.nombre,
@@ -288,7 +178,7 @@ export class Permisos {
       .pipe(finalize(() => this.eliminando.set(false)))
       .subscribe({
         next: () => {
-          this.permisosLista.update((lista) => lista.filter((item) => item.id !== permiso.id));
+          this.listado.quitar(permiso.id);
           this.notificaciones.exito('Eliminado', `Permiso ${permiso.nombre} eliminado.`);
           this.eliminarAbierto.set(false);
           this.aEliminar.set(null);
@@ -299,16 +189,35 @@ export class Permisos {
   }
 
   abrirRoles(permiso: Permiso): void {
+    const solicitud = ++this.solicitudRoles;
+    const vigente = () => solicitud === this.solicitudRoles;
     this.permisoRoles.set(permiso);
+    this.rolesConPermiso.set([]);
+    this.errorRoles.set(null);
     this.rolesAbierto.set(true);
     this.cargandoRoles.set(true);
     this.permisosApi
       .roles(permiso.id)
-      .pipe(finalize(() => this.cargandoRoles.set(false)))
+      .pipe(
+        finalize(() => {
+          if (vigente()) {
+            this.cargandoRoles.set(false);
+          }
+        }),
+      )
       .subscribe({
-        next: (roles) => this.rolesConPermiso.set(roles),
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudieron cargar los roles', mensajeDeError(err)),
+        next: (roles) => {
+          if (vigente()) {
+            this.rolesConPermiso.set(roles);
+          }
+        },
+        error: (err: unknown) => {
+          if (!vigente()) {
+            return;
+          }
+          this.errorRoles.set(mensajeDeError(err));
+          this.notificaciones.error('No se pudieron cargar los roles', mensajeDeError(err));
+        },
       });
   }
 }

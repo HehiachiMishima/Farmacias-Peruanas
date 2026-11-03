@@ -107,8 +107,6 @@ export class GaugeChart {
     afterNextRender(() => this.listo.set(true));
   }
 
-  readonly porcentaje = computed(() => Math.min(100, Math.max(0, Math.round(this.valor()))));
-
   readonly dash = computed(() => {
     const valor = this.listo() ? this.valor() : 0;
     return `${Math.min(100, Math.max(0, valor))} ${100 - Math.min(100, Math.max(0, valor))}`;

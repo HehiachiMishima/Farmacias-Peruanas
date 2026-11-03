@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import oracle.admin.model.UsuarioPermiso;
 import oracle.admin.model.UsuarioPermiso.UsuarioPermisoId;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -16,9 +17,9 @@ public interface UsuarioPermisoRepository extends JpaRepository<UsuarioPermiso, 
 
     boolean existsByUsuarioIdAndPermisoId(Long usuarioId, Long permisoId);
 
+    /** Overrides del usuario con usuario y permiso en el mismo SELECT (sin una consulta por fila). */
+    @EntityGraph(attributePaths = {"usuario", "permiso"})
     List<UsuarioPermiso> findByUsuarioId(Long usuarioId);
-
-    List<UsuarioPermiso> findByUsuarioIdAndOtorgado(Long usuarioId, Boolean otorgado);
 
     @Transactional
     @Modifying

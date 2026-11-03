@@ -12,6 +12,7 @@ import oracle.malla.model.MallaDatos.Ola;
 import oracle.malla.model.MallaDatos.Turno;
 import oracle.malla.model.MallaDatos.Zona;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -28,36 +29,34 @@ public class MallaDatosRepository {
         this.jdbc = jdbc;
     }
 
-    public MallaDatos cargar() {
+    /** Foto de todos los centros o, con {@code centroId}, sólo de ese centro. */
+    public MallaDatos cargar(Long centroId) {
         return new MallaDatos(
-                centros(),
-                turnos(),
-                flujos(),
-                olas(),
-                zonas(),
-                capacidades(),
-                dotaciones());
+                centros(centroId),
+                turnos(centroId),
+                flujos(centroId),
+                olas(centroId),
+                zonas(centroId),
+                capacidades(centroId),
+                dotaciones(centroId));
     }
 
-    private List<Centro> centros() {
-        return jdbc.query("""
-                SELECT id, origen_id, codigo, nombre
-                FROM malla_centro
-                WHERE activo = TRUE
-                ORDER BY id
-                """, (rs, fila) -> new Centro(
+    private List<Centro> centros(Long centroId) {
+        RowMapper<Centro> centro = (rs, fila) -> new Centro(
                 rs.getLong("id"),
-                rs.getString("origen_id"),
                 rs.getString("codigo"),
-                rs.getString("nombre")));
+                rs.getString("nombre"));
+        String consulta = "SELECT id, codigo, nombre FROM malla_centro WHERE activo = TRUE";
+        return centroId == null
+                ? jdbc.query(consulta + " ORDER BY id", centro)
+                : jdbc.query(consulta + " AND id = ?", centro, centroId);
     }
 
-    private List<Turno> turnos() {
-        return jdbc.query("""
+    private List<Turno> turnos(Long centroId) {
+        return consultar("""
                 SELECT id, centro_id, codigo, nombre, hora_inicio, hora_fin, hora_refrigerio, confirmado
                 FROM malla_turno
-                ORDER BY centro_id, id
-                """, (rs, fila) -> new Turno(
+                """, "centro_id, id", centroId, (rs, fila) -> new Turno(
                 rs.getLong("id"),
                 rs.getLong("centro_id"),
                 rs.getString("codigo"),
@@ -68,12 +67,12 @@ public class MallaDatosRepository {
                 rs.getBoolean("confirmado")));
     }
 
-    private List<Flujo> flujos() {
-        return jdbc.query("""
-                SELECT id, centro_id, proceso, orden, responsable, hora_inicio, hora_fin, actividad, confirmado
+    private List<Flujo> flujos(Long centroId) {
+        return consultar("""
+                SELECT id, centro_id, proceso, orden, responsable, hora_inicio, hora_fin, actividad,
+                       confirmado
                 FROM malla_flujo
-                ORDER BY centro_id, proceso, orden
-                """, (rs, fila) -> new Flujo(
+                """, "centro_id, proceso, orden", centroId, (rs, fila) -> new Flujo(
                 rs.getLong("id"),
                 rs.getLong("centro_id"),
                 rs.getString("proceso"),
@@ -85,13 +84,12 @@ public class MallaDatosRepository {
                 rs.getBoolean("confirmado")));
     }
 
-    private List<Ola> olas() {
-        return jdbc.query("""
+    private List<Ola> olas(Long centroId) {
+        return consultar("""
                 SELECT id, centro_id, cluster, nombre, caida_pedidos, lanzamiento, cierre_picking,
                        despacho, confirmado
                 FROM malla_ola
-                ORDER BY centro_id, cluster, nombre
-                """, (rs, fila) -> new Ola(
+                """, "centro_id, cluster, nombre", centroId, (rs, fila) -> new Ola(
                 rs.getLong("id"),
                 rs.getLong("centro_id"),
                 rs.getString("cluster"),
@@ -103,12 +101,11 @@ public class MallaDatosRepository {
                 rs.getBoolean("confirmado")));
     }
 
-    private List<Zona> zonas() {
-        return jdbc.query("""
+    private List<Zona> zonas(Long centroId) {
+        return consultar("""
                 SELECT id, centro_id, nombre, lph_real, lph_diseno
                 FROM malla_zona
-                ORDER BY centro_id, nombre
-                """, (rs, fila) -> new Zona(
+                """, "centro_id, nombre", centroId, (rs, fila) -> new Zona(
                 rs.getLong("id"),
                 rs.getLong("centro_id"),
                 rs.getString("nombre"),
@@ -116,12 +113,11 @@ public class MallaDatosRepository {
                 entero(rs.getObject("lph_diseno"))));
     }
 
-    private List<Capacidad> capacidades() {
-        return jdbc.query("""
+    private List<Capacidad> capacidades(Long centroId) {
+        return consultar("""
                 SELECT centro_id, unidades_dia, lineas_dia, bultos_recepcion_dia, proveedores_dia
                 FROM malla_capacidad
-                ORDER BY centro_id
-                """, (rs, fila) -> new Capacidad(
+                """, "centro_id", centroId, (rs, fila) -> new Capacidad(
                 rs.getLong("centro_id"),
                 entero(rs.getObject("unidades_dia")),
                 entero(rs.getObject("lineas_dia")),
@@ -129,17 +125,23 @@ public class MallaDatosRepository {
                 entero(rs.getObject("proveedores_dia"))));
     }
 
-    private List<Dotacion> dotaciones() {
-        return jdbc.query("""
+    private List<Dotacion> dotaciones(Long centroId) {
+        return consultar("""
                 SELECT id, centro_id, turno_id, proceso, personas
                 FROM malla_dotacion
-                ORDER BY centro_id, proceso, turno_id
-                """, (rs, fila) -> new Dotacion(
+                """, "centro_id, proceso, turno_id", centroId, (rs, fila) -> new Dotacion(
                 rs.getLong("id"),
                 rs.getLong("centro_id"),
                 rs.getLong("turno_id"),
                 rs.getString("proceso"),
                 entero(rs.getObject("personas"))));
+    }
+
+    /** Tablas hijas de la malla: todas las filas o sólo las del centro pedido. */
+    private <T> List<T> consultar(String consulta, String orden, Long centroId, RowMapper<T> fila) {
+        return centroId == null
+                ? jdbc.query(consulta + "ORDER BY " + orden, fila)
+                : jdbc.query(consulta + "WHERE centro_id = ? ORDER BY " + orden, fila, centroId);
     }
 
     private static LocalTime hora(Time valor) {

@@ -1,4 +1,4 @@
-import { DatePipe, formatDate } from '@angular/common';
+import { DatePipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -15,7 +15,6 @@ import { mensajeDeError } from '../../../../../core/errors/error.util';
 import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
 import { exportarCsv } from '../../../../../core/utils/csv.util';
 import { valorTexto } from '../../../../../core/utils/evento.util';
-import { CONFIG } from '../../../../../core/config/configuracion';
 import { hoy } from '../../../../../core/utils/fecha.util';
 import {
   IncidenciaInbound,
@@ -42,21 +41,10 @@ import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtr
 import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
+import { CABECERAS_EXPORT, filaExportacion } from './incidencias.logica';
 
 type CampoFormulario =
   'ordenCompra' | 'idDataProveedor' | 'idDataIncidenciaInbound' | 'skuProducto' | 'nUnidades';
-
-const CABECERAS_EXPORT = [
-  'Orden de compra',
-  'Proveedor',
-  'Tipo',
-  'SKU',
-  'Unidades',
-  'Creado',
-  'Creado por',
-  'Actualizado',
-  'Actualizado por',
-];
 
 @Component({
   selector: 'app-inbound-incidencias',
@@ -199,19 +187,9 @@ export class InboundIncidencias {
       .pipe(finalize(() => this.exportando.set(false)))
       .subscribe({
         next: (lista) => {
-          const filas = lista.map((i) => [
-            i.ordenCompra,
-            i.proveedor ?? '—',
-            i.tipoIncidencia ?? '—',
-            i.skuProducto,
-            i.nUnidades,
-            formatDate(i.creadoEn, 'dd/MM/yyyy HH:mm', this.locale, CONFIG.zonaHoraria),
-            this.directorio.etiqueta(i.creadoPor),
-            i.actualizadoEn
-              ? formatDate(i.actualizadoEn, 'dd/MM/yyyy HH:mm', this.locale, CONFIG.zonaHoraria)
-              : '—',
-            this.directorio.etiqueta(i.actualizadoPor),
-          ]);
+          const filas = lista.map((i) =>
+            filaExportacion(i, this.locale, (id) => this.directorio.etiqueta(id)),
+          );
           exportarCsv(`incidencias_inbound_${hoy()}.csv`, CABECERAS_EXPORT, filas);
           this.notificaciones.exito('Exportado', `Se exportaron ${filas.length} incidencias.`);
         },

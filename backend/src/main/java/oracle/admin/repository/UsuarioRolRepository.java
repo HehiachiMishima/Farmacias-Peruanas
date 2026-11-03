@@ -2,7 +2,6 @@ package oracle.admin.repository;
 
 import java.util.List;
 import oracle.admin.model.Rol;
-import oracle.admin.model.Usuario;
 import oracle.admin.model.UsuarioRol;
 import oracle.admin.model.UsuarioRol.UsuarioRolId;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -22,7 +21,4 @@ public interface UsuarioRolRepository extends JpaRepository<UsuarioRol, UsuarioR
 
     @Query("SELECT ur.rol FROM UsuarioRol ur WHERE ur.usuario.id = :usuarioId")
     List<Rol> rolesDeUsuario(@Param("usuarioId") Long usuarioId);
-
-    @Query("SELECT ur.usuario FROM UsuarioRol ur WHERE ur.rol.id = :rolId")
-    List<Usuario> usuariosDeRol(@Param("rolId") Long rolId);
 }

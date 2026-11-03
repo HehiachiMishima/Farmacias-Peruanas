@@ -21,15 +21,15 @@
       type="search"
       class="ui-input"
       placeholder="Buscar permiso…"
-      [value]="busqueda()"
-      (input)="buscar($any($event.target).value)"
+      [value]="listado.busqueda()"
+      (input)="listado.buscar($any($event.target).value)"
     />
   </div>
   <button
     type="button"
     class="ui-btn ui-btn--secondary ui-btn--sm"
     (click)="cargar()"
-    [disabled]="cargando()"
+    [disabled]="listado.cargando()"
   >
     <ui-icon name="refresh" [size]="16" />
     Actualizar
@@ -37,42 +37,42 @@
   <button
     type="button"
     class="ui-btn ui-btn--secondary ui-btn--sm"
-    [attr.aria-expanded]="filtrosAbierto()"
+    [attr.aria-expanded]="listado.filtrosAbierto()"
     aria-controls="permisos-filtros"
-    (click)="alternarFiltros()"
+    (click)="listado.alternarFiltros()"
   >
     <ui-icon name="filtro" [size]="16" />
     Filtros
-    @if (filtrosActivos() > 0) {
-      <span class="filtros-badge">{{ filtrosActivos() }}</span>
+    @if (listado.filtrosActivos() > 0) {
+      <span class="filtros-badge">{{ listado.filtrosActivos() }}</span>
     }
   </button>
 </div>
 
 <ui-filtros-activos
-  [chips]="chips()"
-  (quitar)="quitarFiltro($event)"
-  (limpiar)="limpiarFiltros()"
+  [chips]="listado.chips()"
+  (quitar)="listado.quitarFiltro($event)"
+  (limpiar)="listado.limpiarFiltros()"
 />
 
 <ui-panel-filtros
   id="permisos-filtros"
-  [abierto]="filtrosAbierto()"
-  [activos]="filtrosActivos()"
+  [abierto]="listado.filtrosAbierto()"
+  [activos]="listado.filtrosActivos()"
   titulo="Filtrar permisos"
-  (cerrar)="filtrosAbierto.set(false)"
-  (limpiar)="limpiarFiltros()"
+  (cerrar)="listado.filtrosAbierto.set(false)"
+  (limpiar)="listado.limpiarFiltros()"
 >
   <section class="filtro-seccion">
     <h3 class="filtro-seccion__titulo"><ui-icon name="power" [size]="15" /> Estado</h3>
     <div class="ui-rango" role="group" aria-label="Estado">
-      @for (e of estados; track e.id) {
+      @for (e of listado.estados; track e.id) {
         <button
           type="button"
           class="ui-rango__btn"
-          [class.ui-rango__btn--on]="filtroEstado() === e.id"
-          [attr.aria-pressed]="filtroEstado() === e.id"
-          (click)="setEstado(e.id)"
+          [class.ui-rango__btn--on]="listado.filtroEstado() === e.id"
+          [attr.aria-pressed]="listado.filtroEstado() === e.id"
+          (click)="listado.setEstado(e.id)"
         >
           {{ e.etiqueta }}
         </button>
@@ -81,7 +81,11 @@
   </section>
   <section class="filtro-seccion">
     <h3 class="filtro-seccion__titulo"><ui-icon name="calendario" [size]="15" /> Periodo</h3>
-    <ui-rango-rapido [desde]="filtroDesde()" [hasta]="filtroHasta()" (rango)="setRango($event)" />
+    <ui-rango-rapido
+      [desde]="listado.filtroDesde()"
+      [hasta]="listado.filtroHasta()"
+      (rango)="listado.setRango($event)"
+    />
     <div class="filtro-seccion__fila">
       <div class="ui-field">
         <label class="ui-label" for="permisos-filtro-desde">Creado desde</label>
@@ -89,9 +93,9 @@
           id="permisos-filtro-desde"
           type="date"
           class="ui-input"
-          [max]="filtroHasta()"
-          [value]="filtroDesde()"
-          (change)="setFiltroDesde($event)"
+          [max]="listado.filtroHasta()"
+          [value]="listado.filtroDesde()"
+          (change)="listado.setFiltroDesde($event)"
         />
       </div>
       <div class="ui-field">
@@ -100,30 +104,35 @@
           id="permisos-filtro-hasta"
           type="date"
           class="ui-input"
-          [min]="filtroDesde()"
-          [value]="filtroHasta()"
-          (change)="setFiltroHasta($event)"
+          [min]="listado.filtroDesde()"
+          [value]="listado.filtroHasta()"
+          (change)="listado.setFiltroHasta($event)"
         />
       </div>
     </div>
   </section>
 </ui-panel-filtros>
 
-<div class="table-card" [class.table-card--refrescando]="cargando() && filtrados().length > 0">
-  @if (cargando() && filtrados().length === 0) {
+<div
+  class="table-card"
+  [class.table-card--refrescando]="listado.cargando() && listado.filtrados().length > 0"
+>
+  @if (listado.cargando() && listado.filtrados().length === 0) {
     <div class="loading"><span class="ui-spinner"></span> Cargando permisos…</div>
-  } @else if (error()) {
-    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!">
+  } @else if (listado.error()) {
+    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="listado.error()!">
       <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()">
         <ui-icon name="refresh" [size]="16" /> Reintentar
       </button>
     </ui-empty>
-  } @else if (filtrados().length === 0) {
+  } @else if (listado.filtrados().length === 0) {
     <ui-empty
       icono="permisos"
-      [titulo]="busqueda() || filtrosActivos() ? 'Sin resultados' : 'Aún no hay permisos'"
+      [titulo]="
+        listado.busqueda() || listado.filtrosActivos() ? 'Sin resultados' : 'Aún no hay permisos'
+      "
       [mensaje]="
-        busqueda() || filtrosActivos()
+        listado.busqueda() || listado.filtrosActivos()
           ? 'Ningún permiso coincide con la búsqueda o los filtros.'
           : 'Crea el primer permiso del catálogo.'
       "
@@ -144,7 +153,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (permiso of paginados(); track permiso.id) {
+          @for (permiso of listado.paginados(); track permiso.id) {
             <tr>
               <td>
                 <span class="ui-table__primary u-mono">{{ permiso.nombre }}</span>
@@ -217,11 +226,11 @@
     </div>
 
     <ui-paginador
-      [pagina]="paginaActual()"
-      [total]="filtrados().length"
-      [porPagina]="porPagina()"
-      (paginaCambia)="pagina.set($event)"
-      (porPaginaCambia)="cambiarPorPagina($event)"
+      [pagina]="listado.paginaActual()"
+      [total]="listado.filtrados().length"
+      [porPagina]="listado.porPagina()"
+      (paginaCambia)="listado.pagina.set($event)"
+      (porPaginaCambia)="listado.cambiarPorPagina($event)"
     />
   }
 </div>
@@ -324,25 +333,12 @@
   </p>
   @if (cargandoRoles()) {
     <div class="loading"><span class="ui-spinner"></span> Cargando…</div>
+  } @else if (errorRoles()) {
+    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="errorRoles()!" />
   } @else if (rolesConPermiso().length === 0) {
     <ui-empty icono="roles" titulo="Sin roles" mensaje="Ningún rol concede este permiso todavía." />
   } @else {
-    <ul class="role-list">
-      @for (rol of rolesConPermiso(); track rol.id) {
-        <li class="role-item">
-          <span class="role-item__icon"><ui-icon name="shieldCheck" [size]="18" /></span>
-          <span class="role-item__text">
-            <span class="role-item__name">
-              {{ rol.nombre }}
-              @if (!rol.activo) {
-                <span class="ui-badge ui-badge--neutral">Inactivo</span>
-              }
-            </span>
-            <span class="role-item__desc">{{ rol.descripcion || 'Sin descripción' }}</span>
-          </span>
-        </li>
-      }
-    </ul>
+    <app-lista-asignacion icono="shieldCheck" [items]="rolesConPermiso()" />
   }
   <div modal-footer class="modal-foot">
     <button type="button" class="ui-btn ui-btn--primary" (click)="rolesAbierto.set(false)">

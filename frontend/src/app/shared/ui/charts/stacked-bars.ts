@@ -6,6 +6,22 @@ export interface GrupoApilado {
   segmentos: { nombre: string; valor: number }[];
 }
 
+/** Agrupa filas planas (grupo, segmento, valor) en barras apiladas, en el orden en que aparece cada grupo. */
+export function agruparApiladas<T>(
+  filas: readonly T[],
+  grupo: (fila: T) => string,
+  segmento: (fila: T) => { nombre: string; valor: number },
+): GrupoApilado[] {
+  const grupos = new Map<string, { nombre: string; valor: number }[]>();
+  for (const fila of filas) {
+    const clave = grupo(fila);
+    const lista = grupos.get(clave) ?? [];
+    lista.push(segmento(fila));
+    grupos.set(clave, lista);
+  }
+  return [...grupos.entries()].map(([etiqueta, segmentos]) => ({ etiqueta, segmentos }));
+}
+
 /**
  * Barras horizontales apiladas: cada fila es un grupo (p. ej. un sistema) y
  * sus segmentos la composición (p. ej. tipos de incidencia). Los segmentos

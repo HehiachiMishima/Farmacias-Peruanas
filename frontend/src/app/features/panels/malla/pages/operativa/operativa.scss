@@ -633,6 +633,28 @@
   }
 }
 
+.dotacion {
+  td small {
+    margin-left: 6px;
+    font-size: var(--fs-xs);
+    color: var(--text-3);
+  }
+
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__total td {
+    font-weight: 800;
+    border-top: 1px solid var(--border);
+  }
+
+  &__falta {
+    color: var(--danger);
+  }
+}
+
 .procesos-pie {
   display: flex;
   justify-content: space-between;

@@ -19,15 +19,4 @@ public record FiltroIncidencia(
         LocalDate desde,
         LocalDate hasta,
         String texto) {
-
-    public boolean vacio() {
-        return centro == null
-                && sistema == null
-                && area == null
-                && responsable == null
-                && tipo == null
-                && desde == null
-                && hasta == null
-                && (texto == null || texto.isBlank());
-    }
 }

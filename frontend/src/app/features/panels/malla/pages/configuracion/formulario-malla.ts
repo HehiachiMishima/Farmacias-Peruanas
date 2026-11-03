@@ -1,4 +1,12 @@
-import { FormArray, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
+import {
+  AbstractControl,
+  FormArray,
+  FormBuilder,
+  FormControl,
+  FormGroup,
+  ValidationErrors,
+  Validators,
+} from '@angular/forms';
 import {
   CentroMallaDatos,
   FlujoMalla,
@@ -9,6 +17,9 @@ import {
   ZonaMalla,
 } from '../../data/malla.model';
 import { PROCESOS } from '../../malla-formato';
+
+/** Misma regla que el servidor: "HH:mm" de 24 h. */
+const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 type Numero = FormControl<number | null>;
 type Texto = FormControl<string>;
@@ -51,7 +62,8 @@ export type ZonaForm = FormGroup<{ nombre: Texto; lphReal: Numero; lphDiseno: Nu
 /**
  * Formulario de la malla de un centro: crea los grupos, agrega, quita y
  * reordena filas, y convierte entre los datos del servidor y el formulario.
- * Las horas se editan como "HH:mm" (input time) y vacío equivale a null.
+ * Las horas se editan como texto "HH:mm" de 24 h (la directiva Hora24 lo
+ * normaliza) y vacío equivale a null.
  */
 export class FormularioMalla {
   private readonly fb = new FormBuilder().nonNullable;
@@ -253,6 +265,23 @@ export class FormularioMalla {
     this.form.markAsDirty();
   }
 
+  /**
+   * Marca en cada control el error de campo que devolvió el servidor
+   * ("turnos[0].inicio" → turnos.0.inicio). Devuelve cuántos encontró.
+   */
+  marcarErroresServidor(campos: Record<string, string>): number {
+    let marcados = 0;
+    for (const [ruta, mensaje] of Object.entries(campos)) {
+      const control = this.form.get(ruta.replace(/\[(\d+)\]/g, '.$1'));
+      if (control) {
+        control.setErrors({ ...control.errors, servidor: mensaje });
+        control.markAsTouched();
+        marcados++;
+      }
+    }
+    return marcados;
+  }
+
   /** Posiciones de los pasos de un proceso dentro de la lista de flujos. */
   indicesDe(proceso: Proceso): number[] {
     return this.flujos.controls.flatMap((paso, i) =>
@@ -261,36 +290,48 @@ export class FormularioMalla {
   }
 
   private turno(t: TurnoMalla, personas: Record<Proceso, number | null>): TurnoForm {
-    return this.fb.group({
-      codigo: [t.codigo, [Validators.required, Validators.maxLength(8), Validators.pattern(/\S/)]],
-      nombre: [t.nombre, [Validators.required, Validators.maxLength(40), Validators.pattern(/\S/)]],
-      inicio: [t.inicio, Validators.required],
-      fin: [t.fin, Validators.required],
-      refrigerio: [t.refrigerio ?? ''],
-      tipoRefrigerio: [t.tipoRefrigerio ?? '', Validators.maxLength(24)],
-      nota: [t.nota ?? '', Validators.maxLength(200)],
-      confirmado: [t.confirmado],
-      personas: this.fb.group(
-        Object.fromEntries(PROCESOS.map((p) => [p.id, this.numero(personas[p.id])])) as Record<
-          Proceso,
-          Numero
-        >,
-      ),
-    });
+    return this.fb.group(
+      {
+        codigo: [
+          t.codigo,
+          [Validators.required, Validators.maxLength(8), Validators.pattern(/\S/)],
+        ],
+        nombre: [
+          t.nombre,
+          [Validators.required, Validators.maxLength(40), Validators.pattern(/\S/)],
+        ],
+        inicio: [t.inicio, [Validators.required, Validators.pattern(HORA)]],
+        fin: [t.fin, [Validators.required, Validators.pattern(HORA)]],
+        refrigerio: [t.refrigerio ?? '', Validators.pattern(HORA)],
+        tipoRefrigerio: [t.tipoRefrigerio ?? '', Validators.maxLength(24)],
+        nota: [t.nota ?? '', Validators.maxLength(200)],
+        confirmado: [t.confirmado],
+        personas: this.fb.group(
+          Object.fromEntries(PROCESOS.map((p) => [p.id, this.numero(personas[p.id])])) as Record<
+            Proceso,
+            Numero
+          >,
+        ),
+      },
+      { validators: inicioDistintoDeFin },
+    );
   }
 
   private paso(f: FlujoMalla): FlujoForm {
-    return this.fb.group({
-      proceso: [f.proceso],
-      responsable: [f.responsable],
-      inicio: [f.inicio, Validators.required],
-      fin: [f.fin ?? ''],
-      actividad: [
-        f.actividad,
-        [Validators.required, Validators.maxLength(200), Validators.pattern(/\S/)],
-      ],
-      confirmado: [f.confirmado],
-    });
+    return this.fb.group(
+      {
+        proceso: [f.proceso],
+        responsable: [f.responsable],
+        inicio: [f.inicio, [Validators.required, Validators.pattern(HORA)]],
+        fin: [f.fin ?? '', Validators.pattern(HORA)],
+        actividad: [
+          f.actividad,
+          [Validators.required, Validators.maxLength(200), Validators.pattern(/\S/)],
+        ],
+        confirmado: [f.confirmado],
+      },
+      { validators: inicioDistintoDeFin },
+    );
   }
 
   private ola(o: OlaMalla): OlaForm {
@@ -300,10 +341,10 @@ export class FormularioMalla {
         [Validators.required, Validators.maxLength(10), Validators.pattern(/\S/)],
       ],
       nombre: [o.nombre, [Validators.required, Validators.maxLength(20), Validators.pattern(/\S/)]],
-      caidaPedidos: [o.caidaPedidos ?? ''],
-      lanzamiento: [o.lanzamiento ?? ''],
-      cierrePicking: [o.cierrePicking ?? ''],
-      despacho: [o.despacho ?? ''],
+      caidaPedidos: [o.caidaPedidos ?? '', Validators.pattern(HORA)],
+      lanzamiento: [o.lanzamiento ?? '', Validators.pattern(HORA)],
+      cierrePicking: [o.cierrePicking ?? '', Validators.pattern(HORA)],
+      despacho: [o.despacho ?? '', Validators.pattern(HORA)],
       confirmado: [o.confirmado],
       nota: [o.nota ?? '', Validators.maxLength(320)],
     });
@@ -320,6 +361,12 @@ export class FormularioMalla {
   private numero(valor: number | null = null): Numero {
     return new FormControl<number | null>(valor, Validators.min(0));
   }
+}
+
+/** Un turno o un paso que empieza y termina a la misma hora no dura nada (ni 24 h). */
+function inicioDistintoDeFin(grupo: AbstractControl): ValidationErrors | null {
+  const { inicio, fin } = grupo.value as { inicio?: string; fin?: string };
+  return inicio && fin && inicio === fin ? { mismaHora: true } : null;
 }
 
 function nulo(valor: string | null | undefined): string | null {

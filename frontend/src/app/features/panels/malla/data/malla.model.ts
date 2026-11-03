@@ -95,13 +95,25 @@ export interface CentroMallaResumen {
   actualizadoEn: string;
 }
 
+/** Un cambio guardado en la malla de un centro. */
+export interface CambioMalla {
+  accion: 'CREAR' | 'GUARDAR' | 'ELIMINAR';
+  resumen: string;
+  creadoPor: number;
+  creadoEn: string;
+}
+
 // ---------------- Validación (reglas del servidor) ----------------
 
 export interface ParametroRegla {
   clave: string;
   etiqueta: string;
+  /** ENTERO, BOOLEANO o LISTA_HORAS. */
   tipo: string;
   valor: string;
+  /** Rango permitido de un ENTERO (null en los demás tipos). */
+  min: number | null;
+  max: number | null;
 }
 
 export interface HallazgoRegla {

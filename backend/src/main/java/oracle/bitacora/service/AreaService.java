@@ -57,12 +57,6 @@ public class AreaService {
                 .map(lista -> ApiResponse.ok("Areas listadas.", lista));
     }
 
-    public Mono<ApiResponse<AreaResponse>> obtenerPorId(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.obtenerPorId id=" + id, () -> transacciones.consultar(() ->
-                        ApiResponse.ok("Area encontrada.", AreaResponse.of(obtenerArea(id))))))
-                .subscribeOn(Schedulers.boundedElastic());
-    }
-
     public Mono<ApiResponse<AreaResponse>> crear(AreaCrearRequest peticion) {
         Long actor = ActorActual.id();
         return Mono.fromCallable(() -> Trazas.medir(log, "AreaService.crear area=" + peticion.area(), () -> transacciones.ejecutar(() -> {

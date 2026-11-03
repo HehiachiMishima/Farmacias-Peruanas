@@ -4,14 +4,12 @@ import jakarta.validation.Valid;
 import oracle.admin.request.CambiarEstadoRequest;
 import oracle.admin.request.PermisoActualizarRequest;
 import oracle.admin.request.PermisoCrearRequest;
-import oracle.admin.request.PermisoFiltroRequest;
 import oracle.common.response.ApiResponse;
 import oracle.admin.response.PermisoResponse;
 import oracle.admin.service.PermisoService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,18 +36,6 @@ public class PermisoController {
     @PreAuthorize("hasAuthority('VER_PERMISOS')")
     public Mono<ApiResponse<List<PermisoResponse>>> listar() {
         return permisoService.listar();
-    }
-
-    @GetMapping("/buscar")
-    @PreAuthorize("hasAuthority('VER_PERMISOS')")
-    public Mono<ApiResponse<List<PermisoResponse>>> buscar(@Valid @ModelAttribute PermisoFiltroRequest filtro) {
-        return permisoService.buscar(filtro);
-    }
-
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('VER_PERMISOS')")
-    public Mono<ApiResponse<PermisoResponse>> obtener(@PathVariable Long id) {
-        return permisoService.obtenerPorId(id);
     }
 
     @PostMapping

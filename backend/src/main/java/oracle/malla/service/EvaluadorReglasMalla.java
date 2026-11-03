@@ -12,7 +12,6 @@ import java.util.stream.Collectors;
 import oracle.malla.model.MallaDatos;
 import oracle.malla.model.MallaDatos.Capacidad;
 import oracle.malla.model.MallaDatos.Centro;
-import oracle.malla.model.MallaDatos.Dotacion;
 import oracle.malla.model.MallaDatos.Flujo;
 import oracle.malla.model.MallaDatos.Ola;
 import oracle.malla.model.MallaDatos.Turno;
@@ -32,6 +31,7 @@ import org.springframework.stereotype.Component;
 public class EvaluadorReglasMalla {
 
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm");
+    private static final List<String> ORDEN_PROCESOS = List.of("REC", "ALM", "REA", "OLA", "DES");
     private static final Map<String, String> NOMBRE_PROCESO = Map.of(
             "REC", "Recepción",
             "ALM", "Almacenamiento",
@@ -61,27 +61,45 @@ public class EvaluadorReglasMalla {
     // Olas
     // ------------------------------------------------------------------
 
+    /**
+     * El límite de cada ola sale de su posición dentro del cluster (la primera
+     * que se lanza usa el primer límite, la segunda el segundo...), no de su
+     * nombre. Las horas se miden desde el inicio del día operativo del centro
+     * (su primer turno), así una ola lanzada después de medianoche cuenta como
+     * más tarde y no como más temprano.
+     */
     private List<HallazgoMallaResponse> olaLanzamiento(Map<String, String> parametros, MallaDatos datos) {
         List<LocalTime> limites = listaHoras(parametros.get("limites"), List.of(LocalTime.of(7, 0), LocalTime.of(15, 0)));
         int tolerancia = entero(parametros.get("toleranciaMin"), 0);
         List<HallazgoMallaResponse> hallazgos = new ArrayList<>();
 
+        Map<String, List<Ola>> clusters = new LinkedHashMap<>();
         for (Ola ola : datos.olas()) {
-            Centro centro = centro(datos, ola.centroId());
-            if (ola.lanzamiento() == null) {
-                hallazgos.add(hallazgo(centro, entidadOla(ola),
-                        "La ola no tiene hora de lanzamiento.",
-                        "Lanzamiento ≤ " + hora(limite(limites, ola)),
-                        "Sin hora"));
-                continue;
-            }
-            LocalTime limite = limite(limites, ola);
-            int exceso = minutos(ola.lanzamiento()) - minutos(limite);
-            if (exceso > tolerancia) {
-                hallazgos.add(hallazgo(centro, entidadOla(ola),
-                        "El lanzamiento se pasa " + exceso + " min del límite de la ola.",
-                        "Lanzamiento ≤ " + hora(limite) + " (±" + tolerancia + " min)",
-                        "Lanzamiento " + hora(ola.lanzamiento())));
+            clusters.computeIfAbsent(ola.centroId() + "|" + ola.cluster(), clave -> new ArrayList<>()).add(ola);
+        }
+        for (List<Ola> grupo : clusters.values()) {
+            Centro centro = centro(datos, grupo.getFirst().centroId());
+            int inicioDia = inicioDia(datos, grupo.getFirst().centroId());
+            List<Ola> ordenadas = new ArrayList<>(grupo);
+            ordenadas.sort(Comparator.comparingInt(ola -> ola.lanzamiento() == null
+                    ? Integer.MAX_VALUE : relativo(inicioDia, ola.lanzamiento())));
+            for (int i = 0; i < ordenadas.size(); i++) {
+                Ola ola = ordenadas.get(i);
+                LocalTime limite = limites.get(Math.min(i, limites.size() - 1));
+                if (ola.lanzamiento() == null) {
+                    hallazgos.add(hallazgo(centro, entidadOla(ola),
+                            "La ola no tiene hora de lanzamiento.",
+                            "Lanzamiento ≤ " + hora(limite),
+                            "Sin hora"));
+                    continue;
+                }
+                int exceso = relativo(inicioDia, ola.lanzamiento()) - relativo(inicioDia, limite);
+                if (exceso > tolerancia) {
+                    hallazgos.add(hallazgo(centro, entidadOla(ola),
+                            "El lanzamiento se pasa " + duracion(exceso) + " del límite de la ola.",
+                            "Lanzamiento ≤ " + hora(limite) + " (±" + tolerancia + " min)",
+                            "Lanzamiento " + hora(ola.lanzamiento())));
+                }
             }
         }
         return hallazgos;
@@ -98,11 +116,14 @@ public class EvaluadorReglasMalla {
                         "Hitos incompletos"));
                 continue;
             }
+            // Cada hito va después del anterior (puede cruzar la medianoche una vez),
+            // así que un hito «antes» del previo solo encaja dando la vuelta al día:
+            // si el ciclo completo no cabe en 24 h, el orden está mal.
             int pedido = minutos(ola.pedido());
             int lanzamiento = avance(pedido, ola.lanzamiento());
             int cierre = avance(lanzamiento, ola.cierre());
             int despacho = avance(cierre, ola.despacho());
-            boolean ok = pedido <= lanzamiento && lanzamiento < cierre && cierre <= despacho;
+            boolean ok = lanzamiento < cierre && despacho - pedido < 1440;
             if (!ok) {
                 hallazgos.add(hallazgo(centro, entidadOla(ola),
                         "Los hitos de la ola no siguen el orden operativo.",
@@ -157,6 +178,10 @@ public class EvaluadorReglasMalla {
     // Turnos
     // ------------------------------------------------------------------
 
+    /**
+     * El día es un círculo: un hueco que cruza la medianoche (23:00–07:00) es
+     * uno solo. Se reporta si algún hueco supera la tolerancia.
+     */
     private List<HallazgoMallaResponse> turnoCobertura(Map<String, String> parametros, MallaDatos datos) {
         int gapMax = entero(parametros.get("minutosGapMax"), 0);
         List<HallazgoMallaResponse> hallazgos = new ArrayList<>();
@@ -172,49 +197,55 @@ public class EvaluadorReglasMalla {
                         "Sin turnos"));
                 continue;
             }
-
-            List<int[]> intervalos = new ArrayList<>();
+            boolean[] cubierto = new boolean[1440];
             for (Turno turno : turnos) {
                 int inicio = minutos(turno.inicio());
-                int fin = minutos(turno.fin());
-                if (inicio == fin) {
-                    intervalos.add(new int[] { 0, 1440 });
-                } else if (inicio < fin) {
-                    intervalos.add(new int[] { inicio, fin });
-                } else {
-                    intervalos.add(new int[] { inicio, 1440 });
-                    intervalos.add(new int[] { 0, fin });
+                int largo = duracion(turno.inicio(), turno.fin());
+                for (int m = 0; m < (largo == 0 ? 1440 : largo); m++) {
+                    cubierto[(inicio + m) % 1440] = true;
                 }
             }
-            intervalos.sort(Comparator.comparingInt(intervalo -> intervalo[0]));
-
-            int cubierto = 0;
-            int cierre = 0;
-            List<String> huecos = new ArrayList<>();
-            for (int[] intervalo : intervalos) {
-                if (intervalo[0] > cierre) {
-                    int gap = intervalo[0] - cierre;
-                    cubierto += gap;
-                    huecos.add(hora(cierre) + "–" + hora(intervalo[0]) + " (" + gap + " min)");
-                }
-                if (intervalo[1] > cierre) {
-                    cierre = intervalo[1];
-                }
-            }
-            if (cierre < 1440) {
-                int gap = 1440 - cierre;
-                cubierto += gap;
-                huecos.add(hora(cierre) + "–24:00 (" + gap + " min)");
-            }
-
-            if (cubierto > gapMax) {
+            List<int[]> huecos = huecos(cubierto);
+            int sinCubrir = huecos.stream().mapToInt(h -> h[1]).sum();
+            List<String> grandes = huecos.stream()
+                    .filter(h -> h[1] > gapMax)
+                    .map(h -> hora(h[0]) + "–" + hora(h[0] + h[1]) + " (" + duracion(h[1]) + ")")
+                    .toList();
+            if (!grandes.isEmpty()) {
                 hallazgos.add(hallazgo(centro, "Turnos",
-                        "La cobertura diaria tiene " + huecos.size() + " hueco(s).",
+                        "La cobertura diaria tiene " + grandes.size() + " hueco(s) sin turno.",
                         "Cobertura de 24 h (hueco máximo " + gapMax + " min)",
-                        "Cubre " + (24 - cubierto / 60.0) + " h · " + String.join(", ", huecos)));
+                        "Cubre " + duracion(1440 - sinCubrir) + " · " + String.join(", ", grandes)));
             }
         }
         return hallazgos;
+    }
+
+    /** Huecos [inicio, largo] de un día circular; un hueco que cruza la medianoche es uno solo. */
+    private static List<int[]> huecos(boolean[] cubierto) {
+        List<int[]> huecos = new ArrayList<>();
+        int arranque = -1;
+        for (int m = 0; m < 1440; m++) {
+            if (cubierto[m]) {
+                arranque = m;
+                break;
+            }
+        }
+        if (arranque < 0) {
+            huecos.add(new int[] {0, 1440});
+            return huecos;
+        }
+        int inicio = -1;
+        for (int i = 1; i <= 1440; i++) {
+            int m = (arranque + i) % 1440;
+            if (!cubierto[m] && inicio < 0) {
+                inicio = m;
+            } else if (cubierto[m] && inicio >= 0) {
+                huecos.add(new int[] {inicio, Math.floorMod(m - inicio, 1440)});
+                inicio = -1;
+            }
+        }
+        return huecos;
     }
 
     private List<HallazgoMallaResponse> turnoRefrigerio(Map<String, String> parametros, MallaDatos datos) {
@@ -266,7 +297,7 @@ public class EvaluadorReglasMalla {
             }
             boolean inicioCubierto = turnos.stream().anyMatch(t -> dentro(flujo.inicio(), t.inicio(), t.fin()));
             boolean finCubierto = flujo.fin() == null
-                    || turnos.stream().anyMatch(t -> dentro(flujo.fin(), t.inicio(), t.fin()));
+                    || turnos.stream().anyMatch(t -> terminaDentro(flujo.fin(), t.inicio(), t.fin()));
             if (!inicioCubierto || !finCubierto) {
                 String ventana = hora(flujo.inicio()) + (flujo.fin() == null ? "" : "–" + hora(flujo.fin()));
                 hallazgos.add(hallazgo(centro, entidadFlujo(flujo),
@@ -356,31 +387,28 @@ public class EvaluadorReglasMalla {
         return hallazgos;
     }
 
+    /** Cada proceso necesita personas en cada turno del centro, haya o no fila guardada. */
     private List<HallazgoMallaResponse> dotacionPlanificada(MallaDatos datos) {
-        Map<String, List<Dotacion>> grupos = new LinkedHashMap<>();
-        for (Dotacion dotacion : datos.dotaciones()) {
-            if (dotacion.personas() == null || dotacion.personas() <= 0) {
-                grupos.computeIfAbsent(dotacion.centroId() + "|" + dotacion.proceso(), clave -> new ArrayList<>())
-                        .add(dotacion);
-            }
-        }
         List<HallazgoMallaResponse> hallazgos = new ArrayList<>();
-        for (List<Dotacion> grupo : grupos.values()) {
-            Dotacion primera = grupo.getFirst();
-            Centro centro = centro(datos, primera.centroId());
+        for (Centro centro : datos.centros()) {
             List<Turno> turnos = datos.turnos().stream()
-                    .filter(t -> t.centroId().equals(primera.centroId()))
+                    .filter(t -> t.centroId().equals(centro.id()))
                     .toList();
-            String detalleTurnos = grupo.stream()
-                    .map(d -> turnos.stream()
-                            .filter(t -> t.id().equals(d.turnoId()))
-                            .map(Turno::codigo)
-                            .findFirst().orElse("—"))
-                    .collect(Collectors.joining(", "));
-            hallazgos.add(hallazgo(centro, nombreProceso(primera.proceso()),
-                    grupo.size() + " turno(s) sin dotación planificada: " + detalleTurnos + ".",
-                    "Personas asignadas en todos los turnos",
-                    grupo.size() + " sin definir"));
+            for (String proceso : ORDEN_PROCESOS) {
+                List<String> sinPersonas = turnos.stream()
+                        .filter(turno -> datos.dotaciones().stream()
+                                .noneMatch(d -> d.turnoId().equals(turno.id()) && d.proceso().equals(proceso)
+                                        && d.personas() != null && d.personas() > 0))
+                        .map(Turno::codigo)
+                        .toList();
+                if (!sinPersonas.isEmpty()) {
+                    hallazgos.add(hallazgo(centro, nombreProceso(proceso),
+                            sinPersonas.size() + " turno(s) sin dotación planificada: "
+                                    + String.join(", ", sinPersonas) + ".",
+                            "Personas asignadas en todos los turnos",
+                            sinPersonas.size() + " sin definir"));
+                }
+            }
         }
         return hallazgos;
     }
@@ -407,7 +435,7 @@ public class EvaluadorReglasMalla {
     private static HallazgoMallaResponse hallazgo(Centro centro, String entidad, String detalle,
             String esperado, String obtenido) {
         return new HallazgoMallaResponse(
-                centro == null ? "—" : centro.origenId(),
+                centro == null ? "—" : centro.codigo(),
                 centro == null ? "General" : centro.nombre(),
                 entidad,
                 detalle,
@@ -441,6 +469,20 @@ public class EvaluadorReglasMalla {
         return hora.getHour() * 60 + hora.getMinute();
     }
 
+    /** Inicio del día operativo del centro: su primer turno (07:00 si no tiene). */
+    private static int inicioDia(MallaDatos datos, Long centroId) {
+        return datos.turnos().stream()
+                .filter(t -> t.centroId().equals(centroId))
+                .findFirst()
+                .map(t -> minutos(t.inicio()))
+                .orElse(7 * 60);
+    }
+
+    /** Minutos desde el inicio del día operativo (da la vuelta a medianoche). */
+    private static int relativo(int inicioDia, LocalTime hora) {
+        return Math.floorMod(minutos(hora) - inicioDia, 1440);
+    }
+
     private static int avance(int anterior, LocalTime hora) {
         int valor = minutos(hora);
         if (valor < anterior) {
@@ -464,27 +506,15 @@ public class EvaluadorReglasMalla {
         return i < f ? h >= i && h < f : h >= i || h < f;
     }
 
-    private static LocalTime limite(List<LocalTime> limites, Ola ola) {
-        int indice = numeroOla(ola.nombre()) - 1;
-        if (indice < 0) {
-            indice = 0;
+    /** Un fin de paso cae en el turno si está en (inicio, fin]: puede terminar justo al cierre. */
+    private static boolean terminaDentro(LocalTime hora, LocalTime inicio, LocalTime fin) {
+        int h = minutos(hora);
+        int i = minutos(inicio);
+        int f = minutos(fin);
+        if (i == f) {
+            return true;
         }
-        return limites.get(Math.min(indice, limites.size() - 1));
-    }
-
-    private static int numeroOla(String nombre) {
-        if (nombre == null) {
-            return 1;
-        }
-        String digitos = nombre.replaceAll("\\D+", "");
-        if (digitos.isEmpty()) {
-            return 1;
-        }
-        try {
-            return Integer.parseInt(digitos);
-        } catch (NumberFormatException ex) {
-            return 1;
-        }
+        return i < f ? h > i && h <= f : h > i || h <= f;
     }
 
     private static String hora(LocalTime hora) {

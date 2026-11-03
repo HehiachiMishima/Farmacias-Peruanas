@@ -21,15 +21,15 @@
       type="search"
       class="ui-input"
       placeholder="Buscar por usuario, nombre o email…"
-      [value]="busqueda()"
-      (input)="buscar($any($event.target).value)"
+      [value]="listado.busqueda()"
+      (input)="listado.buscar($any($event.target).value)"
     />
   </div>
   <button
     type="button"
     class="ui-btn ui-btn--secondary ui-btn--sm"
     (click)="cargar()"
-    [disabled]="cargando()"
+    [disabled]="listado.cargando()"
   >
     <ui-icon name="refresh" [size]="16" />
     Actualizar
@@ -37,42 +37,42 @@
   <button
     type="button"
     class="ui-btn ui-btn--secondary ui-btn--sm"
-    [attr.aria-expanded]="filtrosAbierto()"
+    [attr.aria-expanded]="listado.filtrosAbierto()"
     aria-controls="usuarios-filtros"
-    (click)="alternarFiltros()"
+    (click)="listado.alternarFiltros()"
   >
     <ui-icon name="filtro" [size]="16" />
     Filtros
-    @if (filtrosActivos() > 0) {
-      <span class="filtros-badge">{{ filtrosActivos() }}</span>
+    @if (listado.filtrosActivos() > 0) {
+      <span class="filtros-badge">{{ listado.filtrosActivos() }}</span>
     }
   </button>
 </div>
 
 <ui-filtros-activos
-  [chips]="chips()"
-  (quitar)="quitarFiltro($event)"
-  (limpiar)="limpiarFiltros()"
+  [chips]="listado.chips()"
+  (quitar)="listado.quitarFiltro($event)"
+  (limpiar)="listado.limpiarFiltros()"
 />
 
 <ui-panel-filtros
   id="usuarios-filtros"
-  [abierto]="filtrosAbierto()"
-  [activos]="filtrosActivos()"
+  [abierto]="listado.filtrosAbierto()"
+  [activos]="listado.filtrosActivos()"
   titulo="Filtrar usuarios"
-  (cerrar)="filtrosAbierto.set(false)"
-  (limpiar)="limpiarFiltros()"
+  (cerrar)="listado.filtrosAbierto.set(false)"
+  (limpiar)="listado.limpiarFiltros()"
 >
   <section class="filtro-seccion">
     <h3 class="filtro-seccion__titulo"><ui-icon name="power" [size]="15" /> Estado</h3>
     <div class="ui-rango" role="group" aria-label="Estado">
-      @for (e of estados; track e.id) {
+      @for (e of listado.estados; track e.id) {
         <button
           type="button"
           class="ui-rango__btn"
-          [class.ui-rango__btn--on]="filtroEstado() === e.id"
-          [attr.aria-pressed]="filtroEstado() === e.id"
-          (click)="setEstado(e.id)"
+          [class.ui-rango__btn--on]="listado.filtroEstado() === e.id"
+          [attr.aria-pressed]="listado.filtroEstado() === e.id"
+          (click)="listado.setEstado(e.id)"
         >
           {{ e.etiqueta }}
         </button>
@@ -105,7 +105,7 @@
   </section>
   <section class="filtro-seccion">
     <h3 class="filtro-seccion__titulo"><ui-icon name="calendario" [size]="15" /> Periodo</h3>
-    <ui-rango-rapido [desde]="filtroDesde()" [hasta]="filtroHasta()" (rango)="setRango($event)" />
+    <ui-rango-rapido [desde]="listado.filtroDesde()" [hasta]="listado.filtroHasta()" (rango)="listado.setRango($event)" />
     <div class="filtro-seccion__fila">
       <div class="ui-field">
         <label class="ui-label" for="usuarios-filtro-desde">Creado desde</label>
@@ -113,9 +113,9 @@
           id="usuarios-filtro-desde"
           type="date"
           class="ui-input"
-          [max]="filtroHasta()"
-          [value]="filtroDesde()"
-          (change)="setFiltroDesde($event)"
+          [max]="listado.filtroHasta()"
+          [value]="listado.filtroDesde()"
+          (change)="listado.setFiltroDesde($event)"
         />
       </div>
       <div class="ui-field">
@@ -124,33 +124,33 @@
           id="usuarios-filtro-hasta"
           type="date"
           class="ui-input"
-          [min]="filtroDesde()"
-          [value]="filtroHasta()"
-          (change)="setFiltroHasta($event)"
+          [min]="listado.filtroDesde()"
+          [value]="listado.filtroHasta()"
+          (change)="listado.setFiltroHasta($event)"
         />
       </div>
     </div>
   </section>
 </ui-panel-filtros>
 
-<div class="table-card" [class.table-card--refrescando]="cargando() && filtrados().length > 0">
-  @if (cargando() && filtrados().length === 0) {
+<div class="table-card" [class.table-card--refrescando]="listado.cargando() && listado.filtrados().length > 0">
+  @if (listado.cargando() && listado.filtrados().length === 0) {
     <div class="loading">
       <span class="ui-spinner"></span>
       Cargando usuarios…
     </div>
-  } @else if (error()) {
-    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!">
+  } @else if (listado.error()) {
+    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="listado.error()!">
       <button type="button" class="ui-btn ui-btn--secondary ui-btn--sm" (click)="cargar()">
         <ui-icon name="refresh" [size]="16" /> Reintentar
       </button>
     </ui-empty>
-  } @else if (filtrados().length === 0) {
+  } @else if (listado.filtrados().length === 0) {
     <ui-empty
       icono="usuarios"
-      [titulo]="busqueda() || filtrosActivos() ? 'Sin resultados' : 'Aún no hay usuarios'"
+      [titulo]="listado.busqueda() || listado.filtrosActivos() ? 'Sin resultados' : 'Aún no hay usuarios'"
       [mensaje]="
-        busqueda() || filtrosActivos()
+        listado.busqueda() || listado.filtrosActivos()
           ? 'Ningún usuario coincide con la búsqueda o los filtros.'
           : 'Crea el primer usuario para empezar.'
       "
@@ -174,11 +174,12 @@
           </tr>
         </thead>
         <tbody>
-          @for (usuario of paginados(); track usuario.id) {
+          @for (fila of filas(); track fila.usuario.id) {
+            @let usuario = fila.usuario;
             <tr>
               <td>
                 <div class="ui-person">
-                  <span class="ui-avatar">{{ iniciales(usuario) }}</span>
+                  <span class="ui-avatar">{{ fila.iniciales }}</span>
                   <span class="ui-stack">
                     <span class="ui-table__primary"
                       >{{ usuario.nombre }} {{ usuario.apellido }}</span
@@ -200,11 +201,11 @@
                 }
               </td>
               <td>
-                @if (!tieneResumen(usuario.id)) {
+                @if (!fila.conResumen) {
                   <span class="u-muted">—</span>
-                } @else if (rolesDe(usuario.id).length) {
+                } @else if (fila.roles.length) {
                   <span class="tag-list">
-                    @for (rol of rolesDe(usuario.id); track rol) {
+                    @for (rol of fila.roles; track rol) {
                       <span class="ui-badge ui-badge--brand">{{ rol }}</span>
                     }
                   </span>
@@ -213,11 +214,11 @@
                 }
               </td>
               <td>
-                @if (!tieneResumen(usuario.id)) {
+                @if (!fila.conResumen) {
                   <span class="u-muted">—</span>
-                } @else if (permisosDe(usuario.id).length) {
-                  <span class="ui-badge ui-badge--info" [title]="permisosDe(usuario.id).join(', ')">
-                    {{ permisosDe(usuario.id).length }}
+                } @else if (fila.permisos.length) {
+                  <span class="ui-badge ui-badge--info" [title]="fila.permisosTitulo">
+                    {{ fila.permisos.length }}
                   </span>
                 } @else {
                   <span class="u-muted">Sin permisos</span>
@@ -239,7 +240,7 @@
                     type="button"
                     class="ui-icon-btn"
                     title="Roles"
-                    (click)="abrirRoles(usuario)"
+                    (click)="usuarioRoles.set(usuario)"
                   >
                     <ui-icon name="shieldCheck" [size]="18" />
                   </button>
@@ -248,7 +249,7 @@
                     type="button"
                     class="ui-icon-btn"
                     title="Permisos individuales"
-                    (click)="abrirPermisos(usuario)"
+                    (click)="usuarioPermisos.set(usuario)"
                   >
                     <ui-icon name="key" [size]="18" />
                   </button>
@@ -289,11 +290,11 @@
     </div>
 
     <ui-paginador
-      [pagina]="paginaActual()"
-      [total]="filtrados().length"
-      [porPagina]="porPagina()"
-      (paginaCambia)="pagina.set($event)"
-      (porPaginaCambia)="cambiarPorPagina($event)"
+      [pagina]="listado.paginaActual()"
+      [total]="listado.filtrados().length"
+      [porPagina]="listado.porPagina()"
+      (paginaCambia)="listado.pagina.set($event)"
+      (porPaginaCambia)="listado.cambiarPorPagina($event)"
     />
   }
 </div>
@@ -437,168 +438,6 @@
   </div>
 </ui-modal>
 
-<ui-modal
-  [abierto]="rolesAbierto()"
-  titulo="Roles del usuario"
-  [subtitulo]="usuarioRoles() ? '@' + usuarioRoles()!.usuario : ''"
-  (cerrar)="cerrarAsignaciones()"
->
-  <p class="modal-hint">
-    Activa los roles que quieras asignar a este usuario. Sus permisos se heredan de los roles
-    activados.
-  </p>
-  @if (cargandoRoles()) {
-    <div class="loading"><span class="ui-spinner"></span> Cargando roles…</div>
-  } @else if (catalogoRoles().length === 0) {
-    <ui-empty icono="roles" titulo="Sin roles" mensaje="No hay roles creados en el sistema." />
-  } @else {
-    <ul class="role-list">
-      @for (rol of catalogoRoles(); track rol.id) {
-        <li class="role-item">
-          <span class="role-item__icon"><ui-icon name="shieldCheck" [size]="18" /></span>
-          <span class="role-item__text">
-            <span class="role-item__name">
-              {{ rol.nombre }}
-              @if (!rol.activo) {
-                <span class="ui-badge ui-badge--neutral">Inactivo</span>
-              }
-            </span>
-            <span class="role-item__desc">{{ rol.descripcion || 'Sin descripción' }}</span>
-          </span>
-          <button
-            type="button"
-            class="switch"
-            [class.switch--on]="estaAsignado(rol.id)"
-            [disabled]="cambiandoRol() === rol.id"
-            (click)="alternarRol(rol)"
-            [attr.aria-pressed]="estaAsignado(rol.id)"
-          >
-            <span class="switch__thumb"></span>
-          </button>
-        </li>
-      }
-    </ul>
-  }
-  <div modal-footer class="modal-foot">
-    <button type="button" class="ui-btn ui-btn--primary" (click)="cerrarAsignaciones()">
-      Listo
-    </button>
-  </div>
-</ui-modal>
+<app-roles-usuario [usuario]="usuarioRoles()" (cerrar)="cerrarAsignaciones($event)" />
 
-<ui-modal
-  [abierto]="permisosAbierto()"
-  ancho="lg"
-  titulo="Permisos individuales"
-  [subtitulo]="
-    usuarioPermisos() ? '@' + usuarioPermisos()!.usuario + ' · herencia del rol + overrides' : ''
-  "
-  (cerrar)="cerrarAsignaciones()"
->
-  <p class="modal-hint">
-    <strong>Heredar</strong>: usa lo que conceden sus roles · <strong>Conceder</strong>: permite
-    este permiso aunque el rol no lo dé · <strong>Denegar</strong>: bloquea este permiso aunque el
-    rol lo dé.
-  </p>
-  @if (cargandoPermisos()) {
-    <div class="loading"><span class="ui-spinner"></span> Cargando permisos…</div>
-  } @else if (catalogoPermisos().length === 0) {
-    <ui-empty icono="permisos" titulo="Sin permisos" mensaje="No hay permisos en el catálogo." />
-  } @else {
-    <div class="perm-panel">
-      <div class="perm-toolbar">
-        <div class="ui-search perm-toolbar__grow">
-          <ui-icon name="search" [size]="18" />
-          <input
-            type="search"
-            class="ui-input"
-            placeholder="Buscar permiso…"
-            [value]="filtroPermisos()"
-            (input)="filtroPermisos.set($any($event.target).value)"
-          />
-        </div>
-      </div>
-
-      <div class="perm-summary">
-        <span class="ui-badge ui-badge--brand"
-          ><span class="ui-dot"></span> {{ totalEfectivos() }} efectivos</span
-        >
-        <span class="ui-badge ui-badge--success">+{{ totalConcedidos() }} concedidos</span>
-        <span class="ui-badge ui-badge--danger">−{{ totalDenegados() }} denegados</span>
-      </div>
-
-      @if (permisosFiltrados().length === 0) {
-        <ui-empty
-          icono="search"
-          titulo="Sin resultados"
-          mensaje="Ningún permiso coincide con la búsqueda."
-        />
-      } @else {
-        <ul class="perm-list">
-          @for (permiso of permisosFiltrados(); track permiso.id) {
-            <li class="perm-item" [class]="'perm-item--' + origenDe(permiso.id)">
-              <span class="perm-item__text">
-                <span class="perm-item__name">{{ permiso.nombre }}</span>
-                <span class="perm-item__desc">
-                  {{ permiso.descripcion || 'Sin descripción' }}
-                  @switch (origenDe(permiso.id)) {
-                    @case ('heredado') {
-                      · heredado del rol
-                    }
-                    @case ('concedido') {
-                      · concedido a este usuario
-                    }
-                    @case ('denegado') {
-                      · denegado a este usuario
-                    }
-                    @default {
-                      · sin acceso
-                    }
-                  }
-                  @if (!permiso.activo) {
-                    · permiso inactivo
-                  }
-                </span>
-              </span>
-
-              <div class="perm-seg" role="group" [attr.aria-label]="'Permiso ' + permiso.nombre">
-                <button
-                  type="button"
-                  class="perm-seg__btn perm-seg__btn--inherit"
-                  [class.perm-seg__btn--on]="origenDe(permiso.id) === 'heredado'"
-                  [disabled]="cambiandoPermiso() === permiso.id || !permiteOverride()"
-                  (click)="heredar(permiso)"
-                >
-                  Heredar
-                </button>
-                <button
-                  type="button"
-                  class="perm-seg__btn perm-seg__btn--grant"
-                  [class.perm-seg__btn--on]="origenDe(permiso.id) === 'concedido'"
-                  [disabled]="cambiandoPermiso() === permiso.id || !permiteOverride()"
-                  (click)="conceder(permiso)"
-                >
-                  Conceder
-                </button>
-                <button
-                  type="button"
-                  class="perm-seg__btn perm-seg__btn--deny"
-                  [class.perm-seg__btn--on]="origenDe(permiso.id) === 'denegado'"
-                  [disabled]="cambiandoPermiso() === permiso.id || !permiteOverride()"
-                  (click)="denegar(permiso)"
-                >
-                  Denegar
-                </button>
-              </div>
-            </li>
-          }
-        </ul>
-      }
-    </div>
-  }
-  <div modal-footer class="modal-foot">
-    <button type="button" class="ui-btn ui-btn--primary" (click)="cerrarAsignaciones()">
-      Listo
-    </button>
-  </div>
-</ui-modal>
+<app-permisos-usuario [usuario]="usuarioPermisos()" (cerrar)="cerrarAsignaciones($event)" />

@@ -459,6 +459,54 @@
         }
       </section>
 
+      @if (dotacion(); as dot) {
+        <article class="tarjeta">
+          <header class="tarjeta__cabecera">
+            <h2 class="tarjeta__titulo">
+              <ui-icon name="usuarios" [size]="16" /> Dotación planificada vs real
+            </h2>
+            <span class="tarjeta__sub"
+              >Planificada: suma de los turnos · Real{{
+                dot.semana ? ' (' + dot.semana + ')' : ''
+              }}: declarada en Configuración</span
+            >
+          </header>
+          <div class="ui-table-wrap">
+            <table class="ui-table dotacion">
+              <thead>
+                <tr>
+                  <th>Flujo</th>
+                  <th class="num">Planificada</th>
+                  <th class="num">Real</th>
+                  <th class="num">Diferencia</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (f of dot.filas; track f.etiqueta; let ultima = $last) {
+                  <tr [class.dotacion__total]="ultima">
+                    <td>
+                      <b>{{ f.etiqueta }}</b> <small>{{ f.procesos }}</small>
+                    </td>
+                    <td class="num">{{ formatearNumero(f.planificada) }}</td>
+                    <td class="num">{{ formatearNumero(f.real) }}</td>
+                    <td
+                      class="num"
+                      [class.dotacion__falta]="f.diferencia !== null && f.diferencia < 0"
+                    >
+                      {{
+                        f.diferencia === null
+                          ? '—'
+                          : (f.diferencia > 0 ? '+' : '') + formatearNumero(f.diferencia)
+                      }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </article>
+      }
+
       @if (linea(); as l) {
         <article class="tarjeta">
           <header class="tarjeta__cabecera">

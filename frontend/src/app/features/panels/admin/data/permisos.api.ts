@@ -1,11 +1,6 @@
 import { Service, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import {
-  Permiso,
-  PermisoActualizarRequest,
-  PermisoCrearRequest,
-  PermisoFiltro,
-} from './permiso.model';
+import { Permiso, PermisoActualizarRequest, PermisoCrearRequest } from './permiso.model';
 import { Rol } from './rol.model';
 import { Api } from '../../../../core/services/api';
 
@@ -15,14 +10,6 @@ export class PermisosApi {
 
   listar(): Observable<Permiso[]> {
     return this.api.get<Permiso[]>('/permisos');
-  }
-
-  buscar(filtro: PermisoFiltro): Observable<Permiso[]> {
-    return this.api.get<Permiso[]>('/permisos/buscar', { ...filtro });
-  }
-
-  obtener(id: number): Observable<Permiso> {
-    return this.api.get<Permiso>(`/permisos/${id}`);
   }
 
   crear(peticion: PermisoCrearRequest): Observable<Permiso> {

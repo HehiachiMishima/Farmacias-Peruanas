@@ -15,6 +15,7 @@ import { CONFIG } from '../../core/config/configuracion';
 import { PanelDef, modulosAccesibles } from '../../core/config/paneles';
 import { Auth } from '../../core/services/auth';
 import { TemaService } from '../../core/services/tema';
+import { iniciales } from '../../core/utils/texto.util';
 import { Icon } from '../../shared/ui/icon/icon';
 import { MiCuenta } from '../../shared/ui/mi-cuenta/mi-cuenta';
 
@@ -62,13 +63,7 @@ export class PanelShell {
     return this.panel().modulos.find((modulo) => modulo.ruta === ruta) ?? null;
   });
 
-  readonly iniciales = computed(() => {
-    const usuario = this.usuario();
-    if (!usuario) {
-      return '?';
-    }
-    return `${usuario.nombre?.[0] ?? ''}${usuario.apellido?.[0] ?? ''}`.toUpperCase() || '?';
-  });
+  readonly iniciales = computed(() => iniciales(this.usuario()));
 
   readonly hora = computed(() =>
     this.ahora().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' }),

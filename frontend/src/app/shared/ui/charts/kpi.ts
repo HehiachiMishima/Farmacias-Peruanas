@@ -2,6 +2,16 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { Icon } from '../icon/icon';
 import { porcentaje } from './formato';
 
+/** Datos de una tarjeta KPI tal como los arman los dashboards. */
+export interface TarjetaKpi {
+  etiqueta: string;
+  valor: string;
+  icono: string;
+  color: string;
+  detalle: string;
+  variacion: number | null;
+}
+
 /**
  * Tarjeta KPI: etiqueta, valor principal, detalle y (opcional) variación vs el
  * periodo anterior. `subirEsMalo` invierte el color de la variación: en

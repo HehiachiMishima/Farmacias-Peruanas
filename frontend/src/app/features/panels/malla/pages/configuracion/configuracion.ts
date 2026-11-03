@@ -13,18 +13,22 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { finalize, map } from 'rxjs';
+import { CONFIG } from '../../../../../core/config/configuracion';
 import { PERMISOS } from '../../../../../core/config/permisos';
-import { mensajeDeError } from '../../../../../core/errors/error.util';
+import { cuerpoDeError, mensajeDeError } from '../../../../../core/errors/error.util';
+import { DirectorioUsuarios } from '../../../../../core/services/directorio-usuarios';
 import { Notificaciones } from '../../../../../core/services/notificaciones';
 import { SesionStore } from '../../../../../core/services/sesion';
 import { descargarArchivo } from '../../../../../core/utils/archivo.util';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
+import { Hora24 } from '../../../../../shared/directives/hora-24.directive';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import { Modal } from '../../../../../shared/ui/modal/modal';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 import { MallaApi } from '../../data/malla.api';
 import {
+  CambioMalla,
   CentroMalla,
   CentroMallaDatos,
   CentroMallaResumen,
@@ -44,7 +48,17 @@ import { FormularioMalla } from './formulario-malla';
 @Component({
   selector: 'app-malla-configuracion',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, DatePipe, HasPermiso, EmptyState, Icon, Modal, SelectBuscable],
+  imports: [
+    ReactiveFormsModule,
+    DatePipe,
+    HasPermiso,
+    Hora24,
+    EmptyState,
+    Icon,
+    Modal,
+    SelectBuscable,
+  ],
+  host: { '(window:beforeunload)': 'avisarAlCerrar($event)' },
   templateUrl: './configuracion.html',
   styleUrl: './configuracion.scss',
 })
@@ -55,6 +69,7 @@ export class MallaConfiguracion {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly directorio = inject(DirectorioUsuarios);
   private readonly inputArchivo = viewChild<ElementRef<HTMLInputElement>>('inputArchivo');
 
   readonly permisos = PERMISOS;
@@ -63,6 +78,15 @@ export class MallaConfiguracion {
   readonly puedeModificar = computed(() =>
     this.sesion.permisos().includes(PERMISOS.MODIFICAR_MALLA),
   );
+  /** Activar reglas o cambiar umbrales cambia qué se considera correcto: permiso propio. */
+  readonly puedeConfigurarReglas = computed(() =>
+    this.sesion.permisos().includes(PERMISOS.CONFIGURAR_REGLAS_MALLA),
+  );
+  readonly nombreAccion: Record<string, string> = {
+    CREAR: 'Creado',
+    GUARDAR: 'Guardado',
+    ELIMINAR: 'Eliminado',
+  };
 
   readonly formulario = new FormularioMalla();
   readonly form = this.formulario.form;
@@ -82,6 +106,7 @@ export class MallaConfiguracion {
 
   readonly evaluacion = signal<EvaluacionMalla | null>(null);
   readonly reglaAbierta = signal<number | null>(null);
+  readonly historial = signal<CambioMalla[]>([]);
 
   /** Cambios sin guardar (o datos importados que aún no se guardan). */
   readonly pendiente = toSignal(this.form.events.pipe(map(() => this.form.dirty)), {
@@ -89,6 +114,18 @@ export class MallaConfiguracion {
   });
   /** Se recalcula con cada cambio del formulario (los pasos se filtran por proceso). */
   private readonly cambios = toSignal(this.form.valueChanges, { initialValue: null });
+
+  /** Inbound + Outbound + Despacho deberían dar el total declarado. */
+  readonly descuadreDotacionReal = computed(() => {
+    this.cambios();
+    const real = this.form.controls.dotacionReal.getRawValue();
+    const partes = [real.inbound, real.outbound, real.despacho];
+    if (real.total === null || partes.some((valor) => valor === null)) {
+      return null;
+    }
+    const suma = partes.reduce<number>((total, valor) => total + (valor ?? 0), 0);
+    return suma === real.total ? null : { suma, total: real.total };
+  });
 
   readonly opcionesCentro = computed(() =>
     this.centros().map((c) => ({ id: c.id, etiqueta: `${c.codigo} · ${c.nombre}` })),
@@ -115,7 +152,33 @@ export class MallaConfiguracion {
 
   constructor() {
     this.cargarCentros(Number(this.route.snapshot.queryParamMap.get('centro')) || null);
-    this.cargarEvaluacion();
+    this.directorio.cargar();
+  }
+
+  /**
+   * Al salir con cambios sin guardar se pide confirmación. Cerrar sesión o una
+   * sesión vencida (destino login) nunca se bloquea.
+   */
+  puedeSalir(destino: string): boolean {
+    if (
+      !this.form.dirty ||
+      this.sesion.sesion() === null ||
+      destino.startsWith(CONFIG.rutas.login)
+    ) {
+      return true;
+    }
+    return window.confirm('Hay cambios sin guardar en la malla. ¿Salir sin guardarlos?');
+  }
+
+  /** Cerrar o recargar la pestaña con cambios pendientes también avisa. */
+  avisarAlCerrar(evento: BeforeUnloadEvent): void {
+    if (this.form.dirty) {
+      evento.preventDefault();
+    }
+  }
+
+  quien(id: number): string {
+    return this.directorio.etiqueta(id);
   }
 
   private cargarCentros(preferido: number | null = null): void {
@@ -176,6 +239,8 @@ export class MallaConfiguracion {
     this.actualizadoEn.set(centro.actualizadoEn);
     this.importado.set(null);
     this.habilitar();
+    this.cargarEvaluacion();
+    this.cargarHistorial();
   }
 
   nuevo(): void {
@@ -185,6 +250,8 @@ export class MallaConfiguracion {
     this.seleccionado.set(null);
     this.actualizadoEn.set(null);
     this.importado.set(null);
+    this.evaluacion.set(null);
+    this.historial.set([]);
     this.formulario.cargar(mallaVacia());
     this.habilitar();
   }
@@ -233,7 +300,7 @@ export class MallaConfiguracion {
     const id = this.seleccionado();
     const datos = this.formulario.datos();
     this.guardando.set(true);
-    (id === null ? this.api.crear(datos) : this.api.guardar(id, datos))
+    (id === null ? this.api.crear(datos) : this.api.guardar(id, datos, this.actualizadoEn()))
       .pipe(finalize(() => this.guardando.set(false)))
       .subscribe({
         next: (centro) => {
@@ -241,7 +308,13 @@ export class MallaConfiguracion {
           this.seleccionado.set(centro.id);
           this.aplicar(centro);
           this.cargarCentros();
-          this.cargarEvaluacion();
+        },
+        // El interceptor ya avisó con el mensaje; aquí se marcan los campos que señaló.
+        error: (err: unknown) => {
+          const campos = cuerpoDeError(err)?.campos;
+          if (campos) {
+            this.formulario.marcarErroresServidor(campos);
+          }
         },
       });
   }
@@ -273,7 +346,8 @@ export class MallaConfiguracion {
             (c) => c.codigo.toUpperCase() === datos.codigo?.trim().toUpperCase(),
           );
           this.seleccionado.set(existente?.id ?? null);
-          this.actualizadoEn.set(null);
+          // Versión del centro que se reemplaza: si alguien lo guarda antes, el servidor avisa.
+          this.actualizadoEn.set(existente?.actualizadoEn ?? null);
           this.formulario.cargar(datos);
           this.habilitar();
           this.form.markAsDirty();
@@ -315,18 +389,48 @@ export class MallaConfiguracion {
         this.form.markAsPristine();
         this.seleccionado.set(null);
         this.cargarCentros();
-        this.cargarEvaluacion();
       },
     });
   }
 
   // ---------------- Validación (reglas del servidor) ----------------
 
+  /** Reglas evaluadas sobre la malla guardada del centro elegido. */
   cargarEvaluacion(): void {
+    const id = this.seleccionado();
+    if (id === null) {
+      this.evaluacion.set(null);
+      return;
+    }
     this.api
-      .evaluacion()
+      .evaluacion(id)
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({ next: (evaluacion) => this.evaluacion.set(evaluacion), error: () => {} });
+      .subscribe({
+        next: (evaluacion) => {
+          if (id === this.seleccionado()) {
+            this.evaluacion.set(evaluacion);
+          }
+        },
+        error: () => {},
+      });
+  }
+
+  private cargarHistorial(): void {
+    const id = this.seleccionado();
+    if (id === null) {
+      return;
+    }
+    this.api
+      .cambios(id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (cambios) => {
+          if (id === this.seleccionado()) {
+            this.historial.set(cambios);
+          }
+        },
+        error: () => this.historial.set([]),
+      });
   }
 
   alternarRegla(regla: ReglaEvaluada): void {
@@ -337,8 +441,7 @@ export class MallaConfiguracion {
     this.api.actualizarRegla(regla.id, { activa }).subscribe(() => this.cargarEvaluacion());
   }
 
-  cambiarParametro(regla: ReglaEvaluada, clave: string, evento: Event): void {
-    const valor = (evento.target as HTMLInputElement).value;
+  cambiarParametro(regla: ReglaEvaluada, clave: string, valor: string): void {
     this.api
       .actualizarRegla(regla.id, { parametros: { [clave]: valor } })
       .subscribe({ next: () => this.cargarEvaluacion(), error: () => this.cargarEvaluacion() });

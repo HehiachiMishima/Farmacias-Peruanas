@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { mensajeDeError } from '../../../core/errors/error.util';
 import { Auth } from '../../../core/services/auth';
 import { Notificaciones } from '../../../core/services/notificaciones';
+import { iniciales } from '../../../core/utils/texto.util';
 import { Icon } from '../icon/icon';
 import { Modal } from '../modal/modal';
 
@@ -28,13 +30,7 @@ export class MiCuenta {
 
   readonly usuario = this.auth.usuario;
 
-  readonly iniciales = computed(() => {
-    const u = this.usuario();
-    if (!u) {
-      return '?';
-    }
-    return `${u.nombre?.[0] ?? ''}${u.apellido?.[0] ?? ''}`.toUpperCase() || '?';
-  });
+  readonly iniciales = computed(() => iniciales(this.usuario()));
 
   readonly cambiando = signal(false);
   readonly errorContrasena = signal<string | null>(null);
@@ -53,9 +49,14 @@ export class MiCuenta {
     return control.touched && control.invalid;
   }
 
+  /** Valores del formulario como señal: un `computed` no ve los cambios de un FormGroup. */
+  private readonly valores = toSignal(this.formulario.valueChanges, {
+    initialValue: this.formulario.getRawValue(),
+  });
+
   /** La confirmación no coincide con la nueva contraseña. */
   readonly confirmacionNoCoincide = computed(() => {
-    const { contrasenaNueva, contrasenaConfirmar } = this.formulario.getRawValue();
+    const { contrasenaNueva = '', contrasenaConfirmar = '' } = this.valores();
     return contrasenaConfirmar.length > 0 && contrasenaNueva !== contrasenaConfirmar;
   });
 

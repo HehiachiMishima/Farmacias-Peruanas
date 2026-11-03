@@ -1,13 +1,12 @@
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { finalize } from 'rxjs';
 import { PERMISOS } from '../../../../../../core/config/permisos';
-import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { DirectorioUsuarios } from '../../../../../../core/services/directorio-usuarios';
 import { Notificaciones } from '../../../../../../core/services/notificaciones';
 import { EdicionCrud } from '../../../../../../core/utils/edicion-crud';
 import { ListadoLocal } from '../../../../../../core/utils/listado-local';
+import { OpcionesDependientes } from '../../../../../../core/utils/opciones-dependientes';
 import { ColumnasRedimensionables } from '../../../../../../shared/directives/columnas-redimensionables.directive';
 import { HasPermiso } from '../../../../../../shared/directives/has-permiso.directive';
 import { ActorLabelPipe } from '../../../../../../shared/pipes/actor-label.pipe';
@@ -72,8 +71,13 @@ export class Areas {
 
   readonly hijosAbierto = signal(false);
   readonly areaHijos = signal<Area | null>(null);
-  readonly hijosLista = signal<Responsable[]>([]);
-  readonly cargandoHijos = signal(false);
+  /** Cada apertura cancela la carga anterior: nunca se ven los hijos de otro elemento. */
+  private readonly responsables = new OpcionesDependientes<Responsable>(
+    (id) => this.areasApi.responsablesDe(id),
+    'No se pudieron cargar los responsables',
+  );
+  readonly hijosLista = this.responsables.opciones;
+  readonly cargandoHijos = this.responsables.cargando;
 
   private readonly edicionHijo = new EdicionCrud<Responsable>();
   readonly hijoFormAbierto = this.edicionHijo.formAbierto;
@@ -174,18 +178,9 @@ export class Areas {
 
   private cargarHijos(): void {
     const area = this.areaHijos();
-    if (!area) {
-      return;
+    if (area) {
+      this.responsables.elegir(area.id);
     }
-    this.cargandoHijos.set(true);
-    this.areasApi
-      .responsablesDe(area.id)
-      .pipe(finalize(() => this.cargandoHijos.set(false)))
-      .subscribe({
-        next: (lista) => this.hijosLista.set(lista),
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudieron cargar los responsables', mensajeDeError(err)),
-      });
   }
 
   abrirHijoCrear(): void {

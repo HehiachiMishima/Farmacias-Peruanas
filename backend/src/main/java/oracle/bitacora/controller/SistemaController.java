@@ -39,12 +39,6 @@ public class SistemaController {
         return sistemaService.listar();
     }
 
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('VER_CONTROL')")
-    public Mono<ApiResponse<SistemaResponse>> obtener(@PathVariable Long id) {
-        return sistemaService.obtenerPorId(id);
-    }
-
     @PostMapping
     @PreAuthorize("hasAuthority('CREAR_CONTROL')")
     public Mono<ApiResponse<SistemaResponse>> crear(@Valid @RequestBody SistemaCrearRequest peticion) {

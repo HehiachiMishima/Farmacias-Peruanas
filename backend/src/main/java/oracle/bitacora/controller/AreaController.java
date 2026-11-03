@@ -39,12 +39,6 @@ public class AreaController {
         return areaService.listar();
     }
 
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('VER_CONTROL')")
-    public Mono<ApiResponse<AreaResponse>> obtener(@PathVariable Long id) {
-        return areaService.obtenerPorId(id);
-    }
-
     @PostMapping
     @PreAuthorize("hasAuthority('CREAR_CONTROL')")
     public Mono<ApiResponse<AreaResponse>> crear(@Valid @RequestBody AreaCrearRequest peticion) {

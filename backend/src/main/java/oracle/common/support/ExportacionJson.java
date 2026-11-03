@@ -2,13 +2,10 @@ package oracle.common.support;
 
 import java.io.OutputStream;
 import java.time.Instant;
+import java.util.List;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import tools.jackson.core.JsonGenerator;
 import tools.jackson.databind.ObjectMapper;
@@ -49,32 +46,46 @@ public final class ExportacionJson {
     }
 
     /**
-     * Export completo de un filtro como cuerpo en flujo: lee lotes ordenados de
+     * Lector de lotes por cursor (keyset): devuelve hasta {@code tamano} filas en
+     * un orden estable, todas posteriores a {@code ultima} en ese orden
+     * ({@code null} = primer lote).
+     */
+    @FunctionalInterface
+    public interface LectorLotes<E> {
+        List<E> leer(E ultima, int tamano);
+    }
+
+    /**
+     * Export completo de un filtro como cuerpo en flujo: lee lotes de
      * {@value #TAMANO_LOTE} filas con {@code lector} y escribe cada fila ya
      * convertida, sin cargar el total en memoria.
+     *
+     * Los lotes se piden por cursor (la ultima fila escrita) y no por OFFSET:
+     * cada lote cuesta lo mismo aunque el export tenga cientos de miles de
+     * filas, no hay COUNT por lote y una insercion concurrente no duplica ni
+     * salta filas ya exportadas.
      *
      * El {@code conversor} se obtiene al empezar a escribir (p. ej. con los
      * nombres de catalogo vigentes en ese momento). Si el export falla a mitad
      * (cliente que corta, BD) la respuesta ya esta en curso y no puede
      * convertirse en ApiError, asi que solo se registra en {@code log}.
      */
-    public static <E> StreamingResponseBody enLotes(ObjectMapper json, String mensaje, Sort orden,
-            Function<Pageable, Page<E>> lector, Supplier<Function<E, ?>> conversor,
-            Logger log, String descripcion) {
+    public static <E> StreamingResponseBody enLotes(ObjectMapper json, String mensaje,
+            LectorLotes<E> lector, Supplier<Function<E, ?>> conversor, Logger log, String descripcion) {
         return salida -> {
             try {
                 escribir(json, salida, mensaje, gen -> {
                     Function<E, ?> convertir = conversor.get();
-                    int pagina = 0;
+                    E ultima = null;
                     while (true) {
-                        Page<E> lote = lector.apply(PageRequest.of(pagina, TAMANO_LOTE, orden));
-                        for (E fila : lote.getContent()) {
+                        List<E> lote = lector.leer(ultima, TAMANO_LOTE);
+                        for (E fila : lote) {
                             json.writeValue(gen, convertir.apply(fila));
                         }
-                        if (lote.getContent().size() < TAMANO_LOTE) {
+                        if (lote.size() < TAMANO_LOTE) {
                             break;
                         }
-                        pagina++;
+                        ultima = lote.get(lote.size() - 1);
                     }
                 });
             } catch (Exception e) {

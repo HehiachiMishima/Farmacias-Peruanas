@@ -64,27 +64,3 @@ export interface IncidenciaInboundFiltros {
   hasta?: string;
   texto?: string;
 }
-
-export interface GrupoEstadisticaInbound {
-  etiqueta: string;
-  count: number;
-}
-
-export interface EstadisticaInbound {
-  total: number;
-  totalUnidades: number;
-  proveedores: GrupoEstadisticaInbound[];
-  tipos: GrupoEstadisticaInbound[];
-}
-
-export interface MesIncidenciaProveedor {
-  mes: string;
-  incidencias: number;
-}
-
-export interface ProveedorMensualEstadistica {
-  idProveedor: number;
-  proveedor: string;
-  total: number;
-  meses: MesIncidenciaProveedor[];
-}

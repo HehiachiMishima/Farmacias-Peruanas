@@ -53,7 +53,7 @@ public class CatalogoBitacora extends CatalogoCacheado<CatalogoBitacora.Snapshot
                 responsableRepo.findAll().stream()
                         .collect(Collectors.toUnmodifiableMap(DataResponsable::getId,
                                 r -> r.getResponsable() != null ? r.getResponsable() : "", (a, b) -> a))),
-                transacciones, cacheRespuestas);
+                transacciones, cacheRespuestas, IncidenciaService.ESPACIO_CACHE);
     }
 
     public Map<Long, String> centros() { return snapshot().centros(); }

@@ -5,5 +5,8 @@ public record ParametroMallaResponse(
         String clave,
         String etiqueta,
         String tipo,
-        String valor) {
+        String valor,
+        /** Rango permitido de los ENTERO; null en los demás tipos. */
+        Integer min,
+        Integer max) {
 }

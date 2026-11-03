@@ -2,7 +2,6 @@ import { Service, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { AnaliticaBitacora } from './analitica.model';
 import {
-  EstadisticaIncidencia,
   Incidencia,
   IncidenciaActualizarRequest,
   IncidenciaCrearRequest,
@@ -25,13 +24,6 @@ export class IncidenciasApi {
 
   exportar(filtros: IncidenciaFiltros = {}): Observable<Incidencia[]> {
     return this.api.get<Incidencia[]>('/incidencias/exportar', filtros as Record<string, unknown>);
-  }
-
-  estadisticas(filtros: IncidenciaFiltros = {}): Observable<EstadisticaIncidencia> {
-    return this.api.get<EstadisticaIncidencia>(
-      '/incidencias/estadisticas',
-      filtros as Record<string, unknown>,
-    );
   }
 
   /** Analítica completa del dashboard (KPIs, rankings y cruces). */

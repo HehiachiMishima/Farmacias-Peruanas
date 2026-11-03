@@ -18,14 +18,6 @@ export interface UsuarioActualizarRequest {
   activo?: boolean;
 }
 
-export interface UsuarioFiltro {
-  usuario?: string;
-  nombre?: string;
-  apellido?: string;
-  email?: string;
-  activo?: boolean;
-}
-
 /** Roles y permisos efectivos de un usuario (GET /usuarios/resumen). */
 export interface UsuarioResumen {
   usuarioId: number;

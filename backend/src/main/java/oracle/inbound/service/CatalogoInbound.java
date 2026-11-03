@@ -28,7 +28,7 @@ public class CatalogoInbound extends CatalogoCacheado<CatalogoInbound.Snapshot> 
                 tipoRepo.findAll().stream()
                         .collect(Collectors.toUnmodifiableMap(DataIncidenciaInbound::getId,
                                 DataIncidenciaInbound::getIncidenciaInbound, (a, b) -> a))),
-                transacciones, cacheRespuestas);
+                transacciones, cacheRespuestas, IncidenciaInboundService.ESPACIO_CACHE);
     }
 
     public Map<Long, String> proveedores() { return snapshot().proveedores(); }

@@ -1,24 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { valorTexto } from '../../../../../core/utils/evento.util';
-import { escaparHtml } from '../../../../../core/utils/texto.util';
 import { AnaliticaInbound } from '../../data/analitica.model';
 import { IncidenciaInboundFiltros } from '../../data/inbound.model';
 import { InboundCatalogos } from '../../state/inbound-catalogos';
 import { InboundIncidenciasApi } from '../../data/inbound-incidencias.api';
 import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
-import {
-  SERIES,
-  compacto,
-  entero,
-  porcentaje,
-  variacion,
-} from '../../../../../shared/ui/charts/formato';
 import { CeldaCalor, Heatmap } from '../../../../../shared/ui/charts/heatmap';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
-import { LineChart, SerieLinea } from '../../../../../shared/ui/charts/line-chart';
-import { ItemRanking, RankingTiles } from '../../../../../shared/ui/charts/ranking-tiles';
-import { GrupoApilado, StackedBars } from '../../../../../shared/ui/charts/stacked-bars';
-import { ItemTreemap, Treemap } from '../../../../../shared/ui/charts/treemap';
+import { LineChart } from '../../../../../shared/ui/charts/line-chart';
+import { RankingTiles } from '../../../../../shared/ui/charts/ranking-tiles';
+import { StackedBars, agruparApiladas } from '../../../../../shared/ui/charts/stacked-bars';
+import { Treemap } from '../../../../../shared/ui/charts/treemap';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import {
@@ -30,6 +22,17 @@ import { FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-a
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
+import {
+  concentracionTop5,
+  evolucionMensual,
+  hallazgosInbound,
+  mapaProveedores,
+  rankingProveedores,
+  rankingTipos,
+  serieTendencia,
+  skusConTexto,
+  tarjetasInbound,
+} from './dashboard.logica';
 
 /**
  * Dashboard Inbound: control de proveedores.
@@ -98,194 +101,46 @@ export class InboundDashboard {
   readonly kpis = computed(() => this.datos()?.kpis ?? null);
   readonly hayDatos = computed(() => (this.kpis()?.total ?? 0) > 0);
 
-  readonly concentracionTop5 = computed(() => {
-    const lista = this.datos()?.proveedores ?? [];
-    const total = this.kpis()?.total ?? 0;
-    return total ? lista.slice(0, 5).reduce((t, p) => t + p.total, 0) / total : 0;
-  });
+  readonly concentracionTop5 = computed(() =>
+    concentracionTop5(this.datos()?.proveedores ?? [], this.kpis()?.total ?? 0),
+  );
 
-  readonly tarjetas = computed(() => {
-    const k = this.kpis();
-    return [
-      {
-        etiqueta: 'Incidencias',
-        valor: k ? entero(k.total) : '—',
-        icono: 'incidencias',
-        color: 'var(--brand)',
-        detalle: 'Registradas en el periodo',
-        variacion: k ? variacion(k.total, k.totalPeriodoAnterior) : null,
-      },
-      {
-        etiqueta: 'Unidades afectadas',
-        valor: k ? compacto(k.unidades) : '—',
-        icono: 'paquete',
-        color: 'var(--warning)',
-        detalle: k && k.total ? `${entero(Math.round(k.unidades / k.total))} u por incidencia` : '',
-        variacion: k ? variacion(k.unidades, k.unidadesPeriodoAnterior) : null,
-      },
-      {
-        etiqueta: 'Proveedores con incidencias',
-        valor: k ? entero(k.proveedores) : '—',
-        icono: 'truck',
-        color: 'var(--accent)',
-        detalle: k ? `${entero(k.tipos)} tipos distintos` : '',
-        variacion: null,
-      },
-      {
-        etiqueta: 'Concentración top 5',
-        valor: k ? porcentaje(this.concentracionTop5()) : '—',
-        icono: 'tendencia',
-        color: 'var(--violet)',
-        detalle: 'De las incidencias en 5 proveedores',
-        variacion: null,
-      },
-      {
-        etiqueta: 'Órdenes de compra',
-        valor: k ? entero(k.ordenesCompra) : '—',
-        icono: 'layers',
-        color: 'var(--cyan)',
-        detalle: 'OC distintas con incidencia',
-        variacion: null,
-      },
-      {
-        etiqueta: 'SKUs afectados',
-        valor: k ? entero(k.skus) : '—',
-        icono: 'key',
-        color: 'var(--success)',
-        detalle: 'Productos distintos',
-        variacion: null,
-      },
-    ];
-  });
+  readonly tarjetas = computed(() => tarjetasInbound(this.kpis(), this.concentracionTop5()));
 
-  // ---------------- Hallazgos (texto) ----------------
-  readonly hallazgos = computed(() => {
-    const d = this.datos();
-    if (!d || d.kpis.total === 0) {
-      return [];
-    }
-    const total = d.kpis.total;
-    const hallazgos: { icono: string; color: string; kicker: string; html: string }[] = [];
-    const lider = d.proveedores[0];
-    if (lider) {
-      hallazgos.push({
-        icono: 'alertTriangle',
-        color: 'var(--brand)',
-        kicker: 'Proveedor crítico',
-        html: `<strong>${escaparHtml(lider.proveedor)}</strong> concentra el <strong>${porcentaje(lider.total / total)}</strong> de las incidencias; su problema más frecuente es <strong>${escaparHtml(lider.tipoDominante)}</strong> (${porcentaje(lider.total ? lider.totalTipoDominante / lider.total : 0)} de sus casos).`,
-      });
-    }
-    const tipo = d.tipos[0];
-    if (tipo) {
-      hallazgos.push({
-        icono: 'incidencias',
-        color: 'var(--warning)',
-        kicker: 'Incidencia más repetida',
-        html: `<strong>${escaparHtml(tipo.tipo)}</strong> suma <strong>${entero(tipo.total)}</strong> casos (${porcentaje(tipo.total / total)}) y aparece en <strong>${entero(tipo.proveedores)}</strong> proveedores.`,
-      });
-    }
-    const sku = d.skus[0];
-    if (sku && sku.total > 1) {
-      hallazgos.push({
-        icono: 'paquete',
-        color: 'var(--accent)',
-        kicker: 'SKU reincidente',
-        html: `El SKU <strong>${escaparHtml(sku.sku)}</strong> tuvo <strong>${entero(sku.total)}</strong> incidencias (${entero(sku.unidades)} u) con <strong>${entero(sku.proveedores)}</strong> proveedor(es).`,
-      });
-    }
-    return hallazgos;
-  });
+  readonly hallazgos = computed(() => hallazgosInbound(this.datos()));
 
   // ---------------- Gráficos ----------------
-  /** Proveedores por volumen (treemap): área = incidencias. */
-  readonly mapaProveedores = computed<ItemTreemap[]>(() =>
-    (this.datos()?.proveedores ?? []).map((p) => ({
-      etiqueta: p.proveedor,
-      valor: p.total,
-      detalle: `${entero(p.unidades)} u · principal: ${p.tipoDominante}`,
-    })),
-  );
+  readonly mapaProveedores = computed(() => mapaProveedores(this.datos()?.proveedores ?? []));
 
-  /** Tipos más repetidos, con cuántos proveedores los presentan. */
-  readonly rankingTipos = computed<ItemRanking[]>(() =>
-    (this.datos()?.tipos ?? []).map((t) => ({
-      etiqueta: t.tipo,
-      valor: t.total,
-      chip: `${entero(t.proveedores)} prov.`,
-      detalle: `${compacto(t.unidades)} unidades`,
-    })),
-  );
+  readonly rankingTipos = computed(() => rankingTipos(this.datos()?.tipos ?? []));
 
   readonly matriz = computed<CeldaCalor[]>(() => this.datos()?.proveedorTipo ?? []);
 
   /** Composición por tipo de los proveedores con más incidencias. */
-  readonly apiladas = computed<GrupoApilado[]>(() => {
-    const grupos = new Map<string, { nombre: string; valor: number }[]>();
-    for (const c of this.datos()?.proveedorTipo ?? []) {
-      const lista = grupos.get(c.fila) ?? [];
-      lista.push({ nombre: c.columna, valor: c.valor });
-      grupos.set(c.fila, lista);
-    }
-    return [...grupos.entries()].map(([etiqueta, segmentos]) => ({ etiqueta, segmentos }));
-  });
+  readonly apiladas = computed(() =>
+    agruparApiladas(
+      this.datos()?.proveedorTipo ?? [],
+      (c) => c.fila,
+      (c) => ({ nombre: c.columna, valor: c.valor }),
+    ),
+  );
 
-  readonly tendencia = computed(() => {
-    const serie = this.datos()?.tendencia ?? [];
-    return {
-      etiquetas: serie.map((p) => p.periodo),
-      series: [
-        { nombre: 'Incidencias', color: 'var(--brand)', valores: serie.map((p) => p.valor) },
-      ] as SerieLinea[],
-    };
-  });
+  readonly tendencia = computed(() =>
+    serieTendencia(this.datos()?.tendencia ?? [], 'Incidencias', 'var(--brand)', 'valor'),
+  );
 
-  readonly tendenciaUnidades = computed(() => {
-    const serie = this.datos()?.tendencia ?? [];
-    return {
-      etiquetas: serie.map((p) => p.periodo),
-      series: [
-        { nombre: 'Unidades', color: 'var(--warning)', valores: serie.map((p) => p.secundario) },
-      ] as SerieLinea[],
-    };
-  });
+  readonly tendenciaUnidades = computed(() =>
+    serieTendencia(this.datos()?.tendencia ?? [], 'Unidades', 'var(--warning)', 'secundario'),
+  );
 
   /** Evolución mensual de los 5 proveedores críticos (una línea por proveedor). */
-  readonly mensual = computed(() => {
-    const top = this.datos()?.mensualTop ?? [];
-    const meses = [...new Set(top.flatMap((p) => p.meses.map((m) => m.mes)))].sort();
-    const series: SerieLinea[] = top.map((p, i) => {
-      const porMes = new Map(p.meses.map((m) => [m.mes, m.incidencias]));
-      return {
-        nombre: p.proveedor,
-        color: SERIES[i % SERIES.length],
-        valores: meses.map((m) => porMes.get(m) ?? 0),
-      };
-    });
-    return { etiquetas: meses, series };
-  });
+  readonly mensual = computed(() => evolucionMensual(this.datos()?.mensualTop ?? []));
 
-  readonly ranking = computed(() => {
-    const total = this.kpis()?.total ?? 0;
-    const lista = this.datos()?.proveedores ?? [];
-    const tope = lista[0]?.total || 1;
-    return lista.slice(0, 15).map((p) => ({
-      ...p,
-      pct: porcentaje(total ? p.total / total : 0),
-      barra: (p.total / tope) * 100,
-      dominantePct: porcentaje(p.total ? p.totalTipoDominante / p.total : 0),
-      unidadesPorIncidencia: p.total ? entero(Math.round(p.unidades / p.total)) : '—',
-      totalTexto: entero(p.total),
-      unidadesTexto: entero(p.unidades),
-    }));
-  });
-
-  readonly skus = computed(() =>
-    (this.datos()?.skus ?? []).map((s) => ({
-      ...s,
-      totalTexto: entero(s.total),
-      unidadesTexto: entero(s.unidades),
-    })),
+  readonly ranking = computed(() =>
+    rankingProveedores(this.datos()?.proveedores ?? [], this.kpis()?.total ?? 0),
   );
+
+  readonly skus = computed(() => skusConTexto(this.datos()?.skus ?? []));
 
   readonly granularidad = computed(() =>
     this.datos()?.granularidad === 'dia' ? 'por día' : 'por mes',

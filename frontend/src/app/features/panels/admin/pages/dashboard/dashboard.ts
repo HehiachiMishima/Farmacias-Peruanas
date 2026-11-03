@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { AnaliticaAdmin } from '../../data/analitica.model';
 import { AdminAnaliticaApi } from '../../data/admin-analitica.api';
 import { Auth } from '../../../../../core/services/auth';
+import { saludoSegunHora } from '../../../../../core/utils/fecha.util';
 import { RecursoRemoto } from '../../../../../core/utils/listado-remoto';
 import { BarChart, BarraDato } from '../../../../../shared/ui/charts/bar-chart';
 import { entero, porcentaje } from '../../../../../shared/ui/charts/formato';
@@ -15,6 +16,7 @@ const NOMBRE_PANEL: Record<string, string> = {
   PANEL_BITACORA: 'Bitácora',
   PANEL_INBOUND: 'Inbound',
   PANEL_SIMULACION: 'Simulación',
+  PANEL_MALLA: 'Malla',
 };
 
 const COLOR_PANEL: Record<string, string> = {
@@ -22,6 +24,7 @@ const COLOR_PANEL: Record<string, string> = {
   PANEL_BITACORA: 'var(--brand)',
   PANEL_INBOUND: 'var(--accent)',
   PANEL_SIMULACION: 'var(--cyan)',
+  PANEL_MALLA: 'var(--success)',
 };
 
 /**
@@ -47,10 +50,7 @@ export class Dashboard {
   readonly error = this.recurso.error;
   readonly datos = this.recurso.valor;
 
-  readonly saludo = computed(() => {
-    const hora = new Date().getHours();
-    return hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
-  });
+  readonly saludo = saludoSegunHora();
 
   readonly kpis = computed(() => this.datos()?.kpis ?? null);
 

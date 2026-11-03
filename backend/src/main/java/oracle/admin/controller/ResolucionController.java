@@ -2,7 +2,6 @@ package oracle.admin.controller;
 
 import oracle.common.response.ApiResponse;
 import oracle.admin.response.PermisoEfectivoResponse;
-import oracle.admin.response.PermisoFinalResponse;
 import oracle.admin.service.ResolucionPermisosService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,20 +27,5 @@ public class ResolucionController {
     @GetMapping("/efectivos")
     public Mono<ApiResponse<List<PermisoEfectivoResponse>>> efectivos(@PathVariable Long usuarioId) {
         return resolucionPermisosService.efectivos(usuarioId);
-    }
-
-    @GetMapping("/finales")
-    public Mono<ApiResponse<List<PermisoFinalResponse>>> finales(@PathVariable Long usuarioId) {
-        return resolucionPermisosService.finales(usuarioId);
-    }
-
-    @GetMapping("/permitidos")
-    public Mono<ApiResponse<List<PermisoFinalResponse>>> permitidos(@PathVariable Long usuarioId) {
-        return resolucionPermisosService.permitidos(usuarioId);
-    }
-
-    @GetMapping("/{permisoId}/tiene")
-    public Mono<ApiResponse<Boolean>> tiene(@PathVariable Long usuarioId, @PathVariable Long permisoId) {
-        return resolucionPermisosService.tienePermiso(usuarioId, permisoId);
     }
 }

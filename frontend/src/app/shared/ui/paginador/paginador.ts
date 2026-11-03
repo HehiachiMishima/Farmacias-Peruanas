@@ -55,18 +55,16 @@ export class Paginador {
   readonly pagina = input<number>(1);
   readonly total = input<number>(0);
   readonly porPagina = input<number>(10);
+  /**
+   * Sin uso desde que se quitó el selector de tamaño de página: `opciones` y
+   * `porPaginaCambia` se conservan para no romper a las páginas que los enlazan.
+   */
   readonly opciones = input<number[]>([10, 25, 50]);
 
   readonly paginaCambia = output<number>();
   readonly porPaginaCambia = output<number>();
 
   readonly totalPaginas = computed(() => Math.max(1, Math.ceil(this.total() / this.porPagina())));
-
-  readonly desde = computed(() =>
-    this.total() === 0 ? 0 : (this.pagina() - 1) * this.porPagina() + 1,
-  );
-
-  readonly hasta = computed(() => Math.min(this.total(), this.pagina() * this.porPagina()));
 
   readonly paginas = computed<(number | 'gap')[]>(() => {
     const total = this.totalPaginas();
@@ -94,13 +92,6 @@ export class Paginador {
     const destino = Math.min(Math.max(1, pagina), this.totalPaginas());
     if (destino !== this.pagina()) {
       this.paginaCambia.emit(destino);
-    }
-  }
-
-  cambiarTamano(evento: Event): void {
-    const valor = Number((evento.target as HTMLSelectElement).value);
-    if (valor && valor !== this.porPagina()) {
-      this.porPaginaCambia.emit(valor);
     }
   }
 }

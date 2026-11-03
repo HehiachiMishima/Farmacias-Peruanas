@@ -19,9 +19,11 @@ import { Icon } from '../../../../../shared/ui/icon/icon';
 import { MallaApi } from '../../data/malla.api';
 import { CentroMalla, CentroMallaResumen, Proceso } from '../../data/malla.model';
 import {
+  MINUTOS_REFRIGERIO,
   PROCESOS,
   ahoraEnMinutos,
   duracion,
+  faltan,
   formatearDuracion,
   formatearNumero,
   hora,
@@ -32,6 +34,7 @@ import { MallaLineaDia } from './linea-dia/linea-dia';
 import {
   Ventana,
   activosEnVentana,
+  dotacionComparada,
   enCurso,
   hitos,
   lineaDelDia,
@@ -167,9 +170,10 @@ export class MallaOperativa {
         ? [{ proceso: p.id, color: p.color, texto: textoActivos(p.id, items) }]
         : [];
     });
+    // En refrigerio: desde su hora y durante MINUTOS_REFRIGERIO.
     const refrigerio = turnos.find((x) => {
       const m = minutos(x.refrigerio);
-      return m !== null && (m - t + 1440) % 1440 < 60;
+      return m !== null && faltan(m, t) < MINUTOS_REFRIGERIO;
     });
     return {
       turno: turnos.map((x) => x.codigo).join(' + ') || '—',
@@ -223,6 +227,12 @@ export class MallaOperativa {
         pendientes: pendientes(c, p.id),
       };
     });
+  });
+
+  /** Personas planificadas (suma de turnos) frente a la dotación real declarada. */
+  readonly dotacion = computed(() => {
+    const c = this.centro();
+    return c ? dotacionComparada(c) : null;
   });
 
   readonly linea = computed(() => {

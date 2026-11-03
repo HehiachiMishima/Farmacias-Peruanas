@@ -17,7 +17,7 @@ public record MallaDatos(
         List<Capacidad> capacidades,
         List<Dotacion> dotaciones) {
 
-    public record Centro(Long id, String origenId, String codigo, String nombre) {
+    public record Centro(Long id, String codigo, String nombre) {
     }
 
     public record Turno(Long id, Long centroId, String codigo, String nombre,

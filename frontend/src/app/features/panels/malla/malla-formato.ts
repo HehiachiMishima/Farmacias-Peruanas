@@ -15,6 +15,8 @@ export const RESPONSABLES: readonly { id: Responsable; nombre: string }[] = [
 ];
 
 export const MINUTOS_DIA = 1440;
+/** Lo que dura un refrigerio a partir de su hora. */
+export const MINUTOS_REFRIGERIO = 60;
 
 export function proceso(id: Proceso) {
   return PROCESOS.find((p) => p.id === id) ?? PROCESOS[0];
@@ -72,8 +74,16 @@ export function faltan(t: number, m: number): number {
   return (((m - t) % MINUTOS_DIA) + MINUTOS_DIA) % MINUTOS_DIA;
 }
 
+/** La malla es de centros en Perú: «ahora» es la hora de Lima, no la del equipo. */
+const RELOJ_LIMA = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'America/Lima',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
 export function ahoraEnMinutos(fecha = new Date()): number {
-  return fecha.getHours() * 60 + fecha.getMinutes();
+  return minutos(RELOJ_LIMA.format(fecha)) ?? 0;
 }
 
 const NUMERO = new Intl.NumberFormat('es-PE');

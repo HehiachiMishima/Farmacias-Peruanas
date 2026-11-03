@@ -36,12 +36,6 @@ public class CentroController {
         return centroService.listar();
     }
 
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('VER_CONTROL')")
-    public Mono<ApiResponse<CentroResponse>> obtener(@PathVariable Long id) {
-        return centroService.obtenerPorId(id);
-    }
-
     @PostMapping
     @PreAuthorize("hasAuthority('CREAR_CONTROL')")
     public Mono<ApiResponse<CentroResponse>> crear(@Valid @RequestBody CentroCrearRequest peticion) {

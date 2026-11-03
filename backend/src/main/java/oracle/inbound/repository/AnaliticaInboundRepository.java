@@ -1,17 +1,18 @@
 package oracle.inbound.repository;
 
-import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import oracle.common.response.CeldaMatriz;
 import oracle.common.response.PuntoSerie;
 import oracle.common.config.ZonaNegocio;
 import oracle.common.support.CondicionSql;
+import oracle.common.support.Periodos;
 import oracle.inbound.request.FiltroIncidenciaInbound;
 import oracle.inbound.response.AnaliticaInboundResponse.Kpis;
 import oracle.inbound.response.AnaliticaInboundResponse.Proveedor;
 import oracle.inbound.response.AnaliticaInboundResponse.Sku;
 import oracle.inbound.response.AnaliticaInboundResponse.Tipo;
+import oracle.inbound.response.ProveedorMensualEstadistica;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -146,13 +147,37 @@ public class AnaliticaInboundRepository {
         return "mes";
     }
 
+    /**
+     * Evolucion mensual de los {@code top} proveedores con mas incidencias del
+     * filtro. El ranking y el corte se hacen en MySQL, asi solo viajan las filas
+     * (proveedor, mes) de esos proveedores y no las de todo el catalogo.
+     */
+    public List<ProveedorMensualEstadistica> mensualTop(FiltroIncidenciaInbound filtro, int top) {
+        CondicionSql c = CondicionInbound.de(filtro, zona);
+        String sql = "WITH m AS ("
+                + "  SELECT i.id_data_proveedor AS pid,"
+                + "         DATE_FORMAT(i.creado_en + INTERVAL " + zona.desfaseSegundos() + " SECOND, '%Y-%m') AS mes,"
+                + "         COUNT(*) AS cnt"
+                + "  FROM incidencias_inbound i " + c.where()
+                + "  GROUP BY pid, mes"
+                + "), t AS ("
+                + "  SELECT pid, SUM(cnt) AS total FROM m GROUP BY pid ORDER BY total DESC, pid ASC LIMIT " + top
+                + ") "
+                + "SELECT m.pid, COALESCE(p.proveedor, '—') AS proveedor, m.mes, m.cnt "
+                + "FROM m JOIN t ON t.pid = m.pid "
+                + "LEFT JOIN data_proveedor p ON p.id = m.pid "
+                + "ORDER BY t.total DESC, m.pid ASC, m.mes ASC";
+        List<SerieMensualProveedores.Fila> filas = jdbc.query(sql, (rs, n) -> new SerieMensualProveedores.Fila(
+                rs.getLong("pid"), rs.getString("proveedor"), rs.getString("mes"), rs.getLong("cnt")),
+                c.argumentos());
+        return SerieMensualProveedores.agrupar(filas);
+    }
+
     private static FiltroIncidenciaInbound periodoAnterior(FiltroIncidenciaInbound f) {
-        if (f == null || f.desde() == null || f.hasta() == null || f.hasta().isBefore(f.desde())) {
+        Periodos.Rango previo = f == null ? null : Periodos.anterior(f.desde(), f.hasta());
+        if (previo == null) {
             return null;
         }
-        long dias = ChronoUnit.DAYS.between(f.desde(), f.hasta()) + 1;
-        LocalDate hasta = f.desde().minusDays(1);
-        LocalDate desde = hasta.minusDays(dias - 1);
-        return new FiltroIncidenciaInbound(f.proveedor(), f.tipo(), desde, hasta, f.texto());
+        return new FiltroIncidenciaInbound(f.proveedor(), f.tipo(), previo.desde(), previo.hasta(), f.texto());
     }
 }

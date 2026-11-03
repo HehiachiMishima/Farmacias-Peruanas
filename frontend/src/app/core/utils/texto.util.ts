@@ -12,6 +12,16 @@ export function contieneTexto(
   return !buscado || campos.some((campo) => normalizarTexto(campo).includes(buscado));
 }
 
+/** Iniciales de nombre y apellido para los avatares («Juan Pérez» → «JP»; «?» si no hay). */
+export function iniciales(
+  persona: { nombre?: string | null; apellido?: string | null } | null | undefined,
+): string {
+  if (!persona) {
+    return '?';
+  }
+  return `${persona.nombre?.[0] ?? ''}${persona.apellido?.[0] ?? ''}`.toUpperCase() || '?';
+}
+
 /** Escapa un texto (p. ej. nombres de la BD) antes de insertarlo como HTML. */
 export function escaparHtml(texto: string): string {
   return texto.replace(

@@ -12,9 +12,4 @@ public record CondicionSql(String where, List<Object> args) {
     public Object[] argumentos() {
         return args.toArray();
     }
-
-    /** AND adicional sobre el WHERE existente (o WHERE si no habia condiciones). */
-    public String y(String condicionExtra) {
-        return where.isEmpty() ? "WHERE " + condicionExtra : where + " AND " + condicionExtra;
-    }
 }

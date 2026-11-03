@@ -103,28 +103,81 @@ export function pasos(c: CentroMalla, p: Proceso): FlujoMalla[] {
   return c.flujos.filter((f) => f.proceso === p);
 }
 
-/** Ventana de un proceso: picking, de la primera ola lanzada al último cierre; el resto, sus pasos. */
+export interface FilaDotacion {
+  etiqueta: string;
+  procesos: string;
+  planificada: number | null;
+  real: number | null;
+  diferencia: number | null;
+}
+
+/**
+ * La dotación real se declara por flujo y la planificada por proceso:
+ * Inbound = Recepción + Almacenamiento, Outbound = Reabastecimiento +
+ * Picking y Despacho = Despacho. Sin personas planificadas queda en null.
+ */
+export function dotacionComparada(c: CentroMalla): {
+  filas: FilaDotacion[];
+  semana: string | null;
+} {
+  const fila = (
+    etiqueta: string,
+    procesos: Proceso[],
+    real: number | null,
+    detalle = procesos.map((p) => datosProceso(p).nombre).join(' + '),
+  ): FilaDotacion => {
+    const planificada = procesos.reduce((total, p) => total + personasDeProceso(c, p), 0) || null;
+    return {
+      etiqueta,
+      procesos: detalle,
+      planificada,
+      real,
+      diferencia: planificada === null || real === null ? null : real - planificada,
+    };
+  };
+  const real = c.dotacionReal;
+  return {
+    filas: [
+      fila('Inbound', ['REC', 'ALM'], real.inbound),
+      fila('Outbound', ['REA', 'OLA'], real.outbound),
+      fila('Despacho', ['DES'], real.despacho),
+      fila('Total', ['REC', 'ALM', 'REA', 'OLA', 'DES'], real.total, 'Todos los procesos'),
+    ],
+    semana: real.semana,
+  };
+}
+
+/**
+ * Ventana de un proceso: el arco del día más corto que cubre todos sus
+ * pasos (en picking, de cada lanzamiento a su cierre). No depende del orden
+ * de los pasos, y un paso que cruza la medianoche o un hito previo al primer
+ * turno (06:30) quedan donde corresponde.
+ */
 export function ventanaDeProceso(
   c: CentroMalla,
   p: Proceso,
 ): { inicio: string; fin: string } | null {
-  if (p === 'OLA') {
-    const lanzadas = c.olas.filter((o) => minutos(o.lanzamiento) !== null);
-    if (lanzadas.length === 0) {
-      return null;
-    }
-    const t0 = minutos(c.turnos[0]?.inicio) ?? 0;
-    const relativo = (m: number) => faltan(t0, m);
-    const inicios = lanzadas
-      .map((o) => minutos(o.lanzamiento)!)
-      .sort((a, b) => relativo(a) - relativo(b));
-    const fines = lanzadas
-      .map((o) => minutos(o.cierrePicking) ?? minutos(o.lanzamiento)!)
-      .sort((a, b) => relativo(b) - relativo(a));
-    return { inicio: hora(inicios[0]), fin: hora(fines[0]) };
+  const tramos: [number, number][] =
+    p === 'OLA'
+      ? c.olas.flatMap((o) => {
+          const a = minutos(o.lanzamiento);
+          return a === null ? [] : [[a, faltan(a, minutos(o.cierrePicking) ?? a)]];
+        })
+      : pasos(c, p).flatMap((f) => {
+          const a = minutos(f.inicio);
+          return a === null ? [] : [[a, faltan(a, minutos(f.fin) ?? a)]];
+        });
+  if (tramos.length === 0) {
+    return null;
   }
-  const horas = pasos(c, p).flatMap((f) => [f.inicio, f.fin].filter((h): h is string => !!h));
-  return horas.length ? { inicio: horas[0], fin: horas[horas.length - 1] } : null;
+  // Se prueba arrancar en cada inicio y se queda el que cubre todo en menos tiempo.
+  const mejor = tramos
+    .map(([origen]) => ({
+      origen,
+      largo: Math.max(...tramos.map(([a, largo]) => faltan(origen, a) + largo)),
+    }))
+    .reduce((x, y) => (y.largo < x.largo ? y : x));
+  return { inicio: hora(mejor.origen), fin: hora(mejor.origen + mejor.largo) };
 }
 
 /** Pasos con inicio y fin (u olas, en picking) que están ocurriendo a la hora t. */

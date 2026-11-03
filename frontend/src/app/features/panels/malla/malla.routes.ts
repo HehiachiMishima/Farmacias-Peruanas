@@ -17,6 +17,10 @@ export const MALLA_ROUTES: Routes = [
         canActivate: [permisoGuard(PERMISOS.VER_MALLA)],
         loadComponent: () =>
           import('./pages/configuracion/configuracion').then((m) => m.MallaConfiguracion),
+        canDeactivate: [
+          (pagina: { puedeSalir(destino: string): boolean }, _ruta, _estado, siguiente) =>
+            pagina.puedeSalir(siguiente.url),
+        ],
       },
       {
         path: 'operativa',

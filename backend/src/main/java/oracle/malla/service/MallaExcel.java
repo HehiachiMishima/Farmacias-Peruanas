@@ -1,8 +1,8 @@
 package oracle.malla.service;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.text.Normalizer;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.zip.ZipInputStream;
 import oracle.common.exception.SolicitudInvalidaException;
 import oracle.malla.request.CentroMallaRequest;
 import oracle.malla.request.CentroMallaRequest.Capacidad;
@@ -46,6 +47,8 @@ public final class MallaExcel {
 
     /** Una malla es pequeña: con esto sobra y se evita leer archivos enormes. */
     static final long MAX_BYTES = 2L * 1024 * 1024;
+    /** Tope de lo que el .xlsx (un zip) puede ocupar descomprimido: frena las bombas zip. */
+    static final long MAX_DESCOMPRIMIDO = 20L * 1024 * 1024;
     private static final int MAX_FILAS = 500;
 
     static final String CENTRO = "Centro";
@@ -76,12 +79,33 @@ public final class MallaExcel {
         if (archivo.getSize() > MAX_BYTES) {
             throw new SolicitudInvalidaException("El archivo supera los 2 MB permitidos para una malla.");
         }
-        try (InputStream entrada = archivo.getInputStream(); Workbook libro = new XSSFWorkbook(entrada)) {
-            return leer(libro);
+        try {
+            byte[] contenido = archivo.getBytes();
+            comprobarTamanoReal(contenido);
+            try (Workbook libro = new XSSFWorkbook(new ByteArrayInputStream(contenido))) {
+                return leer(libro);
+            }
         } catch (SolicitudInvalidaException ex) {
             throw ex;
         } catch (IOException | RuntimeException ex) {
             throw new SolicitudInvalidaException("No se pudo leer el Excel: revisa que sea la plantilla de la malla.");
+        }
+    }
+
+    /** Descomprime sin guardar nada, contando bytes reales (no los que declara el zip). */
+    static void comprobarTamanoReal(byte[] contenido) throws IOException {
+        long total = 0;
+        byte[] bloque = new byte[8192];
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(contenido))) {
+            while (zip.getNextEntry() != null) {
+                for (int leidos; (leidos = zip.read(bloque)) > 0; ) {
+                    total += leidos;
+                    if (total > MAX_DESCOMPRIMIDO) {
+                        throw new SolicitudInvalidaException(
+                                "El Excel es demasiado grande para una malla: usa la plantilla.");
+                    }
+                }
+            }
         }
     }
 

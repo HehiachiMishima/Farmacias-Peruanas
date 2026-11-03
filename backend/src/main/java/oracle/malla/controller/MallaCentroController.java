@@ -1,9 +1,11 @@
 package oracle.malla.controller;
 
 import jakarta.validation.Valid;
+import java.time.Instant;
 import java.util.List;
 import oracle.common.response.ApiResponse;
 import oracle.malla.request.CentroMallaRequest;
+import oracle.malla.response.CambioMallaResponse;
 import oracle.malla.response.CentroMallaResponse;
 import oracle.malla.response.CentroMallaResumenResponse;
 import oracle.malla.service.MallaCentroService;
@@ -62,8 +64,15 @@ public class MallaCentroController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('MODIFICAR_MALLA')")
     public Mono<ApiResponse<CentroMallaResponse>> guardar(@PathVariable Long id,
-            @Valid @RequestBody CentroMallaRequest req) {
-        return service.guardar(id, req);
+            @Valid @RequestBody CentroMallaRequest req, @RequestParam(required = false) Instant version) {
+        return service.guardar(id, req, version);
+    }
+
+    /** Últimos cambios guardados en la malla del centro. */
+    @GetMapping("/{id}/cambios")
+    @PreAuthorize("hasAuthority('VER_MALLA')")
+    public Mono<ApiResponse<List<CambioMallaResponse>>> cambios(@PathVariable Long id) {
+        return service.cambios(id);
     }
 
     @DeleteMapping("/{id}")

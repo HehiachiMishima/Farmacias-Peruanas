@@ -4,7 +4,6 @@ import jakarta.validation.Valid;
 import oracle.admin.request.UsuarioRolAsignarRequest;
 import oracle.common.response.ApiResponse;
 import oracle.admin.response.RolResponse;
-import oracle.admin.response.UsuarioResponse;
 import oracle.admin.response.UsuarioRolResponse;
 import oracle.admin.service.UsuarioRolService;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -47,11 +46,5 @@ public class UsuarioRolController {
     @PreAuthorize("hasAuthority('ASIGNAR_ROLES')")
     public Mono<ApiResponse<Void>> quitar(@PathVariable Long usuarioId, @PathVariable Long rolId) {
         return usuarioRolService.quitar(usuarioId, rolId);
-    }
-
-    @GetMapping("/roles/{rolId}/usuarios")
-    @PreAuthorize("hasAuthority('VER_ROLES') and hasAuthority('VER_USUARIOS')")
-    public Mono<ApiResponse<List<UsuarioResponse>>> usuariosDeRol(@PathVariable Long rolId) {
-        return usuarioRolService.listarPorRol(rolId);
     }
 }

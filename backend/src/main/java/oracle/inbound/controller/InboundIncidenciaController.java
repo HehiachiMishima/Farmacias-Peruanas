@@ -2,24 +2,21 @@ package oracle.inbound.controller;
 
 import oracle.inbound.response.AnaliticaInboundResponse;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.io.IOException;
 import java.time.LocalDate;
-import java.util.List;
 import oracle.inbound.request.FiltroIncidenciaInbound;
 import oracle.inbound.request.IncidenciaInboundActualizarRequest;
 import oracle.inbound.request.IncidenciaInboundCrearRequest;
 import oracle.common.response.ApiResponse;
-import oracle.inbound.response.EstadisticaInboundResponse;
 import oracle.inbound.response.IncidenciaInboundResponse;
 import oracle.common.response.PaginaResponse;
-import oracle.inbound.response.ProveedorMensualEstadistica;
 import oracle.inbound.service.IncidenciaInboundService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -48,40 +45,23 @@ public class InboundIncidenciaController {
    * Exporta en flujo (chunked) el JSON completo del filtro: el envoltorio es el
    * mismo que el de una respuesta normal, pero las filas se escriben por lotes
    * en vez de cargarse todas en memoria.
+   *
+   * Se escribe en el hilo de la petición (virtual) y no como
+   * StreamingResponseBody asíncrono: el timeout async (15 s) cortaba a la mitad
+   * los exports grandes y el cliente recibía un JSON truncado.
    */
   @GetMapping("/exportar")
   @PreAuthorize("hasAuthority('VER_INCIDENCIAS_INBOUND')")
-  public ResponseEntity<StreamingResponseBody> exportar(
+  public void exportar(
       @RequestParam(required = false) Long proveedor,
       @RequestParam(required = false) Long tipo,
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
-      @RequestParam(required = false) String texto) {
-    return ResponseEntity.ok()
-        .contentType(MediaType.APPLICATION_JSON)
-        .body(service.exportarEnFlujo(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto)));
-  }
-
-  @GetMapping("/estadisticas")
-  @PreAuthorize("hasAuthority('VER_DASHBOARD_INBOUND')")
-  public Mono<ApiResponse<EstadisticaInboundResponse>> estadisticas(
-      @RequestParam(required = false) Long proveedor,
-      @RequestParam(required = false) Long tipo,
-      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
-      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
-      @RequestParam(required = false) String texto) {
-    return service.estadisticas(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto));
-  }
-
-  @GetMapping("/estadisticas/proveedores-mensual")
-  @PreAuthorize("hasAuthority('VER_DASHBOARD_INBOUND')")
-  public Mono<ApiResponse<List<ProveedorMensualEstadistica>>> estadisticaProveedoresMensual(
-      @RequestParam(required = false) Long proveedor,
-      @RequestParam(required = false) Long tipo,
-      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
-      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
-      @RequestParam(required = false) String texto) {
-    return service.estadisticaProveedoresMensual(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto));
+      @RequestParam(required = false) String texto,
+      HttpServletResponse respuesta) throws IOException {
+    respuesta.setContentType(MediaType.APPLICATION_JSON_VALUE);
+    service.exportarEnFlujo(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto))
+        .writeTo(respuesta.getOutputStream());
   }
 
   /** Analitica del dashboard Inbound (en torno al proveedor) para el filtro. */
@@ -94,12 +74,6 @@ public class InboundIncidenciaController {
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
       @RequestParam(required = false) String texto) {
     return service.analitica(new FiltroIncidenciaInbound(proveedor, tipo, desde, hasta, texto));
-  }
-
-  @GetMapping("/{id}")
-  @PreAuthorize("hasAuthority('VER_INCIDENCIAS_INBOUND')")
-  public Mono<ApiResponse<IncidenciaInboundResponse>> obtener(@PathVariable Long id) {
-    return service.obtenerPorId(id);
   }
 
   @PostMapping

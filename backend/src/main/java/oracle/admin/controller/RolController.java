@@ -4,14 +4,12 @@ import jakarta.validation.Valid;
 import oracle.admin.request.CambiarEstadoRequest;
 import oracle.admin.request.RolActualizarRequest;
 import oracle.admin.request.RolCrearRequest;
-import oracle.admin.request.RolFiltroRequest;
 import oracle.common.response.ApiResponse;
 import oracle.admin.response.RolResponse;
 import oracle.admin.service.RolService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,18 +36,6 @@ public class RolController {
     @PreAuthorize("hasAuthority('VER_ROLES')")
     public Mono<ApiResponse<List<RolResponse>>> listar() {
         return rolService.listar();
-    }
-
-    @GetMapping("/buscar")
-    @PreAuthorize("hasAuthority('VER_ROLES')")
-    public Mono<ApiResponse<List<RolResponse>>> buscar(@Valid @ModelAttribute RolFiltroRequest filtro) {
-        return rolService.buscar(filtro);
-    }
-
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('VER_ROLES')")
-    public Mono<ApiResponse<RolResponse>> obtener(@PathVariable Long id) {
-        return rolService.obtenerPorId(id);
     }
 
     @PostMapping

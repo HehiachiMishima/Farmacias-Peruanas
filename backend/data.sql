@@ -1,10 +1,19 @@
-DROP TABLE IF EXISTS data_centro;
-DROP TABLE IF EXISTS data_sistema;
-DROP TABLE IF EXISTS data_area;
-DROP TABLE IF EXISTS data_incidencia;
-DROP TABLE IF EXISTS data_responsable;
-DROP TABLE IF EXISTS incidencias;
+-- ============================================================
+-- Datos de ejemplo del panel Bitácora (catálogos + incidencias).
+-- ¡ATENCIÓN! Vacía antes las tablas de Bitácora: borra las incidencias y
+-- catálogos existentes. Los ids son fijos, así que se puede volver a correr.
+-- (Antes hacía DROP TABLE: fallaba por las FK RESTRICT y, si llegaba a
+-- borrarlas, los INSERT siguientes no tenían tabla.)
+-- ============================================================
 START TRANSACTION;
+
+-- Hijos primero para respetar las FK RESTRICT.
+DELETE FROM incidencias;
+DELETE FROM data_responsable;
+DELETE FROM data_incidencia;
+DELETE FROM data_area;
+DELETE FROM data_sistema;
+DELETE FROM data_centro;
 
 -- Autor de todos los registros: el usuario con rol ADMINISTRADOR (el
 -- semilla que crea el backend al arrancar). Su id no siempre es 1: en

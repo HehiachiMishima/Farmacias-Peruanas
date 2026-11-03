@@ -62,16 +62,10 @@ public class MallaConfiguracionService {
         this.json = json;
     }
 
-    public Mono<ApiResponse<List<ReglaMallaResponse>>> listarReglas() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "MallaConfiguracionService.listarReglas",
-                        () -> transacciones.consultar(this::reglasResponse)))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(lista -> ApiResponse.ok("Reglas de la malla listadas.", lista));
-    }
-
-    public Mono<ApiResponse<EvaluacionMallaResponse>> evaluar() {
-        return Mono.fromCallable(() -> Trazas.medir(log, "MallaConfiguracionService.evaluar",
-                        () -> transacciones.consultar(this::evaluacion)))
+    /** Evalúa las reglas sobre todos los centros o, con centroId, solo sobre ese. */
+    public Mono<ApiResponse<EvaluacionMallaResponse>> evaluar(Long centroId) {
+        return Mono.fromCallable(() -> Trazas.medir(log, "MallaConfiguracionService.evaluar centro=" + centroId,
+                        () -> transacciones.consultar(() -> evaluacion(centroId))))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(resultado -> ApiResponse.ok("Malla evaluada.", resultado));
     }
@@ -103,11 +97,11 @@ public class MallaConfiguracionService {
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    private EvaluacionMallaResponse evaluacion() {
+    private EvaluacionMallaResponse evaluacion(Long centroId) {
         List<MallaRegla> catalogo = catalogo();
         MallaDatos foto;
         try {
-            foto = datos.cargar();
+            foto = datos.cargar(centroId);
         } catch (DataAccessException ex) {
             log.error("No se pudo leer la malla capturada: {}", ex.getMessage());
             throw new ConflictoException(SIN_INSTALAR);
@@ -171,10 +165,6 @@ public class MallaConfiguracionService {
         return new EvaluacionMallaResponse(java.time.Instant.now(), resumen, resultados);
     }
 
-    private List<ReglaMallaResponse> reglasResponse() {
-        return catalogo().stream().map(this::reglaResponse).toList();
-    }
-
     private List<MallaRegla> catalogo() {
         try {
             List<MallaRegla> lista = reglas.findAllByOrderByOrdenAscIdAsc();
@@ -206,7 +196,7 @@ public class MallaConfiguracionService {
         return ReglasMallaCatalogo.parametros(regla.getCodigo()).stream()
                 .map(def -> new ParametroMallaResponse(
                         def.clave(), def.etiqueta(), def.tipo(),
-                        valores.getOrDefault(def.clave(), def.porDefecto())))
+                        valores.getOrDefault(def.clave(), def.porDefecto()), def.min(), def.max()))
                 .toList();
     }
 
@@ -254,9 +244,10 @@ public class MallaConfiguracionService {
                     throw new SolicitudInvalidaException(
                             "El parámetro '" + def.etiqueta() + "' debe ser un número entero.");
                 }
-                if (numero < 0 || numero > 1440) {
+                if (numero < def.min() || numero > def.max()) {
                     throw new SolicitudInvalidaException(
-                            "El parámetro '" + def.etiqueta() + "' debe estar entre 0 y 1440.");
+                            "El parámetro '" + def.etiqueta() + "' debe estar entre " + def.min()
+                                    + " y " + def.max() + ".");
                 }
                 yield Integer.toString(numero);
             }

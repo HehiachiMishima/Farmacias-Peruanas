@@ -1,8 +1,7 @@
 import { Service, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { Permiso } from './permiso.model';
-import { Rol, RolActualizarRequest, RolCrearRequest, RolFiltro } from './rol.model';
-import { Usuario } from '../../../../core/models';
+import { Rol, RolActualizarRequest, RolCrearRequest } from './rol.model';
 import { Api } from '../../../../core/services/api';
 
 @Service()
@@ -11,14 +10,6 @@ export class RolesApi {
 
   listar(): Observable<Rol[]> {
     return this.api.get<Rol[]>('/roles');
-  }
-
-  buscar(filtro: RolFiltro): Observable<Rol[]> {
-    return this.api.get<Rol[]>('/roles/buscar', { ...filtro });
-  }
-
-  obtener(id: number): Observable<Rol> {
-    return this.api.get<Rol>(`/roles/${id}`);
   }
 
   crear(peticion: RolCrearRequest): Observable<Rol> {
@@ -47,9 +38,5 @@ export class RolesApi {
 
   quitarPermiso(id: number, permisoId: number): Observable<void> {
     return this.api.delete<void>(`/roles/${id}/permisos/${permisoId}`);
-  }
-
-  usuarios(id: number): Observable<Usuario[]> {
-    return this.api.get<Usuario[]>(`/roles/${id}/usuarios`);
   }
 }

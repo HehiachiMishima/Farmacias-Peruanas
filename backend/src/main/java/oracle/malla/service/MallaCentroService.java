@@ -1,5 +1,6 @@
 package oracle.malla.service;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -22,6 +23,7 @@ import oracle.malla.request.CentroMallaRequest.Flujo;
 import oracle.malla.request.CentroMallaRequest.Ola;
 import oracle.malla.request.CentroMallaRequest.Turno;
 import oracle.malla.request.CentroMallaRequest.Zona;
+import oracle.malla.response.CambioMallaResponse;
 import oracle.malla.response.CentroMallaResponse;
 import oracle.malla.response.CentroMallaResumenResponse;
 import org.springframework.dao.DuplicateKeyException;
@@ -37,6 +39,8 @@ import reactor.core.scheduler.Schedulers;
 @Slf4j
 @Service
 public class MallaCentroService {
+
+    private static final int CAMBIOS_VISIBLES = 20;
 
     private final MallaCentroRepository centros;
     private final Transacciones transacciones;
@@ -61,29 +65,43 @@ public class MallaCentroService {
             validar(req, null);
             Long id = centros.crear(req.codigo().trim(), req.nombre().trim(), actor);
             centros.guardar(id, req, actor);
+            centros.registrarCambio(id, req.codigo().trim(), "CREAR", resumen(req), actor);
             return buscar(id);
         }, "Centro creado.");
     }
 
-    public Mono<ApiResponse<CentroMallaResponse>> guardar(Long id, CentroMallaRequest req) {
+    /**
+     * Reemplaza la malla del centro. Con {@code version} (la fecha de última
+     * actualización que vio quien edita) rechaza el guardado si otra persona
+     * guardó antes, en lugar de pisar sus cambios.
+     */
+    public Mono<ApiResponse<CentroMallaResponse>> guardar(Long id, CentroMallaRequest req, Instant version) {
         Long actor = ActorActual.id();
         return escribir("guardar id=" + id, () -> {
-            if (!centros.bloquear(id)) {
-                throw noExiste(id);
+            Instant actual = centros.bloquear(id).orElseThrow(() -> noExiste(id));
+            if (version != null && !version.equals(actual)) {
+                throw new ConflictoException(
+                        "Otra persona guardó la malla de este centro mientras la editabas: recárgala antes de guardar.");
             }
             validar(req, id);
             centros.guardar(id, req, actor);
+            centros.registrarCambio(id, req.codigo().trim(), "GUARDAR", resumen(req), actor);
             return buscar(id);
         }, "Malla guardada.");
     }
 
     public Mono<ApiResponse<Void>> eliminar(Long id) {
+        Long actor = ActorActual.id();
         return escribir("eliminar id=" + id, () -> {
-            if (!centros.eliminar(id)) {
-                throw noExiste(id);
-            }
+            CentroMallaResponse centro = buscar(id);
+            centros.eliminar(id);
+            centros.registrarCambio(id, centro.codigo(), "ELIMINAR", centro.nombre(), actor);
             return null;
         }, "Centro eliminado.");
+    }
+
+    public Mono<ApiResponse<List<CambioMallaResponse>>> cambios(Long id) {
+        return leer("cambios id=" + id, () -> centros.cambios(id, CAMBIOS_VISIBLES), "Cambios del centro.");
     }
 
     /** Lee el Excel y devuelve sus datos sin guardarlos: el formulario los muestra para revisar. */
@@ -119,6 +137,16 @@ public class MallaCentroService {
         for (Turno turno : req.turnos()) {
             if (!turnos.add(MallaCentroRepository.clave(turno.codigo()))) {
                 throw new SolicitudInvalidaException("El turno " + turno.codigo().trim() + " está repetido.");
+            }
+            if (turno.inicio().equals(turno.fin())) {
+                throw new SolicitudInvalidaException(
+                        "El turno " + turno.codigo().trim() + " empieza y termina a la misma hora.");
+            }
+        }
+        for (Flujo paso : req.flujos()) {
+            if (paso.inicio().equals(paso.fin())) {
+                throw new SolicitudInvalidaException(
+                        "El paso «" + paso.actividad().trim() + "» empieza y termina a la misma hora.");
             }
         }
         Set<String> dotacion = new HashSet<>();
@@ -165,6 +193,12 @@ public class MallaCentroService {
                 new Capacidad(null, null, null, null),
                 List.of(),
                 new DotacionReal(28, 378, 59, 464, "S44"));
+    }
+
+    /** Lo que se guardó, en una línea: para el historial de cambios. */
+    private static String resumen(CentroMallaRequest req) {
+        return "%s · %d turnos, %d pasos, %d olas, %d zonas".formatted(req.nombre().trim(),
+                req.turnos().size(), req.flujos().size(), req.olas().size(), req.zonas().size());
     }
 
     private CentroMallaResponse buscar(Long id) {

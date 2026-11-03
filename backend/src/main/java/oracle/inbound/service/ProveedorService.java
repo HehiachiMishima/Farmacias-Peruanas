@@ -72,7 +72,7 @@ public class ProveedorService {
         Long actor = ActorActual.id();
         return Mono.fromCallable(() -> Trazas.medir(log, "ProveedorService.crear", () -> transacciones.ejecutar(() -> {
                     String nombre = req.proveedor().trim();
-                    if (repo.existsByProveedorIgnoreCase(nombre)) {
+                    if (repo.existsByProveedor(nombre)) {
                         throw new ConflictoException("Ya existe un proveedor con el nombre '" + nombre + "'.");
                     }
                     DataProveedor p = new DataProveedor();
@@ -91,7 +91,7 @@ public class ProveedorService {
                     DataProveedor p = obtener(id);
                     if (req.proveedor() != null && !req.proveedor().isBlank()) {
                         String nombre = req.proveedor().trim();
-                        if (repo.existsByProveedorIgnoreCaseAndIdNot(nombre, id)) {
+                        if (repo.existsByProveedorAndIdNot(nombre, id)) {
                             throw new ConflictoException("Ya existe otro proveedor con el nombre '" + nombre + "'.");
                         }
                         p.setProveedor(nombre);

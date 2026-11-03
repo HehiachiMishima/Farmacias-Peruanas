@@ -17,7 +17,6 @@ import oracle.admin.repository.UsuarioRolRepository;
 import oracle.admin.request.UsuarioRolAsignarRequest;
 import oracle.common.response.ApiResponse;
 import oracle.admin.response.RolResponse;
-import oracle.admin.response.UsuarioResponse;
 import oracle.admin.response.UsuarioRolResponse;
 import oracle.common.security.AutorizacionCache;
 import oracle.common.config.Transacciones;
@@ -105,28 +104,20 @@ public class UsuarioRolService {
     /** Roles del usuario. */
     public Mono<ApiResponse<List<RolResponse>>> listarPorUsuario(Long usuarioId) {
         return Mono.fromCallable(() -> Trazas.medir(log,
-                        "UsuarioRolService.listarPorUsuario usuarioId=" + usuarioId, () -> {
-                            obtenerUsuario(usuarioId);
+                        "UsuarioRolService.listarPorUsuario usuarioId=" + usuarioId, () -> transacciones.consultar(() -> {
+                            validarUsuario(usuarioId);
                             return usuarioRolRepository.rolesDeUsuario(usuarioId).stream()
                                     .map(RolResponse::of)
                                     .toList();
-                        }))
+                        })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Roles del usuario.", lista));
     }
 
-    /** Usuarios que tienen un rol. */
-    public Mono<ApiResponse<List<UsuarioResponse>>> listarPorRol(Long rolId) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "UsuarioRolService.listarPorRol rolId=" + rolId, () -> {
-                    if (!rolRepository.existsById(rolId)) {
-                        throw new RecursoNoEncontradoException("No existe el rol con id " + rolId + ".");
-                    }
-                    return usuarioRolRepository.usuariosDeRol(rolId).stream()
-                            .map(UsuarioResponse::of)
-                            .toList();
-                }))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(lista -> ApiResponse.ok("Usuarios con el rol.", lista));
+    private void validarUsuario(Long id) {
+        if (!usuarioRepository.existsById(id)) {
+            throw new RecursoNoEncontradoException("No existe el usuario con id " + id + ".");
+        }
     }
 
     private Usuario obtenerUsuario(Long id) {

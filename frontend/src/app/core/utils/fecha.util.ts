@@ -24,6 +24,17 @@ export function hoy(): string {
   return fechaIso(diaNegocio());
 }
 
+/** Instante de auditoría (UTC) → «dd/MM/yyyy HH:mm» en la zona del negocio, como lo muestra la tabla. */
+export function fechaHoraNegocio(instante: string, locale: string): string {
+  return formatDate(instante, 'dd/MM/yyyy HH:mm', locale, CONFIG.zonaHoraria);
+}
+
+/** Saludo según la hora local: «Buenos días», «Buenas tardes» o «Buenas noches». */
+export function saludoSegunHora(fecha = new Date()): string {
+  const hora = fecha.getHours();
+  return hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
+}
+
 /** Duración en segundos → «HH:MM» (— si no hay). */
 export function duracionHhmm(segundos: number | null): string {
   if (segundos === null) {

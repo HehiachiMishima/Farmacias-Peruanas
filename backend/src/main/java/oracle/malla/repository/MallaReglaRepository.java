@@ -7,6 +7,4 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface MallaReglaRepository extends JpaRepository<MallaRegla, Long> {
 
     List<MallaRegla> findAllByOrderByOrdenAscIdAsc();
-
-    boolean existsByCodigo(String codigo);
 }

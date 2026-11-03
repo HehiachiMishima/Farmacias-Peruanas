@@ -5,6 +5,7 @@ import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -20,6 +21,7 @@ import oracle.malla.request.CentroMallaRequest.Flujo;
 import oracle.malla.request.CentroMallaRequest.Ola;
 import oracle.malla.request.CentroMallaRequest.Turno;
 import oracle.malla.request.CentroMallaRequest.Zona;
+import oracle.malla.response.CambioMallaResponse;
 import oracle.malla.response.CentroMallaResponse;
 import oracle.malla.response.CentroMallaResumenResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -75,7 +77,7 @@ public class MallaCentroRepository {
         List<Turno> turnos = jdbc.query("""
                 SELECT id, codigo, nombre, hora_inicio, hora_fin, hora_refrigerio, tipo_refrigerio,
                        nota, confirmado
-                FROM malla_turno WHERE centro_id = ? ORDER BY hora_inicio, id
+                FROM malla_turno WHERE centro_id = ? ORDER BY id
                 """, (rs, fila) -> {
             codigosTurno.put(rs.getLong("id"), rs.getString("codigo"));
             return new Turno(
@@ -167,10 +169,33 @@ public class MallaCentroRepository {
                 (rs, fila) -> rs.getLong("id"), codigo).stream().findFirst();
     }
 
-    /** Bloquea el centro hasta el fin de la transacción: dos guardados no se mezclan. */
-    public boolean bloquear(Long id) {
-        return !jdbc.query("SELECT id FROM malla_centro WHERE id = ? AND activo = TRUE FOR UPDATE",
-                (rs, fila) -> rs.getLong("id"), id).isEmpty();
+    /**
+     * Bloquea el centro hasta el fin de la transacción (dos guardados no se
+     * mezclan) y devuelve su última actualización; vacío si no existe.
+     */
+    public Optional<Instant> bloquear(Long id) {
+        return jdbc.query("SELECT actualizado_en FROM malla_centro WHERE id = ? AND activo = TRUE FOR UPDATE",
+                (rs, fila) -> rs.getTimestamp("actualizado_en").toInstant(), id).stream().findFirst();
+    }
+
+    /** Deja constancia de un cambio en la malla de un centro. */
+    public void registrarCambio(Long centroId, String codigo, String accion, String resumen, Long actor) {
+        jdbc.update("""
+                INSERT INTO malla_cambio (centro_id, codigo_centro, accion, resumen, creado_por)
+                VALUES (?, ?, ?, ?, ?)
+                """, centroId, codigo, accion, resumen, actor);
+    }
+
+    /** Últimos cambios del centro, del más reciente al más antiguo. */
+    public List<CambioMallaResponse> cambios(Long centroId, int limite) {
+        return jdbc.query("""
+                SELECT accion, resumen, creado_por, creado_en
+                FROM malla_cambio WHERE centro_id = ? ORDER BY id DESC LIMIT ?
+                """, (rs, fila) -> new CambioMallaResponse(
+                rs.getString("accion"),
+                rs.getString("resumen"),
+                rs.getLong("creado_por"),
+                rs.getTimestamp("creado_en").toInstant()), centroId, limite);
     }
 
     public Long crear(String codigo, String nombre, Long actor) {

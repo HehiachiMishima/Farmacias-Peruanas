@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-/** Dashboard ejecutivo de Administracion: 5 agregaciones en paralelo, cacheadas (TTL). */
+/** Dashboard ejecutivo de Administracion: 2 agregaciones en paralelo, cacheadas (TTL). */
 @Slf4j
 @Service
 public class AnaliticaAdminService {

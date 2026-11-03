@@ -1,6 +1,7 @@
 import { Signal, computed, signal } from '@angular/core';
 import { Observable } from 'rxjs';
 import { RecursoRemoto } from './listado-remoto';
+import { PaginacionLocal } from './paginacion-local';
 
 /**
  * Catálogo pequeño cargado completo en memoria, con búsqueda y paginación en
@@ -15,8 +16,6 @@ export class ListadoLocal<T extends { id: number }> {
   readonly cargando: Signal<boolean>;
   readonly error: Signal<string | null>;
   readonly busqueda = signal('');
-  readonly pagina = signal(1);
-  readonly porPagina = signal(10);
 
   readonly filtrados = computed(() => {
     const termino = this.busqueda().trim().toLowerCase();
@@ -27,16 +26,11 @@ export class ListadoLocal<T extends { id: number }> {
     return lista.filter((item) => this.texto(item).toLowerCase().includes(termino));
   });
 
-  readonly totalPaginas = computed(() =>
-    Math.max(1, Math.ceil(this.filtrados().length / this.porPagina())),
-  );
-
-  readonly paginaActual = computed(() => Math.min(Math.max(1, this.pagina()), this.totalPaginas()));
-
-  readonly paginados = computed(() => {
-    const inicio = (this.paginaActual() - 1) * this.porPagina();
-    return this.filtrados().slice(inicio, inicio + this.porPagina());
-  });
+  private readonly paginacion = new PaginacionLocal(this.filtrados);
+  readonly pagina = this.paginacion.pagina;
+  readonly porPagina = this.paginacion.porPagina;
+  readonly paginaActual = this.paginacion.paginaActual;
+  readonly paginados = this.paginacion.paginados;
 
   constructor(
     fuente: () => Observable<T[]>,
@@ -58,8 +52,7 @@ export class ListadoLocal<T extends { id: number }> {
   }
 
   cambiarPorPagina(valor: number): void {
-    this.porPagina.set(valor);
-    this.pagina.set(1);
+    this.paginacion.cambiarPorPagina(valor);
   }
 
   /** Quita un elemento eliminado sin volver a pedir la lista. */

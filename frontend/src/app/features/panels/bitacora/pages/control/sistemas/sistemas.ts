@@ -1,13 +1,12 @@
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { finalize } from 'rxjs';
 import { PERMISOS } from '../../../../../../core/config/permisos';
-import { mensajeDeError } from '../../../../../../core/errors/error.util';
 import { DirectorioUsuarios } from '../../../../../../core/services/directorio-usuarios';
 import { Notificaciones } from '../../../../../../core/services/notificaciones';
 import { EdicionCrud } from '../../../../../../core/utils/edicion-crud';
 import { ListadoLocal } from '../../../../../../core/utils/listado-local';
+import { OpcionesDependientes } from '../../../../../../core/utils/opciones-dependientes';
 import { ColumnasRedimensionables } from '../../../../../../shared/directives/columnas-redimensionables.directive';
 import { HasPermiso } from '../../../../../../shared/directives/has-permiso.directive';
 import { ActorLabelPipe } from '../../../../../../shared/pipes/actor-label.pipe';
@@ -72,8 +71,13 @@ export class Sistemas {
 
   readonly tiposAbierto = signal(false);
   readonly sistemaTipos = signal<Sistema | null>(null);
-  readonly tiposLista = signal<TipoIncidencia[]>([]);
-  readonly cargandoTipos = signal(false);
+  /** Cada apertura cancela la carga anterior: nunca se ven los hijos de otro elemento. */
+  private readonly tipos = new OpcionesDependientes<TipoIncidencia>(
+    (id) => this.sistemasApi.tiposDe(id),
+    'No se pudieron cargar los tipos',
+  );
+  readonly tiposLista = this.tipos.opciones;
+  readonly cargandoTipos = this.tipos.cargando;
 
   private readonly edicionTipo = new EdicionCrud<TipoIncidencia>();
   readonly tipoFormAbierto = this.edicionTipo.formAbierto;
@@ -174,18 +178,9 @@ export class Sistemas {
 
   private cargarTipos(): void {
     const sistema = this.sistemaTipos();
-    if (!sistema) {
-      return;
+    if (sistema) {
+      this.tipos.elegir(sistema.id);
     }
-    this.cargandoTipos.set(true);
-    this.sistemasApi
-      .tiposDe(sistema.id)
-      .pipe(finalize(() => this.cargandoTipos.set(false)))
-      .subscribe({
-        next: (lista) => this.tiposLista.set(lista),
-        error: (err: unknown) =>
-          this.notificaciones.error('No se pudieron cargar los tipos', mensajeDeError(err)),
-      });
   }
 
   abrirTipoCrear(): void {

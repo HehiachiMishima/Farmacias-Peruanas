@@ -6,8 +6,4 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 public interface IncidenciaRepository
         extends JpaRepository<Incidencia, Long>, JpaSpecificationExecutor<Incidencia> {
-
-    boolean existsByTicket(String ticket);
-
-    boolean existsByTicketAndIdNot(String ticket, Long id);
 }

@@ -16,10 +16,7 @@ $salida: cubic-bezier(0.16, 1, 0.3, 1);
 /* ---------------- Base ---------------- */
 .login {
   --l-rojo: #e11d2e;
-  --l-rojo-2: #c4101f;
-  --l-rojo-3: #8e0b16;
   --l-oro: #f7c400;
-  --l-oro-2: #c99a00;
   --l-tinta: #0f1217;
   --l-navy: #15214a;
   --l-tinta-2: #4b5563;
@@ -898,17 +895,6 @@ $salida: cubic-bezier(0.16, 1, 0.3, 1);
   color: var(--l-tinta-3);
 
   ui-icon { color: #7b8794; }
-}
-
-.login__uso {
-  margin: 0;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.26em;
-  text-transform: uppercase;
-  text-align: center;
-  color: #9aa3af;
-  animation: l-aparecer 900ms 900ms ease both;
 }
 
 /* ---------------- Pantallas grandes (2K / 4K) ---------------- */

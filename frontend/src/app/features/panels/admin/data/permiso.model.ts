@@ -21,12 +21,6 @@ export interface PermisoActualizarRequest {
   activo?: boolean;
 }
 
-export interface PermisoFiltro {
-  nombre?: string;
-  descripcion?: string;
-  activo?: boolean;
-}
-
 export interface UsuarioPermisoOverride {
   permisoId: number;
   otorgado: boolean;
@@ -49,11 +43,4 @@ export interface PermisoEfectivo {
   permisoId: number;
   otorgado: boolean;
   origen: 'ROL' | 'OVERRIDE' | string;
-}
-
-/** Fila de v_permisos_finales: permitido = MIN(otorgado) => deny-overrides aplicado. */
-export interface PermisoFinal {
-  usuarioId: number;
-  permisoId: number;
-  permitido: boolean;
 }

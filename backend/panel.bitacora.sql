@@ -19,9 +19,7 @@ CREATE TABLE IF NOT EXISTS data_centro (
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'Fecha y hora exacta de creación (UTC).',
     actualizado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'Fecha y hora de la última modificación (UTC).',
     CONSTRAINT uq_data_centro_centro UNIQUE (centro),
-    INDEX idx_data_centro_creado_en (creado_en, id),
-    INDEX idx_data_centro_actualizado_en (actualizado_en, id),
-    FULLTEXT INDEX ft_data_centro_centro (centro)
+    INDEX idx_data_centro_creado_en (creado_en, id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Catálogo de centros.';
 
 -- ============================================================
@@ -35,9 +33,7 @@ CREATE TABLE IF NOT EXISTS data_sistema (
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'Fecha y hora exacta de creación (UTC).',
     actualizado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'Fecha y hora de la última modificación (UTC).',
     CONSTRAINT uq_data_sistema_sistema UNIQUE (sistema),
-    INDEX idx_data_sistema_creado_en (creado_en, id),
-    INDEX idx_data_sistema_actualizado_en (actualizado_en, id),
-    FULLTEXT INDEX ft_data_sistema_sistema (sistema)
+    INDEX idx_data_sistema_creado_en (creado_en, id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Catálogo de sistemas.';
 
 -- ============================================================
@@ -51,9 +47,7 @@ CREATE TABLE IF NOT EXISTS data_area (
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'Fecha y hora exacta de creación (UTC).',
     actualizado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'Fecha y hora de la última modificación (UTC).',
     CONSTRAINT uq_data_area_area UNIQUE (area),
-    INDEX idx_data_area_creado_en (creado_en, id),
-    INDEX idx_data_area_actualizado_en (actualizado_en, id),
-    FULLTEXT INDEX ft_data_area_area (area)
+    INDEX idx_data_area_creado_en (creado_en, id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Catálogo de áreas.';
 
 -- ============================================================
@@ -70,10 +64,8 @@ CREATE TABLE IF NOT EXISTS data_responsable (
     CONSTRAINT uq_data_responsable_area_responsable UNIQUE (id_data_area, responsable),
     CONSTRAINT uq_data_responsable_id_area UNIQUE (id, id_data_area),
     CONSTRAINT fk_data_responsable_area FOREIGN KEY (id_data_area) REFERENCES data_area (id) ON DELETE RESTRICT ON UPDATE CASCADE,
-    INDEX idx_data_responsable_area_creado_en (id_data_area, creado_en),
-    INDEX idx_data_responsable_creado_en (creado_en, id),
-    INDEX idx_data_responsable_actualizado_en (actualizado_en, id),
-    FULLTEXT INDEX ft_data_responsable_responsable (responsable)
+    INDEX idx_data_responsable_responsable (responsable) COMMENT 'Unicidad global del nombre que valida el backend (WHERE responsable = ?).',
+    INDEX idx_data_responsable_creado_en (creado_en, id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Catálogo de responsables por área.';
 
 -- ============================================================
@@ -90,10 +82,7 @@ CREATE TABLE IF NOT EXISTS data_incidencia (
     CONSTRAINT uq_data_incidencia_sistema_incidencia UNIQUE (id_data_sistema, incidencia),
     CONSTRAINT uq_data_incidencia_id_sistema UNIQUE (id, id_data_sistema),
     CONSTRAINT fk_data_incidencia_sistema FOREIGN KEY (id_data_sistema) REFERENCES data_sistema (id) ON DELETE RESTRICT ON UPDATE CASCADE,
-    INDEX idx_data_incidencia_sistema_creado_en (id_data_sistema, creado_en),
-    INDEX idx_data_incidencia_creado_en (creado_en, id),
-    INDEX idx_data_incidencia_actualizado_en (actualizado_en, id),
-    FULLTEXT INDEX ft_data_incidencia_incidencia (incidencia)
+    INDEX idx_data_incidencia_creado_en (creado_en, id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Catálogo de incidencias por sistema.';
 -- ============================================================
 -- Incidencias con FKs a los catálogos
@@ -144,8 +133,16 @@ CREATE TABLE IF NOT EXISTS incidencias (
         id_data_responsable,
         id_data_area
     ),
-    INDEX idx_incidencias_hora_fin_creado_en (hora_fin, creado_en),
-    INDEX idx_incidencias_creado_en (creado_en),
+    INDEX idx_incidencias_creado_en (creado_en) COMMENT 'Listado sin filtros: ORDER BY creado_en DESC, id DESC (el id va implicito).',
+    INDEX idx_incidencias_analitica (
+        creado_en,
+        id_data_centro,
+        id_data_sistema,
+        id_data_incidencia,
+        id_data_area,
+        id_data_responsable,
+        tiempo_solucion_seg
+    ) COMMENT 'Cubre los agregados del dashboard por rango de fechas sin leer la fila completa.',
     INDEX idx_incidencias_creado_por (creado_por),
     INDEX idx_incidencias_actualizado_por (actualizado_por)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Bitácora de incidencias.';

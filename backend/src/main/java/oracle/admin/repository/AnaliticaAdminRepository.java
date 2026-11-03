@@ -19,15 +19,21 @@ public class AnaliticaAdminRepository {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Tres recorridos en lugar de cinco: usuarios (total y activos juntos),
+     * el anti-join de usuarios sin rol y usuarios_permisos (grants y denies juntos).
+     */
     public Kpis kpis() {
         return jdbc.queryForObject("""
-                SELECT
-                  (SELECT COUNT(*) FROM usuarios) AS usuarios,
-                  (SELECT COUNT(*) FROM usuarios WHERE activo = TRUE) AS usuarios_activos,
-                  (SELECT COUNT(*) FROM usuarios u
-                     WHERE NOT EXISTS (SELECT 1 FROM usuarios_roles ur WHERE ur.usuario_id = u.id)) AS sin_rol,
-                  (SELECT COUNT(*) FROM usuarios_permisos WHERE otorgado = TRUE) AS grants,
-                  (SELECT COUNT(*) FROM usuarios_permisos WHERE otorgado = FALSE) AS denies
+                SELECT u.usuarios, u.usuarios_activos,
+                  (SELECT COUNT(*) FROM usuarios x
+                     WHERE NOT EXISTS (SELECT 1 FROM usuarios_roles ur WHERE ur.usuario_id = x.id)) AS sin_rol,
+                  o.grants, o.denies
+                FROM (SELECT COUNT(*) AS usuarios, COALESCE(SUM(activo = TRUE), 0) AS usuarios_activos
+                      FROM usuarios) u
+                CROSS JOIN (SELECT COALESCE(SUM(otorgado = TRUE), 0) AS grants,
+                                   COALESCE(SUM(otorgado = FALSE), 0) AS denies
+                            FROM usuarios_permisos) o
                 """, (rs, n) -> new Kpis(rs.getLong("usuarios"), rs.getLong("usuarios_activos"),
                 rs.getLong("sin_rol"), rs.getLong("grants"), rs.getLong("denies")));
     }
@@ -41,7 +47,7 @@ public class AnaliticaAdminRepository {
                 JOIN usuarios u ON u.id = v.usuario_id AND u.activo = TRUE
                 WHERE v.permitido = TRUE
                   AND p.nombre IN ('PANEL_ADMIN', 'PANEL_BITACORA', 'PANEL_INBOUND',
-                                   'PANEL_SIMULACION')
+                                   'PANEL_SIMULACION', 'PANEL_MALLA')
                 GROUP BY p.nombre
                 ORDER BY p.nombre
                 """, CONTEO);

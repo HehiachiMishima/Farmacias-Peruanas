@@ -14,7 +14,6 @@ export const CONFIG = {
   rutas: {
     intro: '/intro',
     login: '/login',
-    inicio: '/',
     sinAcceso: '/sin-acceso',
   },
   notificaciones: {

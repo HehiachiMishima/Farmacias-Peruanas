@@ -106,22 +106,24 @@ public class RolPermisoService {
 
     /** Permisos de un rol. */
     public Mono<ApiResponse<List<PermisoResponse>>> listarPorRol(Long rolId) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "RolPermisoService.listarPorRol rolId=" + rolId, () -> {
-                    obtenerRol(rolId);
+        return Mono.fromCallable(() -> Trazas.medir(log, "RolPermisoService.listarPorRol rolId=" + rolId, () -> transacciones.consultar(() -> {
+                    if (!rolRepository.existsById(rolId)) {
+                        throw new RecursoNoEncontradoException("No existe el rol con id " + rolId + ".");
+                    }
                     return rolPermisoRepository.permisosDeRol(rolId).stream().map(PermisoResponse::of).toList();
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Permisos del rol.", lista));
     }
 
     /** Roles que tienen un permiso. */
     public Mono<ApiResponse<List<RolResponse>>> listarPorPermiso(Long permisoId) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "RolPermisoService.listarPorPermiso permisoId=" + permisoId, () -> {
+        return Mono.fromCallable(() -> Trazas.medir(log, "RolPermisoService.listarPorPermiso permisoId=" + permisoId, () -> transacciones.consultar(() -> {
                     if (!permisoRepository.existsById(permisoId)) {
                         throw new RecursoNoEncontradoException("No existe el permiso con id " + permisoId + ".");
                     }
                     return rolPermisoRepository.rolesConPermiso(permisoId).stream().map(RolResponse::of).toList();
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Roles con el permiso.", lista));
     }

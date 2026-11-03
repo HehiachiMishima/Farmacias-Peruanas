@@ -3,7 +3,6 @@ package oracle.admin.controller;
 import jakarta.validation.Valid;
 import oracle.admin.request.UsuarioPermisoOverrideRequest;
 import oracle.common.response.ApiResponse;
-import oracle.admin.response.PermisoResponse;
 import oracle.admin.response.UsuarioPermisoResponse;
 import oracle.admin.service.UsuarioPermisoService;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -33,18 +32,6 @@ public class UsuarioPermisoController {
     @PreAuthorize("hasAuthority('VER_USUARIOS') and hasAuthority('VER_PERMISOS')")
     public Mono<ApiResponse<List<UsuarioPermisoResponse>>> listar(@PathVariable Long usuarioId) {
         return usuarioPermisoService.listarPorUsuario(usuarioId);
-    }
-
-    @GetMapping("/denegados")
-    @PreAuthorize("hasAuthority('VER_USUARIOS') and hasAuthority('VER_PERMISOS')")
-    public Mono<ApiResponse<List<UsuarioPermisoResponse>>> denegados(@PathVariable Long usuarioId) {
-        return usuarioPermisoService.listarDenegados(usuarioId);
-    }
-
-    @GetMapping("/con-override")
-    @PreAuthorize("hasAuthority('VER_USUARIOS') and hasAuthority('VER_PERMISOS')")
-    public Mono<ApiResponse<List<PermisoResponse>>> conOverride(@PathVariable Long usuarioId) {
-        return usuarioPermisoService.permisosConOverride(usuarioId);
     }
 
     @PutMapping

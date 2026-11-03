@@ -4,7 +4,6 @@ import oracle.common.config.Transacciones;
 import oracle.common.security.AutorizacionCache;
 import oracle.common.support.ActorActual;
 import oracle.common.support.Auditoria;
-import oracle.common.support.Filtros;
 import oracle.common.support.Listas;
 import oracle.common.support.Trazas;
 
@@ -13,14 +12,11 @@ import oracle.common.exception.ConflictoException;
 import oracle.common.exception.OperacionNoPermitidaException;
 import oracle.common.exception.RecursoNoEncontradoException;
 import oracle.admin.model.Rol;
-import oracle.admin.repository.RolPermisoRepository;
 import oracle.admin.repository.RolRepository;
 import oracle.admin.request.CambiarEstadoRequest;
 import oracle.admin.request.RolActualizarRequest;
 import oracle.admin.request.RolCrearRequest;
-import oracle.admin.request.RolFiltroRequest;
 import oracle.common.response.ApiResponse;
-import oracle.admin.response.PermisoResponse;
 import oracle.admin.response.RolResponse;
 import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
@@ -34,14 +30,12 @@ public class RolService {
 
     private final AutorizacionCache autorizacionCache;
     private final RolRepository rolRepository;
-    private final RolPermisoRepository rolPermisoRepository;
     private final Transacciones transacciones;
 
-    public RolService(RolRepository rolRepository, RolPermisoRepository rolPermisoRepository,
-            AutorizacionCache autorizacionCache, Transacciones transacciones) {
+    public RolService(RolRepository rolRepository, AutorizacionCache autorizacionCache,
+            Transacciones transacciones) {
         this.autorizacionCache = autorizacionCache;
         this.rolRepository = rolRepository;
-        this.rolPermisoRepository = rolPermisoRepository;
         this.transacciones = transacciones;
     }
 
@@ -54,23 +48,6 @@ public class RolService {
                     })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Roles listados.", lista));
-    }
-
-    public Mono<ApiResponse<List<RolResponse>>> buscar(RolFiltroRequest filtro) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "RolService.buscar", () -> transacciones.consultar(() ->
-                        rolRepository.buscarConFiltros(
-                                        Filtros.normalizar(filtro.nombre()),
-                                        Filtros.normalizar(filtro.descripcion()),
-                                        filtro.activo())
-                                .stream().map(RolResponse::of).toList())))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(lista -> ApiResponse.ok("Roles encontrados.", lista));
-    }
-
-    public Mono<ApiResponse<RolResponse>> obtenerPorId(Long id) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "RolService.obtenerPorId id=" + id, () -> transacciones.consultar(() ->
-                        ApiResponse.ok("Rol encontrado.", RolResponse.of(obtenerRol(id))))))
-                .subscribeOn(Schedulers.boundedElastic());
     }
 
     public Mono<ApiResponse<RolResponse>> crear(RolCrearRequest peticion) {
@@ -143,15 +120,6 @@ public class RolService {
             String mensaje = peticion.activo() ? "Rol activado." : "Rol desactivado.";
             return ApiResponse.ok(mensaje, RolResponse.of(rol));
         }))).subscribeOn(Schedulers.boundedElastic());
-    }
-
-    public Mono<ApiResponse<List<PermisoResponse>>> permisosDeRol(Long rolId) {
-        return Mono.fromCallable(() -> Trazas.medir(log, "RolService.permisosDeRol rolId=" + rolId, () -> transacciones.consultar(() -> {
-                    obtenerRol(rolId);
-                    return rolPermisoRepository.permisosDeRol(rolId).stream().map(PermisoResponse::of).toList();
-                })))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(lista -> ApiResponse.ok("Permisos del rol.", lista));
     }
 
     private Rol obtenerRol(Long id) {

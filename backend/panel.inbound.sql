@@ -15,9 +15,7 @@ CREATE TABLE IF NOT EXISTS data_proveedor (
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'Fecha y hora exacta de creación (UTC).',
     actualizado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'Fecha y hora de la última modificación (UTC).',
     CONSTRAINT uq_data_proveedor_proveedor UNIQUE (proveedor),
-    INDEX idx_data_proveedor_creado_en (creado_en, id),
-    INDEX idx_data_proveedor_actualizado_en (actualizado_en, id),
-    FULLTEXT INDEX ft_data_proveedor_proveedor (proveedor)
+    INDEX idx_data_proveedor_creado_en (creado_en, id) COMMENT 'Listado paginado: ORDER BY creado_en DESC, id DESC.'
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Catálogo de proveedores.';
 
 -- ============================================================
@@ -31,9 +29,7 @@ CREATE TABLE IF NOT EXISTS data_incidencia_inbound (
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'Fecha y hora exacta de creación (UTC).',
     actualizado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)) COMMENT 'Fecha y hora de la última modificación (UTC).',
     CONSTRAINT uq_data_incidencia_inbound_incidencia UNIQUE (incidencia_inbound),
-    INDEX idx_data_incidencia_inbound_creado_en (creado_en, id),
-    INDEX idx_data_incidencia_inbound_actualizado_en (actualizado_en, id),
-    FULLTEXT INDEX ft_data_incidencia_inbound_incidencia (incidencia_inbound)
+    INDEX idx_data_incidencia_inbound_creado_en (creado_en, id) COMMENT 'Listado paginado: ORDER BY creado_en DESC, id DESC.'
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Catálogo de incidencias de inbound.';
 
 -- ============================================================
@@ -61,6 +57,5 @@ CREATE TABLE IF NOT EXISTS incidencias_inbound (
         creado_en
     ),
     INDEX idx_incidencias_inbound_sku (sku_producto),
-    INDEX idx_incidencias_inbound_creado_en (creado_en),
-    INDEX idx_incidencias_inbound_actualizado_en (actualizado_en)
+    INDEX idx_incidencias_inbound_creado_en (creado_en)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Bitácora de incidencias inbound.';

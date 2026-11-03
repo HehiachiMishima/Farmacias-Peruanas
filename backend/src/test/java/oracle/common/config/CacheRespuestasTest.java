@@ -68,6 +68,49 @@ class CacheRespuestasTest {
     }
 
     @Test
+    void invalidarEspacioSoloDescartaSusClaves() {
+        AtomicInteger bitacora = new AtomicInteger();
+        AtomicInteger inbound = new AtomicInteger();
+        CacheRespuestas cache = cache(true);
+
+        cache.obtener("bitacora-analitica:f1", bitacora::incrementAndGet);
+        cache.obtener("inbound-analitica:f1", inbound::incrementAndGet);
+        cache.invalidarEspacio("bitacora-analitica");
+        cache.obtener("bitacora-analitica:f1", bitacora::incrementAndGet);
+        cache.obtener("inbound-analitica:f1", inbound::incrementAndGet);
+
+        assertThat(bitacora.get()).isEqualTo(2);
+        assertThat(inbound.get()).isEqualTo(1);
+    }
+
+    @Test
+    void unCalculoEnCursoNoSobreviveAInvalidarSuEspacio() throws Exception {
+        CacheRespuestas cache = cache(true);
+        AtomicInteger datos = new AtomicInteger(1);
+        CountDownLatch dentro = new CountDownLatch(1);
+        CountDownLatch salida = new CountDownLatch(1);
+
+        CompletableFuture<Integer> lento = CompletableFuture.supplyAsync(() -> cache.obtener("esp:k", () -> {
+            int leido = datos.get();
+            dentro.countDown();
+            try {
+                salida.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return leido;
+        }));
+        assertThat(dentro.await(5, TimeUnit.SECONDS)).isTrue();
+
+        datos.set(2);
+        cache.invalidarEspacio("esp");
+        salida.countDown();
+
+        assertThat(lento.get(5, TimeUnit.SECONDS)).isEqualTo(1);
+        assertThat(cache.obtener("esp:k", datos::get)).isEqualTo(2);
+    }
+
+    @Test
     void deshabilitadaCalculaSiempre() {
         AtomicInteger contador = new AtomicInteger();
         CacheRespuestas cache = cache(false);

@@ -134,18 +134,3 @@ export interface IncidenciaFiltros {
   hasta?: string;
   texto?: string;
 }
-
-export interface GrupoEstadistica {
-  etiqueta: string;
-  count: number;
-  segundos: number;
-}
-
-export interface EstadisticaIncidencia {
-  total: number;
-  segundosTotales: number;
-  sistemas: GrupoEstadistica[];
-  tipos: GrupoEstadistica[];
-  centros: GrupoEstadistica[];
-  areas: GrupoEstadistica[];
-}

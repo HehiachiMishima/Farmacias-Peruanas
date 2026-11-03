@@ -7,14 +7,14 @@ import { IncidenciaFiltros, Responsable } from '../../data/bitacora.model';
 import { AreasApi } from '../../data/areas.api';
 import { BitacoraCatalogos } from '../../state/bitacora-catalogos';
 import { IncidenciasApi } from '../../data/incidencias.api';
-import { BulletChart, ItemBullet } from '../../../../../shared/ui/charts/bullet-chart';
-import { duracion, entero, variacion } from '../../../../../shared/ui/charts/formato';
+import { BulletChart } from '../../../../../shared/ui/charts/bullet-chart';
+import { duracion } from '../../../../../shared/ui/charts/formato';
 import { CeldaCalor, Heatmap } from '../../../../../shared/ui/charts/heatmap';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
-import { ItemRanking, RankingTiles } from '../../../../../shared/ui/charts/ranking-tiles';
-import { RingChart, SegmentoAnillo } from '../../../../../shared/ui/charts/ring-chart';
-import { GrupoApilado, StackedBars } from '../../../../../shared/ui/charts/stacked-bars';
-import { ItemWaffle, WaffleChart } from '../../../../../shared/ui/charts/waffle-chart';
+import { RankingTiles } from '../../../../../shared/ui/charts/ranking-tiles';
+import { RingChart } from '../../../../../shared/ui/charts/ring-chart';
+import { StackedBars, agruparApiladas } from '../../../../../shared/ui/charts/stacked-bars';
+import { WaffleChart } from '../../../../../shared/ui/charts/waffle-chart';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
 import {
@@ -25,6 +25,7 @@ import {
 import { FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros/rango-rapido';
+import { bulletMttr, gruposConMttr, rankingTipos, tarjetasBitacora } from './dashboard.logica';
 
 /**
  * Dashboard Bitácora: sistemas y tipos de incidencia.
@@ -104,103 +105,29 @@ export class DashboardBitacora {
   readonly kpis = computed(() => this.datos()?.kpis ?? null);
   readonly hayDatos = computed(() => (this.kpis()?.total ?? 0) > 0);
 
-  readonly tarjetas = computed(() => {
-    const k = this.kpis();
-    return [
-      {
-        etiqueta: 'Incidencias',
-        valor: k ? entero(k.total) : '—',
-        icono: 'incidencias',
-        color: 'var(--brand)',
-        detalle: 'Registradas en el periodo',
-        variacion: k ? variacion(k.total, k.totalPeriodoAnterior) : null,
-      },
-      {
-        etiqueta: 'Tiempo medio de solución',
-        valor: k ? duracion(k.mttrSegundos) : '—',
-        icono: 'reloj',
-        color: 'var(--accent)',
-        detalle: k ? `MTTR de ${entero(k.resueltas)} resueltas` : '',
-        variacion: null,
-      },
-      {
-        etiqueta: 'Horas invertidas',
-        valor: k ? entero(Math.round(k.segundosSolucion / 3600)) + ' h' : '—',
-        icono: 'activity',
-        color: 'var(--violet)',
-        detalle: 'Suma de tiempos de solución',
-        variacion: null,
-      },
-      {
-        etiqueta: 'Sistemas afectados',
-        valor: k ? entero(k.sistemasAfectados) : '—',
-        icono: 'sistema',
-        color: 'var(--cyan)',
-        detalle: 'Con al menos una incidencia',
-        variacion: null,
-      },
-      {
-        etiqueta: 'Centros afectados',
-        valor: k ? entero(k.centrosAfectados) : '—',
-        icono: 'centro',
-        color: 'var(--success)',
-        detalle: 'Con al menos una incidencia',
-        variacion: null,
-      },
-    ];
-  });
+  readonly tarjetas = computed(() => tarjetasBitacora(this.kpis()));
 
   // ---------------- Gráficos ----------------
   /** Tipos más repetidos, con el sistema al que pertenecen. */
-  readonly rankingTipos = computed<ItemRanking[]>(() =>
-    (this.datos()?.tipos ?? []).map((t) => ({
-      etiqueta: t.tipo,
-      valor: t.total,
-      chip: t.sistema,
-      detalle: `MTTR ${duracion(t.mttrSegundos)}`,
-    })),
-  );
+  readonly rankingTipos = computed(() => rankingTipos(this.datos()?.tipos ?? []));
 
   readonly matriz = computed<CeldaCalor[]>(() => this.datos()?.centroSistema ?? []);
 
   /** Tipos de incidencia dentro de cada sistema. */
-  readonly apiladas = computed<GrupoApilado[]>(() => {
-    const grupos = new Map<string, { nombre: string; valor: number }[]>();
-    for (const t of this.datos()?.tipos ?? []) {
-      const lista = grupos.get(t.sistema) ?? [];
-      lista.push({ nombre: t.tipo, valor: t.total });
-      grupos.set(t.sistema, lista);
-    }
-    return [...grupos.entries()].map(([etiqueta, segmentos]) => ({ etiqueta, segmentos }));
-  });
-
-  readonly anilloCentros = computed<SegmentoAnillo[]>(() =>
-    (this.datos()?.centros ?? []).map((g) => ({
-      etiqueta: g.etiqueta,
-      valor: g.total,
-      detalle: `MTTR ${duracion(g.mttrSegundos)}`,
-    })),
+  readonly apiladas = computed(() =>
+    agruparApiladas(
+      this.datos()?.tipos ?? [],
+      (t) => t.sistema,
+      (t) => ({ nombre: t.tipo, valor: t.total }),
+    ),
   );
 
-  readonly waffleAreas = computed<ItemWaffle[]>(() =>
-    (this.datos()?.areas ?? []).map((g) => ({
-      etiqueta: g.etiqueta,
-      valor: g.total,
-      detalle: `MTTR ${duracion(g.mttrSegundos)}`,
-    })),
-  );
+  readonly anilloCentros = computed(() => gruposConMttr(this.datos()?.centros ?? []));
+
+  readonly waffleAreas = computed(() => gruposConMttr(this.datos()?.areas ?? []));
 
   /** ¿Dónde tardamos más? MTTR por sistema contra el MTTR general. */
-  readonly bulletMttr = computed<ItemBullet[]>(() =>
-    (this.datos()?.sistemas ?? [])
-      .filter((g) => g.mttrSegundos > 0)
-      .map((g) => ({
-        etiqueta: g.etiqueta,
-        valor: g.mttrSegundos,
-        texto: duracion(g.mttrSegundos),
-        detalle: `${entero(g.total)} casos`,
-      })),
-  );
+  readonly bulletMttr = computed(() => bulletMttr(this.datos()?.sistemas ?? []));
 
   readonly mttrGeneral = computed(() => this.kpis()?.mttrSegundos ?? 0);
   readonly mttrGeneralTexto = computed(() => duracion(this.mttrGeneral()));

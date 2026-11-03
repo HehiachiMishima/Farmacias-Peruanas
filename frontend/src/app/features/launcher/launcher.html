@@ -38,7 +38,7 @@
     <section class="launcher__intro">
       <p class="launcher__eyebrow"><ui-icon name="radar" [size]="16" /> {{ fecha }}</p>
       <h1 class="launcher__title">
-        {{ saludo() }}@if (usuario(); as u) {, <span class="launcher__title-name">{{ u.nombre }}</span>}
+        {{ saludo }}@if (usuario(); as u) {, <span class="launcher__title-name">{{ u.nombre }}</span>}
       </h1>
       <p class="launcher__subtitle">
         Selecciona un panel de operación. Tienes acceso a
@@ -47,31 +47,31 @@
     </section>
 
     <div class="launcher__grid">
-      @for (panel of paneles; track panel.id; let i = $index) {
+      @for (t of tarjetas(); track t.panel.id; let i = $index) {
         <button
           type="button"
           class="panel-card"
-          [class.panel-card--locked]="!accesible(panel)"
-          [attr.aria-disabled]="!accesible(panel)"
-          [style.--c]="panel.acento"
+          [class.panel-card--locked]="!t.accesible"
+          [attr.aria-disabled]="!t.accesible"
+          [style.--c]="t.panel.acento"
           [style.--i]="i"
-          (click)="abrir(panel)"
+          (click)="abrir(t.panel, t.accesible)"
         >
           <span class="panel-card__band" aria-hidden="true"></span>
 
           <span class="panel-card__head">
-            <span class="panel-card__icon"><ui-icon [name]="panel.icono" [size]="24" /></span>
-            <span class="panel-card__status" [class.panel-card__status--off]="!accesible(panel)">
-              <ui-icon [name]="accesible(panel) ? 'checkCircleFilled' : 'lock'" [size]="14" />
-              {{ accesible(panel) ? 'Disponible' : 'Bloqueado' }}
+            <span class="panel-card__icon"><ui-icon [name]="t.panel.icono" [size]="24" /></span>
+            <span class="panel-card__status" [class.panel-card__status--off]="!t.accesible">
+              <ui-icon [name]="t.accesible ? 'checkCircleFilled' : 'lock'" [size]="14" />
+              {{ t.accesible ? 'Disponible' : 'Bloqueado' }}
             </span>
           </span>
 
-          <span class="panel-card__name">{{ panel.nombre }}</span>
-          <span class="panel-card__desc">{{ panel.descripcion }}</span>
+          <span class="panel-card__name">{{ t.panel.nombre }}</span>
+          <span class="panel-card__desc">{{ t.panel.descripcion }}</span>
 
           <span class="panel-card__mods">
-            @for (modulo of (accesible(panel) ? modulosDe(panel) : panel.modulos); track modulo.id) {
+            @for (modulo of t.modulos; track modulo.id) {
               <span class="panel-card__mod">
                 <ui-icon [name]="modulo.icono" [size]="13" />
                 {{ modulo.nombre }}
@@ -80,8 +80,8 @@
           </span>
 
           <span class="panel-card__cta">
-            {{ accesible(panel) ? 'Entrar al panel' : 'Solicita acceso al administrador' }}
-            @if (accesible(panel)) {
+            {{ t.accesible ? 'Entrar al panel' : 'Solicita acceso al administrador' }}
+            @if (t.accesible) {
               <ui-icon name="flecha" [size]="16" />
             }
           </span>

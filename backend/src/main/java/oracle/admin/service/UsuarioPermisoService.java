@@ -15,7 +15,6 @@ import oracle.admin.repository.UsuarioPermisoRepository;
 import oracle.admin.repository.UsuarioRepository;
 import oracle.admin.request.UsuarioPermisoOverrideRequest;
 import oracle.common.response.ApiResponse;
-import oracle.admin.response.PermisoResponse;
 import oracle.admin.response.UsuarioPermisoResponse;
 import oracle.common.security.AutorizacionCache;
 import oracle.common.config.Transacciones;
@@ -125,40 +124,14 @@ public class UsuarioPermisoService {
     /** Overrides del usuario (grant y deny). */
     public Mono<ApiResponse<List<UsuarioPermisoResponse>>> listarPorUsuario(Long usuarioId) {
         return Mono.fromCallable(() -> Trazas.medir(log,
-                "UsuarioPermisoService.listarPorUsuario usuarioId=" + usuarioId, () -> {
+                "UsuarioPermisoService.listarPorUsuario usuarioId=" + usuarioId, () -> transacciones.consultar(() -> {
                     obtenerUsuario(usuarioId);
                     return usuarioPermisoRepository.findByUsuarioId(usuarioId).stream()
                             .map(UsuarioPermisoResponse::of)
                             .toList();
-                }))
+                })))
                 .subscribeOn(Schedulers.boundedElastic())
                 .map(lista -> ApiResponse.ok("Overrides del usuario.", lista));
-    }
-
-    /** Solo los overrides deny (otorgado=FALSE). */
-    public Mono<ApiResponse<List<UsuarioPermisoResponse>>> listarDenegados(Long usuarioId) {
-        return Mono.fromCallable(() -> Trazas.medir(log,
-                "UsuarioPermisoService.listarDenegados usuarioId=" + usuarioId, () -> {
-                    obtenerUsuario(usuarioId);
-                    return usuarioPermisoRepository.findByUsuarioIdAndOtorgado(usuarioId, Boolean.FALSE).stream()
-                            .map(UsuarioPermisoResponse::of)
-                            .toList();
-                }))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(lista -> ApiResponse.ok("Overrides denegados del usuario.", lista));
-    }
-
-    /** Permisos (entidad) sobre los que el usuario tiene un override. */
-    public Mono<ApiResponse<List<PermisoResponse>>> permisosConOverride(Long usuarioId) {
-        return Mono.fromCallable(() -> Trazas.medir(log,
-                "UsuarioPermisoService.permisosConOverride usuarioId=" + usuarioId, () -> {
-                    obtenerUsuario(usuarioId);
-                    return usuarioPermisoRepository.findByUsuarioId(usuarioId).stream()
-                            .map(up -> PermisoResponse.of(up.getPermiso()))
-                            .toList();
-                }))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(lista -> ApiResponse.ok("Permisos con override del usuario.", lista));
     }
 
     private Usuario obtenerUsuario(Long id) {

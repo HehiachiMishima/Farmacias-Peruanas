@@ -219,6 +219,12 @@
             />
           </div>
         </div>
+        @if (descuadreDotacionReal(); as d) {
+          <p class="tarjeta__nota tarjeta__nota--aviso">
+            <ui-icon name="alerta" [size]="14" /> Inbound + Outbound + Despacho suman {{ d.suma }},
+            pero el total dice {{ d.total }}.
+          </p>
+        }
       </section>
     </div>
 
@@ -278,7 +284,7 @@
                 <td>
                   <input
                     class="ui-input"
-                    type="time"
+                    appHora24
                     formControlName="inicio"
                     aria-label="Inicio"
                     [class.ui-input--invalid]="
@@ -289,20 +295,27 @@
                 <td>
                   <input
                     class="ui-input"
-                    type="time"
+                    appHora24
                     formControlName="fin"
                     aria-label="Fin"
                     [class.ui-input--invalid]="
-                      turno.controls.fin.touched && turno.controls.fin.invalid
+                      turno.controls.fin.touched &&
+                      (turno.controls.fin.invalid || turno.hasError('mismaHora'))
+                    "
+                    [title]="
+                      turno.hasError('mismaHora') ? 'Inicio y fin no pueden ser iguales' : ''
                     "
                   />
                 </td>
                 <td>
                   <input
                     class="ui-input"
-                    type="time"
+                    appHora24
                     formControlName="refrigerio"
                     aria-label="Refrigerio"
+                    [class.ui-input--invalid]="
+                      turno.controls.refrigerio.touched && turno.controls.refrigerio.invalid
+                    "
                   />
                 </td>
                 <td>
@@ -459,7 +472,7 @@
                 <td>
                   <input
                     class="ui-input"
-                    type="time"
+                    appHora24
                     formControlName="inicio"
                     aria-label="Inicio"
                     [class.ui-input--invalid]="
@@ -468,7 +481,19 @@
                   />
                 </td>
                 <td>
-                  <input class="ui-input" type="time" formControlName="fin" aria-label="Fin" />
+                  <input
+                    class="ui-input"
+                    appHora24
+                    formControlName="fin"
+                    aria-label="Fin"
+                    [class.ui-input--invalid]="
+                      fila.paso.controls.fin.touched &&
+                      (fila.paso.controls.fin.invalid || fila.paso.hasError('mismaHora'))
+                    "
+                    [title]="
+                      fila.paso.hasError('mismaHora') ? 'Inicio y fin no pueden ser iguales' : ''
+                    "
+                  />
                 </td>
                 <td>
                   <input
@@ -572,33 +597,45 @@
                   <td>
                     <input
                       class="ui-input"
-                      type="time"
+                      appHora24
                       formControlName="caidaPedidos"
                       aria-label="Caída de pedidos"
+                      [class.ui-input--invalid]="
+                        ola.controls.caidaPedidos.touched && ola.controls.caidaPedidos.invalid
+                      "
                     />
                   </td>
                   <td>
                     <input
                       class="ui-input"
-                      type="time"
+                      appHora24
                       formControlName="lanzamiento"
                       aria-label="Lanzamiento"
+                      [class.ui-input--invalid]="
+                        ola.controls.lanzamiento.touched && ola.controls.lanzamiento.invalid
+                      "
                     />
                   </td>
                   <td>
                     <input
                       class="ui-input"
-                      type="time"
+                      appHora24
                       formControlName="cierrePicking"
                       aria-label="Cierre de picking"
+                      [class.ui-input--invalid]="
+                        ola.controls.cierrePicking.touched && ola.controls.cierrePicking.invalid
+                      "
                     />
                   </td>
                   <td>
                     <input
                       class="ui-input"
-                      type="time"
+                      appHora24
                       formControlName="despacho"
                       aria-label="Despacho"
+                      [class.ui-input--invalid]="
+                        ola.controls.despacho.touched && ola.controls.despacho.invalid
+                      "
                     />
                   </td>
                   <td class="centro">
@@ -753,7 +790,7 @@
           <ui-icon name="shield" [size]="16" /> Validación de la malla
         </h2>
         <span class="tarjeta__sub"
-          >Reglas evaluadas por el servidor sobre todos los centros guardados</span
+          >Reglas evaluadas por el servidor sobre la malla guardada de este centro</span
         >
       </header>
       <ul class="resumen">
@@ -806,7 +843,7 @@
             @if (reglaAbierta() === regla.id) {
               <div class="regla__cuerpo">
                 <p class="regla__descripcion">{{ regla.descripcion }}</p>
-                @if (puedeModificar()) {
+                @if (puedeConfigurarReglas()) {
                   <div class="regla__ajustes">
                     <label class="regla__activa">
                       <input
@@ -817,14 +854,48 @@
                       Activa
                     </label>
                     @for (p of regla.parametros; track p.clave) {
-                      <label class="regla__parametro">
-                        {{ p.etiqueta }}
-                        <input
-                          class="ui-input"
-                          [value]="p.valor"
-                          (change)="cambiarParametro(regla, p.clave, $event)"
-                        />
-                      </label>
+                      @switch (p.tipo) {
+                        @case ('BOOLEANO') {
+                          <label class="regla__activa">
+                            <input
+                              type="checkbox"
+                              [checked]="p.valor === 'true'"
+                              (change)="
+                                cambiarParametro(regla, p.clave, '' + $any($event.target).checked)
+                              "
+                            />
+                            {{ p.etiqueta }}
+                          </label>
+                        }
+                        @case ('ENTERO') {
+                          <label class="regla__parametro">
+                            {{ p.etiqueta }}
+                            <input
+                              class="ui-input"
+                              type="number"
+                              step="1"
+                              [min]="p.min"
+                              [max]="p.max"
+                              [value]="p.valor"
+                              (change)="cambiarParametro(regla, p.clave, $any($event.target).value)"
+                            />
+                            <small>Entre {{ p.min }} y {{ p.max }}</small>
+                          </label>
+                        }
+                        @default {
+                          <label class="regla__parametro">
+                            {{ p.etiqueta }}
+                            <input
+                              class="ui-input"
+                              [value]="p.valor"
+                              (change)="cambiarParametro(regla, p.clave, $any($event.target).value)"
+                            />
+                            @if (p.tipo === 'LISTA_HORAS') {
+                              <small>Horas HH:mm separadas por coma, en orden de ola</small>
+                            }
+                          </label>
+                        }
+                      }
                     }
                   </div>
                 }
@@ -856,6 +927,25 @@
                 }
               </div>
             }
+          </li>
+        }
+      </ul>
+    </section>
+  }
+
+  @if (historial().length > 0) {
+    <section class="tarjeta historial">
+      <header class="tarjeta__cabecera">
+        <h2 class="tarjeta__titulo"><ui-icon name="reloj" [size]="16" /> Últimos cambios</h2>
+      </header>
+      <ul class="historial__lista">
+        @for (c of historial(); track $index) {
+          <li>
+            <span class="ui-badge ui-badge--neutral">{{ nombreAccion[c.accion] ?? c.accion }}</span>
+            <span class="historial__resumen">{{ c.resumen }}</span>
+            <span class="historial__quien"
+              >{{ quien(c.creadoPor) }} · {{ c.creadoEn | date: 'dd/MM/yyyy HH:mm' }}</span
+            >
           </li>
         }
       </ul>
