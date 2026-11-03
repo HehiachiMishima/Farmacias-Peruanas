@@ -32,9 +32,11 @@ import { Paginador } from '../../../../../shared/ui/paginador/paginador';
 import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import {
+  ESTADOS_REGISTRO,
   PALETA_REGISTROS,
   colorRegistro,
   datosCarga,
+  etiquetaEstado,
   formatearNumero,
   nombreRegistroSugerido,
   problemaArchivoExcel,
@@ -76,15 +78,13 @@ export class SimulacionRegistro {
   readonly tamanoArchivo = tamanoArchivo;
   readonly colorRegistro = colorRegistro;
   readonly formatearNumero = formatearNumero;
+  readonly estado = etiquetaEstado;
 
   readonly busqueda = signal('');
   private readonly busqueda$ = new Subject<string>();
 
-  /** Estado del registro: proyección, balanceado o ambos. */
-  readonly estados = [
-    { id: 'PROYECCION', etiqueta: 'Proyección' },
-    { id: 'BALANCEADO', etiqueta: 'Balanceado' },
-  ] as const;
+  /** Estado del registro: proyección, rutas balanceadas (paso 1) o balanceado (paso 2). */
+  readonly estados = ESTADOS_REGISTRO;
   readonly filtroEstados = signal<string[]>([]);
   readonly filtrosAbierto = signal(false);
 
@@ -112,7 +112,7 @@ export class SimulacionRegistro {
     this.filtroEstados().map((estado) => ({
       clave: `estado:${estado}`,
       etiqueta: 'Estado',
-      valor: estado === 'BALANCEADO' ? 'Balanceado' : 'Proyección',
+      valor: etiquetaEstado(estado),
       icono: 'power',
     })),
   );
@@ -374,10 +374,6 @@ export class SimulacionRegistro {
           this.cargar();
         },
       });
-  }
-
-  estado(estado: string): string {
-    return estado === 'BALANCEADO' ? 'Balanceado' : 'Proyección';
   }
 
   verConfiguracion(registro: ArchivoSimulacion): void {

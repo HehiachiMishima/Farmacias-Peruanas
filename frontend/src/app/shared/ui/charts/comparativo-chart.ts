@@ -5,6 +5,9 @@ export interface GrupoComparativo {
   etiqueta: string;
   antes: number;
   despues: number;
+  /** Texto del valor cuando no es un número representable (p. ej. «Sin operarios»). */
+  textoAntes?: string;
+  textoDespues?: string;
   /** Referencia del grupo (p. ej. límite de horas): se dibuja como línea discontinua. */
   limite?: number;
 }
@@ -130,8 +133,8 @@ export class ComparativoChart {
     const formato = this.formato();
     return this.datos().map((g) => ({
       etiqueta: g.etiqueta,
-      textoAntes: formato(g.antes),
-      textoDespues: formato(g.despues),
+      textoAntes: g.textoAntes ?? formato(g.antes),
+      textoDespues: g.textoDespues ?? formato(g.despues),
       textoLimite: formato(g.limite ?? 0),
       pctAntes: (Math.max(0, g.antes) / max) * 100,
       pctDespues: (Math.max(0, g.despues) / max) * 100,

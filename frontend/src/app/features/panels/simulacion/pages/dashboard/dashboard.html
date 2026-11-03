@@ -2,7 +2,8 @@
   <div>
     <h1 class="page-head__title">Dashboard de simulación</h1>
     <p class="page-head__sub">
-      Resultado del balanceo: cierre de la operación, carga y operarios antes y después.
+      Cada cluster por separado: primero sus rutas y luego sus operarios. Al cerrar el último, el
+      resumen de todas las olas.
     </p>
   </div>
   @if (seleccionado()) {
@@ -68,19 +69,21 @@
   (cerrar)="filtrosAbierto.set(false)"
   (limpiar)="limpiarFiltros()"
 >
-  <section class="filtro-seccion">
-    <h3 class="filtro-seccion__titulo"><ui-icon name="area" [size]="15" /> Clusters</h3>
-    <div class="ui-field">
-      <label class="ui-label" for="dashboard-filtro-clusters">Clusters</label>
-      <ui-select-multiple
-        campoId="dashboard-filtro-clusters"
-        [opciones]="opcionesCluster()"
-        [valores]="filtroClusters()"
-        placeholder="Todos los clusters"
-        (valoresCambia)="setFiltroClusters($event)"
-      />
-    </div>
-  </section>
+  @if (vista() === null) {
+    <section class="filtro-seccion">
+      <h3 class="filtro-seccion__titulo"><ui-icon name="area" [size]="15" /> Clusters</h3>
+      <div class="ui-field">
+        <label class="ui-label" for="dashboard-filtro-clusters">Clusters</label>
+        <ui-select-multiple
+          campoId="dashboard-filtro-clusters"
+          [opciones]="opcionesCluster()"
+          [valores]="filtroClusters()"
+          placeholder="Todos los clusters"
+          (valoresCambia)="setFiltroClusters($event)"
+        />
+      </div>
+    </section>
+  }
 
   <section class="filtro-seccion">
     <h3 class="filtro-seccion__titulo"><ui-icon name="layers" [size]="15" /> Chutes</h3>
@@ -131,7 +134,7 @@
     <ui-empty
       icono="dashboard"
       titulo="Sin ajustes que comparar"
-      mensaje="Este registro sigue en proyección. Define los límites y ejecuta el balanceo (o mueve rutas) para ver el comparativo."
+      mensaje="Este registro sigue en proyección. En Configuración, pulsa «Balancear rutas» en un cluster para ver cómo queda repartida su carga."
     >
       <button
         *hasPermiso="permisos.VER_CONFIGURACION_SIMULACION"
@@ -156,17 +159,50 @@
     </ui-empty>
   </div>
 } @else if (dashboard(); as datos) {
-  <section class="dash-kpis" aria-label="Indicadores del balanceo">
-    @for (tarjeta of tarjetas(); track tarjeta.etiqueta) {
-      <ui-kpi
-        [etiqueta]="tarjeta.etiqueta"
-        [valor]="tarjeta.valor"
-        [icono]="tarjeta.icono"
-        [color]="tarjeta.color"
-        [detalle]="tarjeta.detalle"
-      />
-    }
-  </section>
+  <nav class="dash-vistas" aria-label="Vista del dashboard">
+    <div class="segmento" role="tablist" aria-label="Lanzamiento">
+      @for (ola of datos.olas; track ola.clusterId) {
+        <button
+          type="button"
+          role="tab"
+          class="segmento__opcion"
+          [class.segmento__opcion--activa]="vista() === ola.clusterId"
+          [attr.aria-selected]="vista() === ola.clusterId"
+          [disabled]="ola.estado === 'PENDIENTE'"
+          [title]="ola.cluster + ': ' + estadoCluster(ola.estado)"
+          (click)="elegirVista(ola.clusterId)"
+        >
+          <span
+            class="dash-vistas__punto"
+            [class.dash-vistas__punto--rutas]="ola.estado === 'RUTAS' || ola.estado === 'LISTO'"
+            [class.dash-vistas__punto--listo]="ola.estado === 'CERRADO'"
+            aria-hidden="true"
+          ></span>
+          {{ ola.cluster }}
+        </button>
+      }
+      <button
+        type="button"
+        role="tab"
+        class="segmento__opcion"
+        [class.segmento__opcion--activa]="vista() === null"
+        [attr.aria-selected]="vista() === null"
+        [disabled]="!finalizado()"
+        [title]="finalizado() ? 'Todas las olas juntas' : 'Disponible al cerrar el último cluster'"
+        (click)="elegirVista(null)"
+      >
+        Resumen
+      </button>
+    </div>
+    <span class="dash-vistas__nota">
+      @if (olaActual(); as ola) {
+        {{ ola.cluster }} por separado: primero sus rutas y luego sus operarios.
+      } @else {
+        Resumen de la simulación: todas las olas, una tras otra.
+      }
+    </span>
+  </nav>
+
   @if (filtrosActivos() > 0) {
     <p class="filtro-nota dash-nota-global">
       <ui-icon name="info" [size]="14" />
@@ -178,11 +214,29 @@
       <ui-icon name="alerta" [size]="16" />
       <span>
         <strong>{{ mezcla.chute }}</strong> junta {{ mezcla.clusters.join(' y ') }}, que no pueden
-        compartir chute. Ejecuta el balanceo para separarlos; si no hay otro chute libre, mueve sus
-        rutas desde Configuración.
+        compartir chute. No hubo otro chute libre para separarlos: mueve sus rutas desde
+        Configuración.
       </span>
     </p>
   }
+
+  @if (olaActual(); as ola) {
+    <h2 class="dash-seccion">
+      <ui-icon name="paquete" [size]="18" /> 1 · Rutas de {{ ola.cluster }}
+      <span class="dash-seccion__sub">Reparto por bultos entre sus chutes</span>
+    </h2>
+  }
+  <section class="dash-kpis" [attr.aria-label]="olaActual() ? 'Rutas' : 'Resumen'">
+    @for (tarjeta of tarjetas(); track tarjeta.etiqueta) {
+      <ui-kpi
+        [etiqueta]="tarjeta.etiqueta"
+        [valor]="tarjeta.valor"
+        [icono]="tarjeta.icono"
+        [color]="tarjeta.color"
+        [detalle]="tarjeta.detalle"
+      />
+    }
+  </section>
 
   <div class="dash-grid" [class.dash-grid--cargando]="cargando()">
     <article class="dash-card" [class.dash-card--cargando]="cargando()">
@@ -192,8 +246,12 @@
             <ui-icon name="paquete" [size]="18" /> Carga por chute: antes vs. después
           </h2>
           <p class="dash-card__sub">
-            Cómo cambió la carga de cada chute al mover rutas. Elige la métrica y filtra uno o más
-            chutes para ver sus rutas antes y después.
+            @if (olaActual(); as ola) {
+              Cómo cambió la carga de {{ ola.cluster }} en cada chute al mover sus rutas.
+            } @else {
+              Cómo cambió la carga de cada chute al mover rutas.
+            }
+            Elige la métrica y pulsa un chute para ver sus rutas antes y después.
           </p>
         </div>
         <div class="segmento" role="tablist" aria-label="Métrica de carga">
@@ -251,7 +309,17 @@
           <tbody>
             @for (chute of chutesVisibles(); track chute.chute) {
               <tr>
-                <td class="fuerte">{{ chute.chute }}</td>
+                <td class="fuerte">
+                  <button
+                    type="button"
+                    class="cuadro__chute"
+                    [attr.title]="tituloDetalleChute(chute)"
+                    [attr.aria-label]="tituloDetalleChute(chute)"
+                    (click)="abrirDetalle(chute)"
+                  >
+                    {{ chute.chute }}
+                  </button>
+                </td>
                 @for (m of metricas; track m.id) {
                   <td class="num u-muted" [class.cuadro__col--activa]="metrica() === m.id">
                     {{ formatearNumero(m.antes(chute), m.decimales) }}
@@ -282,7 +350,7 @@
           </tfoot>
         </table>
       </div>
-      @if (filtroClusters().length > 0) {
+      @if (vista() === null && filtroClusters().length > 0) {
         <p class="filtro-nota cuadro__nota">
           <ui-icon name="info" [size]="14" />
           Con filtro de cluster se listan los chutes que lo atienden, con toda su carga (también la
@@ -290,122 +358,353 @@
         </p>
       }
     </article>
+  </div>
 
-    @if (demasiadosChutes()) {
-      <p class="filtro-nota">
-        <ui-icon name="info" [size]="14" />
-        Elegiste {{ formatearNumero(chutesDetalle().length) }} chutes: el detalle de rutas admite
-        hasta {{ maxChutesDetalle }} a la vez. Quita algunos del filtro para verlo.
+  @if (olaActual(); as ola) {
+    <h2 class="dash-seccion">
+      <ui-icon name="usuarios" [size]="18" /> 2 · Operarios de {{ ola.cluster }}
+      <span class="dash-seccion__sub">
+        {{
+          olaPrevia()
+            ? 'El equipo llega de ' + olaPrevia() + ' y se reacomoda'
+            : 'Primera ola: el equipo empieza aquí'
+        }}
+      </span>
+    </h2>
+    @if (operariosListos()) {
+      <section class="dash-kpis" aria-label="Operarios">
+        @for (tarjeta of tarjetasOperarios(); track tarjeta.etiqueta) {
+          <ui-kpi
+            [etiqueta]="tarjeta.etiqueta"
+            [valor]="tarjeta.valor"
+            [icono]="tarjeta.icono"
+            [color]="tarjeta.color"
+            [detalle]="tarjeta.detalle"
+          />
+        }
+      </section>
+      <div class="dash-grid" [class.dash-grid--cargando]="cargando()">
+        <article class="dash-card" [class.dash-card--cargando]="cargando()">
+          <header class="dash-card__head">
+            <div class="dash-card__titulos">
+              <h2 class="dash-card__titulo">
+                <ui-icon name="usuarios" [size]="18" /> Operarios por chute: recibidos vs. asignados
+              </h2>
+              <p class="dash-card__sub">
+                @if (olaPrevia(); as previa) {
+                  Recibidos: los que cada chute tenía al terminar {{ previa }}. Asignados: los que
+                  quedaron tras reacomodar el equipo para que {{ olaActual()?.cluster }} cumpla su
+                  límite. El tiempo «recibido» es el de la ola si nadie se moviera.
+                } @else {
+                  Es la primera ola: el equipo empieza aquí, sin dotación previa.
+                }
+              </p>
+            </div>
+          </header>
+          <div class="dash-card__body">
+            @if (gruposOperarios().length > 0) {
+              <ui-comparativo
+                [datos]="gruposOperarios()"
+                [formato]="formatoCarga"
+                [etiquetaAntes]="olaPrevia() ? 'Al terminar ' + olaPrevia() : 'Sin ola anterior'"
+                etiquetaDespues="Asignados"
+                color="var(--violet)"
+                [altura]="280"
+              />
+            } @else {
+              <div class="dash-card__vacio">Sin chutes para comparar.</div>
+            }
+          </div>
+
+          <div class="dash-tabla-wrap cuadro dash-tabla-wrap--scroll">
+            <table class="dash-tabla cuadro__tabla">
+              <thead>
+                <tr>
+                  <th rowspan="2">Chute</th>
+                  <th colspan="3" class="cuadro__grupo">Operarios</th>
+                  <th colspan="2" class="cuadro__grupo">Tiempo en la ola</th>
+                </tr>
+                <tr>
+                  <th class="num">Recibidos</th>
+                  <th class="num">Asignados</th>
+                  <th class="num">Diferencia</th>
+                  <th class="num">Sin mover gente</th>
+                  <th class="num">Asignados</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (chute of chutesVisibles(); track chute.chute) {
+                  <tr>
+                    <td class="fuerte">{{ chute.chute }}</td>
+                    <td class="num u-muted">{{ formatearNumero(chute.operariosOriginal) }}</td>
+                    <td class="num fuerte">{{ formatearNumero(chute.operariosBalanceado) }}</td>
+                    <td
+                      class="num"
+                      [class]="
+                        claseVariacion(chute.operariosOriginal, chute.operariosBalanceado, false)
+                      "
+                    >
+                      {{ diferencia(chute.operariosOriginal, chute.operariosBalanceado) }}
+                    </td>
+                    <td class="num u-muted">{{ formatearHoras(chute.tiempoOriginal) }}</td>
+                    <td class="num">
+                      <span class="fuerte">{{ formatearHoras(chute.tiempoBalanceado) }}</span>
+                      <span
+                        class="cuadro__delta"
+                        [class]="claseVariacion(chute.tiempoOriginal, chute.tiempoBalanceado, true)"
+                      >
+                        {{ variacion(chute.tiempoOriginal, chute.tiempoBalanceado) }}
+                      </span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td class="fuerte">Total</td>
+                  <td class="num">{{ formatearNumero(totalOperarios().antes) }}</td>
+                  <td class="num fuerte">{{ formatearNumero(totalOperarios().despues) }}</td>
+                  <td class="num">
+                    {{ diferencia(totalOperarios().antes, totalOperarios().despues) }}
+                  </td>
+                  <td colspan="2"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </article>
+        @if (datos.flujoOperarios.length > 0) {
+          <article class="dash-card" [class.dash-card--cargando]="cargando()">
+            <header class="dash-card__head">
+              <div class="dash-card__titulos">
+                <h2 class="dash-card__titulo">
+                  <ui-icon name="usuarios" [size]="18" /> Paso del equipo desde {{ olaPrevia() }}
+                </h2>
+                <p class="dash-card__sub">
+                  Quiénes siguen en su chute, quiénes salen de uno y quiénes llegan a otro al pasar
+                  de {{ olaPrevia() }} a {{ olaActual()?.cluster }}.
+                </p>
+              </div>
+              @if (operariosEntreOlas() > 0) {
+                <span class="flujo-total">
+                  {{ formatearNumero(operariosEntreOlas()) }} operario(s) cambian de chute
+                </span>
+              }
+            </header>
+            <div class="flujo-olas">
+              @for (paso of datos.flujoOperarios; track paso.origenId) {
+                <section class="flujo-ola" [attr.aria-label]="paso.origen + ' a ' + paso.destino">
+                  <h3 class="flujo-ola__titulo">
+                    {{ paso.origen }} <ui-icon name="flecha" [size]="14" /> {{ paso.destino }}
+                  </h3>
+                  <ul class="flujo-ola__resumen">
+                    <li class="flujo-dato flujo-dato--quedan">
+                      <strong>{{ formatearNumero(paso.quedan) }}</strong> se quedan
+                    </li>
+                    <li class="flujo-dato flujo-dato--salen">
+                      <strong>{{ formatearNumero(paso.salen) }}</strong> salen
+                    </li>
+                    <li class="flujo-dato flujo-dato--llegan">
+                      <strong>{{ formatearNumero(paso.llegan) }}</strong> llegan
+                    </li>
+                  </ul>
+                  <div class="dash-tabla-wrap cuadro">
+                    <table class="dash-tabla cuadro__tabla">
+                      <thead>
+                        <tr>
+                          <th>Chute</th>
+                          <th class="num">En {{ paso.origen }}</th>
+                          <th class="num">En {{ paso.destino }}</th>
+                          <th>Movimiento</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (chute of paso.chutes; track chute.chuteId) {
+                          <tr>
+                            <td class="fuerte">{{ chute.chute }}</td>
+                            <td class="num u-muted">{{ formatearNumero(chute.antes) }}</td>
+                            <td class="num fuerte">{{ formatearNumero(chute.despues) }}</td>
+                            <td>
+                              <span
+                                class="flujo-mov"
+                                [class.flujo-mov--salen]="chute.despues < chute.antes"
+                                [class.flujo-mov--llegan]="chute.despues > chute.antes"
+                              >
+                                {{ movimientoOperarios(chute) }}
+                              </span>
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              }
+            </div>
+          </article>
+        }
+      </div>
+    } @else {
+      <p class="dash-paso" role="status">
+        <ui-icon name="info" [size]="16" />
+        <span>
+          <strong>Operarios pendientes:</strong> asigna los operarios de {{ ola.cluster }} en
+          Configuración (paso 2). Sus rutas ya están balanceadas.
+        </span>
+        <button
+          *hasPermiso="permisos.VER_CONFIGURACION_SIMULACION"
+          type="button"
+          class="ui-btn ui-btn--secondary ui-btn--sm"
+          (click)="irAConfiguracion()"
+        >
+          Ir a Configuración
+        </button>
       </p>
-    } @else if (chutesDetalle().length > 0) {
-      <article class="dash-card">
+    }
+  } @else {
+    <div class="dash-grid" [class.dash-grid--cargando]="cargando()">
+      <article class="dash-card" [class.dash-card--cargando]="cargando()">
         <header class="dash-card__head">
           <div class="dash-card__titulos">
             <h2 class="dash-card__titulo">
-              <ui-icon name="layers" [size]="18" /> Rutas de {{ tituloDetalle() }}: antes vs.
-              después
+              <ui-icon name="reloj" [size]="18" /> Cierre de cada ola
             </h2>
             <p class="dash-card__sub">
-              Las rutas que tenían al cargar el Excel y las que tienen tras el balanceo, agrupadas
-              por cluster.
+              Las olas se trabajan una tras otra con el mismo equipo, así que el cierre total es la
+              suma de sus tiempos.
             </p>
           </div>
         </header>
-        <div class="dash-card__body">
-          @if (chutesOcultos().length > 0) {
-            <p class="filtro-nota">
-              <ui-icon name="info" [size]="14" />
-              {{ chutesOcultos().join(', ') }} no atiende(n) los clusters filtrados; no se
-              incluye(n).
-            </p>
-          }
-          <app-simulacion-detalle-chute
-            [registroId]="seleccionado()"
-            [chutes]="chutesDetalle()"
-            [clusters]="datos.clusters"
-            [movimientos]="datos.movimientos"
-          />
+
+        <div class="dash-tabla-wrap cuadro">
+          <table class="dash-tabla cuadro__tabla">
+            <thead>
+              <tr>
+                <th>Cluster</th>
+                <th class="num">Cierre</th>
+                <th class="num">Límite</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (cluster of clustersVisibles(); track cluster.cluster) {
+                <tr>
+                  <td class="fuerte">{{ cluster.cluster }}</td>
+                  <td class="num fuerte">{{ formatearHoras(cluster.tiempoBalanceado) }}</td>
+                  <td class="num">
+                    {{ cluster.limiteHoras > 0 ? formatearHoras(cluster.limiteHoras) : '—' }}
+                  </td>
+                  <td>
+                    @if (cluster.tiempoBalanceado === null) {
+                      <span class="ui-badge ui-badge--danger">Sin operarios</span>
+                    } @else if (cluster.limiteHoras > 0) {
+                      <span
+                        class="ui-badge"
+                        [class.ui-badge--danger]="cluster.excede"
+                        [class.ui-badge--success]="!cluster.excede"
+                      >
+                        {{ cluster.excede ? 'Excede' : 'Cumple' }}
+                      </span>
+                    } @else {
+                      <span class="ui-badge ui-badge--neutral">Sin límite</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
         </div>
       </article>
-    } @else if (chutesOcultos().length > 0) {
-      <p class="filtro-nota">
-        <ui-icon name="info" [size]="14" />
-        Los chutes elegidos no atienden los clusters filtrados: quita un filtro para ver sus rutas.
-      </p>
-    }
-
-    <article class="dash-card" [class.dash-card--cargando]="cargando()">
-      <header class="dash-card__head">
-        <div class="dash-card__titulos">
-          <h2 class="dash-card__titulo">
-            <ui-icon name="reloj" [size]="18" /> Tiempo de cierre por cluster: antes vs. después
-          </h2>
-          <p class="dash-card__sub">
-            Horas que tarda cada cluster en cerrar; la línea discontinua marca su límite.
-          </p>
-        </div>
-      </header>
-      <div class="dash-card__body">
-        @if (gruposCluster().length > 0) {
-          <ui-comparativo
-            [datos]="gruposCluster()"
-            [formato]="formatearHoras"
-            etiquetaAntes="Antes del balanceo"
-            etiquetaDespues="Después del balanceo"
-            color="var(--success)"
-            [altura]="300"
-            [anchoGrupo]="96"
-          />
+      <article class="dash-card" [class.dash-card--cargando]="cargando()">
+        <header class="dash-card__head">
+          <div class="dash-card__titulos">
+            <h2 class="dash-card__titulo">
+              <ui-icon name="usuarios" [size]="18" /> Flujo de operarios entre olas
+            </h2>
+            <p class="dash-card__sub">
+              El mismo equipo pasa de una ola a la siguiente: se quedan los que siguen en su chute;
+              los demás salen de un chute o llegan a otro.
+            </p>
+          </div>
+          @if (operariosEntreOlas() > 0) {
+            <span class="flujo-total">
+              {{ formatearNumero(operariosEntreOlas()) }} operario(s) cambian de chute
+            </span>
+          }
+        </header>
+        @if (datos.flujoOperarios.length === 0) {
+          <div class="dash-card__vacio">Con una sola ola no hay paso de gente entre olas.</div>
         } @else {
-          <div class="dash-card__vacio">Sin clusters para comparar.</div>
-        }
-      </div>
-
-      <div class="dash-tabla-wrap cuadro">
-        <table class="dash-tabla cuadro__tabla">
-          <thead>
-            <tr>
-              <th>Cluster</th>
-              <th class="num">Antes</th>
-              <th class="num">Después</th>
-              <th class="num">Variación</th>
-              <th class="num">Límite</th>
-              <th>Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (cluster of clustersVisibles(); track cluster.cluster) {
-              <tr>
-                <td class="fuerte">{{ cluster.cluster }}</td>
-                <td class="num u-muted">{{ formatearHoras(cluster.tiempoOriginal) }}</td>
-                <td class="num fuerte">{{ formatearHoras(cluster.tiempoBalanceado) }}</td>
-                <td
-                  class="num"
-                  [class]="claseVariacion(cluster.tiempoOriginal, cluster.tiempoBalanceado, true)"
-                >
-                  {{ variacion(cluster.tiempoOriginal, cluster.tiempoBalanceado) }}
-                </td>
-                <td class="num">
-                  {{ cluster.limiteHoras > 0 ? formatearHoras(cluster.limiteHoras) : '—' }}
-                </td>
-                <td>
-                  @if (cluster.limiteHoras > 0) {
-                    <span
-                      class="ui-badge"
-                      [class.ui-badge--danger]="cluster.excede"
-                      [class.ui-badge--success]="!cluster.excede"
-                    >
-                      {{ cluster.excede ? 'Excede' : 'Cumple' }}
-                    </span>
-                  } @else {
-                    <span class="ui-badge ui-badge--neutral">Sin límite</span>
-                  }
-                </td>
-              </tr>
+          <div class="flujo-olas">
+            @for (paso of datos.flujoOperarios; track paso.origenId) {
+              <section class="flujo-ola" [attr.aria-label]="paso.origen + ' a ' + paso.destino">
+                <h3 class="flujo-ola__titulo">
+                  {{ paso.origen }} <ui-icon name="flecha" [size]="14" /> {{ paso.destino }}
+                </h3>
+                <ul class="flujo-ola__resumen">
+                  <li class="flujo-dato flujo-dato--quedan">
+                    <strong>{{ formatearNumero(paso.quedan) }}</strong> se quedan
+                  </li>
+                  <li class="flujo-dato flujo-dato--salen">
+                    <strong>{{ formatearNumero(paso.salen) }}</strong> salen
+                  </li>
+                  <li class="flujo-dato flujo-dato--llegan">
+                    <strong>{{ formatearNumero(paso.llegan) }}</strong> llegan
+                  </li>
+                </ul>
+                <div class="dash-tabla-wrap cuadro">
+                  <table class="dash-tabla cuadro__tabla">
+                    <thead>
+                      <tr>
+                        <th>Chute</th>
+                        <th class="num">En {{ paso.origen }}</th>
+                        <th class="num">En {{ paso.destino }}</th>
+                        <th>Movimiento</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (chute of paso.chutes; track chute.chuteId) {
+                        <tr>
+                          <td class="fuerte">{{ chute.chute }}</td>
+                          <td class="num u-muted">{{ formatearNumero(chute.antes) }}</td>
+                          <td class="num fuerte">{{ formatearNumero(chute.despues) }}</td>
+                          <td>
+                            <span
+                              class="flujo-mov"
+                              [class.flujo-mov--salen]="chute.despues < chute.antes"
+                              [class.flujo-mov--llegan]="chute.despues > chute.antes"
+                            >
+                              {{ movimientoOperarios(chute) }}
+                            </span>
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             }
-          </tbody>
-        </table>
-      </div>
-    </article>
-  </div>
+          </div>
+        }
+      </article>
+    </div>
+  }
+
+  <ui-modal
+    [abierto]="detalleChute() !== null"
+    ancho="xxl"
+    [titulo]="tituloDetalle()"
+    [subtitulo]="subtituloDetalle"
+    (cerrar)="cerrarDetalle()"
+  >
+    @if (detalleChute()) {
+      <app-simulacion-detalle-chute
+        [registroId]="seleccionado()"
+        [chutes]="chutesModal()"
+        [clusters]="datos.clusters"
+        [movimientos]="datos.movimientos"
+        [clusterFijo]="vista()"
+      />
+    }
+  </ui-modal>
 }

@@ -23,20 +23,26 @@
       } @else if (c.mezclaOriginal) {
         <span class="ui-badge ui-badge--success">CL1 y CL2 separados</span>
       }
-      <span
-        class="ui-badge"
-        [class.ui-badge--success]="c.estado === 'MEJORO'"
-        [class.ui-badge--danger]="c.estado === 'AUMENTO'"
-        [class.ui-badge--neutral]="c.estado !== 'MEJORO' && c.estado !== 'AUMENTO'"
-      >
-        {{
-          c.estado === 'MEJORO'
-            ? 'Tiempo mejoró'
-            : c.estado === 'AUMENTO'
-              ? 'Tiempo aumentó'
-              : 'Tiempo sin cambios'
-        }}
-      </span>
+      @if (c.tiempoBalanceado === null) {
+        <span class="ui-badge ui-badge--neutral" title="Asigna operarios para calcular el tiempo">
+          Sin operarios
+        </span>
+      } @else {
+        <span
+          class="ui-badge"
+          [class.ui-badge--success]="c.estado === 'MEJORO'"
+          [class.ui-badge--danger]="c.estado === 'AUMENTO'"
+          [class.ui-badge--neutral]="c.estado !== 'MEJORO' && c.estado !== 'AUMENTO'"
+        >
+          {{
+            c.estado === 'MEJORO'
+              ? 'Tiempo mejoró'
+              : c.estado === 'AUMENTO'
+                ? 'Tiempo aumentó'
+                : 'Tiempo sin cambios'
+          }}
+        </span>
+      }
     </li>
   }
 </ul>
@@ -48,26 +54,11 @@
       mezclados()
         .map((c) => c.chute)
         .join(', ')
-    }}. Ejecuta el balanceo para separarlos; si no hay otro chute libre, mueve sus rutas desde
-    Configuración.
+    }}. No hubo otro chute libre para separarlos: mueve sus rutas desde Configuración.
   </p>
 }
 
-<section class="rc-resumen" aria-label="Resumen de los chutes elegidos">
-  <div class="rc-indicadores">
-    @for (ind of indicadores(); track ind.etiqueta) {
-      <article class="rc-indicador">
-        <span class="rc-indicador__etiqueta">{{ ind.etiqueta }}</span>
-        <div class="rc-indicador__valores">
-          <span class="rc-indicador__antes" title="Antes del balanceo">{{ ind.antes }}</span>
-          <ui-icon name="flecha" [size]="14" />
-          <span class="rc-indicador__despues" title="Después del balanceo">{{ ind.despues }}</span>
-        </div>
-        <span class="rc-delta" [class]="'rc-delta--' + ind.tono">{{ ind.variacion }}</span>
-      </article>
-    }
-  </div>
-
+<section class="rc-resumen" aria-label="Flujo de rutas de los chutes elegidos">
   @if (flujo(); as f) {
     <article class="rc-flujo" aria-label="Flujo de rutas de los chutes elegidos">
       <h3 class="rc-flujo__titulo">Flujo de rutas</h3>
@@ -160,17 +151,19 @@
       <option value="B2B">B2B</option>
     </select>
   </div>
-  <div class="rc-filtros__campo">
-    <label class="ui-label" for="rc-cluster">Cluster</label>
-    <ui-select-buscable
-      campoId="rc-cluster"
-      [limpiable]="true"
-      [opciones]="opcionesCluster()"
-      [valor]="clusterId()"
-      placeholder="Todos los clusters"
-      (valorCambia)="setCluster($event)"
-    />
-  </div>
+  @if (clusterFijo() === null) {
+    <div class="rc-filtros__campo">
+      <label class="ui-label" for="rc-cluster">Cluster</label>
+      <ui-select-buscable
+        campoId="rc-cluster"
+        [limpiable]="true"
+        [opciones]="opcionesCluster()"
+        [valor]="clusterId()"
+        placeholder="Todos los clusters"
+        (valorCambia)="setCluster($event)"
+      />
+    </div>
+  }
   <label class="rc-filtros__check">
     <input
       type="checkbox"
@@ -209,7 +202,9 @@
             {{ lado.lado === 'ANTES' ? 'Al cargar el Excel' : 'Tras balancear' }}
             @if (lado.resumen(); as r) {
               · {{ formatearNumero(r.rutas) }} rutas ({{ formatearNumero(r.rutasB2c) }} B2C ·
-              {{ formatearNumero(r.rutasB2b) }} B2B) · {{ formatearNumero(r.bultos, 2) }} bultos
+              {{ formatearNumero(r.rutasB2b) }} B2B) · {{ formatearNumero(r.bultos, 2) }} bultos ·
+              {{ formatearNumero(r.unidades, 2) }} unidades ·
+              {{ formatearNumero(r.lineas, 2) }} líneas · {{ formatearNumero(r.cod) }} COD
             }
           </p>
         </div>
@@ -260,6 +255,9 @@
                     <th>Chute</th>
                   }
                   <th class="num">Bultos</th>
+                  <th class="num">Unidades</th>
+                  <th class="num">Líneas</th>
+                  <th class="num">COD</th>
                   <th>Movimiento</th>
                 </tr>
               </thead>
@@ -267,7 +265,7 @@
                 @for (ruta of pagina.contenido; track ruta.id; let i = $index) {
                   @if (iniciaGrupo(pagina.contenido, i)) {
                     <tr class="rc-tabla__grupo">
-                      <th [attr.colspan]="varios() ? 6 : 5" scope="rowgroup">
+                      <th [attr.colspan]="varios() ? 9 : 8" scope="rowgroup">
                         {{ ruta.cluster }}
                       </th>
                     </tr>
@@ -291,6 +289,9 @@
                       </td>
                     }
                     <td class="num">{{ formatearNumero(ruta.totalBultos, 2) }}</td>
+                    <td class="num">{{ formatearNumero(ruta.totalUnidades, 2) }}</td>
+                    <td class="num">{{ formatearNumero(ruta.totalLineas, 2) }}</td>
+                    <td class="num">{{ formatearNumero(ruta.conteoCod, 0) }}</td>
                     <td>
                       <span class="rc-mov" [class]="'rc-mov--' + mov.tipo">{{ mov.texto }}</span>
                       @if (mov.separa) {

@@ -9,6 +9,8 @@ import java.time.Instant;
  */
 public record HistorialSimulacionResponse(
     Long id,
+    /** Lanzamiento que hizo el cambio; null = movimiento manual o de una versión anterior. */
+    Long lanzamientoId,
     String tipoAccion,
     /** BALANCEO, SEPARACION (CL1 y CL2) o MANUAL. */
     String motivo,
@@ -20,7 +22,10 @@ public record HistorialSimulacionResponse(
     String chuteOrigen,
     String chuteDestino,
     String chuteModificado,
-    /** Operarios después de la acción en el chute de origen y en el de destino o modificado. */
+    /**
+     * MOVER_RUTA: operarios de origen y destino; ASIGNAR_OPERARIOS: los del
+     * chute en la ola antes y después.
+     */
     Integer operariosOrigen,
     Integer operariosDestino,
     Instant creadoEn,

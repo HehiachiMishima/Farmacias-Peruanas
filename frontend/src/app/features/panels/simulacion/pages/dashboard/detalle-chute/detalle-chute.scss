@@ -61,96 +61,9 @@
   border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border));
 }
 
-/* Resumen: cuatro indicadores antes → después y el flujo de rutas. */
+/* Resumen: el flujo de rutas del chute (antes y después con la misma escala). */
 .rc-resumen {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-4);
   margin-bottom: var(--space-5);
-
-  @include bp.up(lg) {
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  }
-}
-
-.rc-indicadores {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
-
-  @include bp.up(md) {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-.rc-indicador {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-
-  &__etiqueta {
-    font-size: var(--fs-xs);
-    font-weight: 700;
-    color: var(--text-3);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  &__valores {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 6px;
-    color: var(--text-3);
-    font-variant-numeric: tabular-nums;
-  }
-
-  &__antes {
-    font-size: var(--fs-sm);
-    font-weight: 600;
-  }
-
-  &__despues {
-    font-size: 1.35rem;
-    font-weight: 800;
-    line-height: 1.1;
-    color: var(--text);
-  }
-}
-
-.rc-delta {
-  align-self: flex-start;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  color: var(--text-3);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  font-variant-numeric: tabular-nums;
-
-  &--cambio {
-    color: var(--info);
-    background: var(--info-soft);
-    border-color: color-mix(in srgb, var(--info) 28%, var(--border));
-  }
-
-  &--mejora {
-    color: var(--success);
-    background: color-mix(in srgb, var(--success) 10%, transparent);
-    border-color: color-mix(in srgb, var(--success) 28%, var(--border));
-  }
-
-  &--empeora {
-    color: var(--danger);
-    background: color-mix(in srgb, var(--danger) 10%, transparent);
-    border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
-  }
 }
 
 /* Flujo: dos barras con la misma escala (se quedaron + salieron / + llegaron). */
@@ -416,6 +329,14 @@
     position: sticky;
     top: 0;
     z-index: 1;
+  }
+
+  /* Ocho columnas (ruta, tipo, cluster, bultos, unidades, líneas, COD, movimiento)
+     en media pantalla: menos relleno para que quepan sin desplazar la tabla. */
+  th,
+  td {
+    padding-left: 10px;
+    padding-right: 10px;
   }
 
   /* Encabezado de grupo: las rutas de cada cluster se leen por separado. */

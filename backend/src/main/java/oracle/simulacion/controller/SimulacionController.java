@@ -10,6 +10,7 @@ import oracle.common.response.ApiResponse;
 import oracle.common.response.PaginaResponse;
 import oracle.simulacion.model.TipoRuta;
 import oracle.simulacion.request.ConfiguracionActualizarRequest;
+import oracle.simulacion.request.FaseBalanceo;
 import oracle.simulacion.request.LadoChute;
 import oracle.simulacion.request.Limites;
 import oracle.simulacion.request.MoverRutaRequest;
@@ -18,7 +19,7 @@ import oracle.simulacion.response.ArchivoSimulacionResponse;
 import oracle.simulacion.response.BalanceoResponse;
 import oracle.simulacion.response.ConfiguracionSimulacionResponse;
 import oracle.simulacion.response.DashboardSimulacionResponse;
-import oracle.simulacion.response.HistorialSimulacionResponse;
+import oracle.simulacion.response.HistorialRegistroResponse;
 import oracle.simulacion.response.RutaSimulacionResponse;
 import oracle.simulacion.response.RutasDashboardResponse;
 import oracle.simulacion.service.SimulacionConfiguracionService;
@@ -160,10 +161,19 @@ public class SimulacionController {
     return configuracionService.mover(id, rutaId, req);
   }
 
-  @PostMapping("/registros/{id}/balancear")
+  /** Lanza un cluster: paso 1 (RUTAS) o paso 2 (OPERARIOS) de su ola. */
+  @PostMapping("/registros/{id}/clusters/{clusterId}/balancear")
   @PreAuthorize("hasAuthority('MODIFICAR_CONFIGURACION_SIMULACION')")
-  public Mono<ApiResponse<BalanceoResponse>> balancear(@PathVariable Long id) {
-    return configuracionService.balancear(id);
+  public Mono<ApiResponse<BalanceoResponse>> balancear(
+      @PathVariable Long id, @PathVariable Long clusterId, @RequestParam FaseBalanceo fase) {
+    return configuracionService.balancear(id, clusterId, fase);
+  }
+
+  @PostMapping("/registros/{id}/clusters/{clusterId}/restablecer")
+  @PreAuthorize("hasAuthority('MODIFICAR_CONFIGURACION_SIMULACION')")
+  public Mono<ApiResponse<ConfiguracionSimulacionResponse>> restablecerCluster(
+      @PathVariable Long id, @PathVariable Long clusterId) {
+    return configuracionService.restablecerCluster(id, clusterId);
   }
 
   @PostMapping("/registros/{id}/restablecer")
@@ -172,16 +182,34 @@ public class SimulacionController {
     return configuracionService.restablecer(id);
   }
 
+  /** Cierra el cluster en curso: el equipo pasa al siguiente con esta dotación. */
+  @PostMapping("/registros/{id}/clusters/{clusterId}/cerrar")
+  @PreAuthorize("hasAuthority('MODIFICAR_CONFIGURACION_SIMULACION')")
+  public Mono<ApiResponse<ConfiguracionSimulacionResponse>> cerrar(
+      @PathVariable Long id, @PathVariable Long clusterId) {
+    return configuracionService.cerrar(id, clusterId);
+  }
+
+  /** Reabre un cluster cerrado; los siguientes vuelven a la proyección. */
+  @PostMapping("/registros/{id}/clusters/{clusterId}/reabrir")
+  @PreAuthorize("hasAuthority('MODIFICAR_CONFIGURACION_SIMULACION')")
+  public Mono<ApiResponse<ConfiguracionSimulacionResponse>> reabrir(
+      @PathVariable Long id, @PathVariable Long clusterId) {
+    return configuracionService.reabrir(id, clusterId);
+  }
+
   @GetMapping("/registros/{id}/historial")
   @PreAuthorize("hasAuthority('VER_CONFIGURACION_SIMULACION')")
-  public Mono<ApiResponse<List<HistorialSimulacionResponse>>> historial(@PathVariable Long id) {
+  public Mono<ApiResponse<HistorialRegistroResponse>> historial(@PathVariable Long id) {
     return configuracionService.historial(id);
   }
 
+  /** Sin clusterId, el resumen del registro; con él, la vista de ese cluster. */
   @GetMapping("/registros/{id}/dashboard")
   @PreAuthorize("hasAuthority('VER_DASHBOARD_SIMULACION')")
-  public Mono<ApiResponse<DashboardSimulacionResponse>> dashboard(@PathVariable Long id) {
-    return configuracionService.dashboard(id);
+  public Mono<ApiResponse<DashboardSimulacionResponse>> dashboard(
+      @PathVariable Long id, @RequestParam(required = false) Long clusterId) {
+    return configuracionService.dashboard(id, clusterId);
   }
 
   @GetMapping("/registros/{id}/dashboard/rutas")

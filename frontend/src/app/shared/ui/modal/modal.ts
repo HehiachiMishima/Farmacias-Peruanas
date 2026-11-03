@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { Icon } from '../icon/icon';
 
-export type AnchoModal = 'sm' | 'md' | 'lg' | 'xl' | 'full';
+export type AnchoModal = 'sm' | 'md' | 'lg' | 'xl' | 'xxl' | 'full';
 
 /** Diálogos abiertos a la vez: el scroll del documento se bloquea mientras haya alguno. */
 let abiertos = 0;

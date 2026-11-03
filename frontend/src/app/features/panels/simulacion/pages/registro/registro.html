@@ -170,8 +170,9 @@
               <td>
                 <span
                   class="ui-badge"
-                  [class.ui-badge--success]="a.estado === 'BALANCEADO'"
-                  [class.ui-badge--neutral]="a.estado !== 'BALANCEADO'"
+                  [class.ui-badge--success]="a.estado === 'FINALIZADO'"
+                  [class.ui-badge--info]="a.estado === 'EN_PROCESO'"
+                  [class.ui-badge--neutral]="a.estado === 'PROYECCION'"
                 >
                   {{ estado(a.estado) }}
                 </span>

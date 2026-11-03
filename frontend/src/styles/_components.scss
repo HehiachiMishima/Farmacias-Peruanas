@@ -167,6 +167,17 @@
   }
 }
 
+/* Paso completado: verde con contraste suficiente en ambos temas. */
+.ui-btn--success {
+  --btn-bg: color-mix(in srgb, var(--success) 82%, var(--text));
+  --btn-fg: var(--surface);
+  --btn-border: transparent;
+  --btn-shadow: 0 6px 16px -6px color-mix(in srgb, var(--success) 70%, transparent);
+  &:hover {
+    --btn-bg: color-mix(in srgb, var(--success) 70%, var(--text));
+  }
+}
+
 .ui-btn--sm {
   height: 34px;
   padding: 0 var(--space-3);
@@ -1297,6 +1308,9 @@ body.col-resize--activo .col-resize {
 .ui-modal--xl {
   max-width: 980px;
 }
+.ui-modal--xxl {
+  max-width: 1320px;
+}
 /* Casi pantalla completa: paneles de análisis con gráfico y tablas. */
 .ui-modal--full {
   max-width: 1680px;
@@ -1357,6 +1371,7 @@ body.col-resize--activo .col-resize {
   .ui-modal--md,
   .ui-modal--lg,
   .ui-modal--xl,
+  .ui-modal--xxl,
   .ui-modal--full {
     max-width: none;
     max-height: calc(100dvh - var(--space-6));

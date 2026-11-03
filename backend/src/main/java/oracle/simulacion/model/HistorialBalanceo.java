@@ -11,9 +11,10 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Cambio sobre el registro: ruta movida, operario reasignado u operario
- * añadido, hecho por el balanceo (ajuste de tiempos o separación de CL1 y CL2)
- * o a mano por el usuario.
+ * Cambio sobre el registro: ruta movida (paso 1 del balanceo, separación de
+ * CL1 y CL2 o a mano) u operarios asignados a un chute en una ola (paso 2).
+ * Los cambios del balanceo apuntan a su lanzamiento. La tabla conserva
+ * también AÑADIR_OPERARIO y MOVER_OPERARIO de registros anteriores.
  */
 @Entity
 @Table(name = "historial_balanceo")
@@ -22,8 +23,8 @@ import lombok.Setter;
 public class HistorialBalanceo {
 
   public static final String ACCION_MOVER_RUTA = "MOVER_RUTA";
-  public static final String ACCION_ANADIR_OPERARIO = "AÑADIR_OPERARIO";
-  public static final String ACCION_MOVER_OPERARIO = "MOVER_OPERARIO";
+  /** Paso 2: operarios del chute antes → después (operarios_origen → operarios_destino). */
+  public static final String ACCION_ASIGNAR_OPERARIOS = "ASIGNAR_OPERARIOS";
 
   public static final String MOTIVO_BALANCEO = "BALANCEO";
   public static final String MOTIVO_SEPARACION = "SEPARACION";
@@ -35,6 +36,10 @@ public class HistorialBalanceo {
 
   @Column(name = "archivo_id", nullable = false)
   private Long archivoId;
+
+  /** Lanzamiento que hizo el cambio; null = movimiento manual. */
+  @Column(name = "lanzamiento_id")
+  private Long lanzamientoId;
 
   @Column(name = "tipo_accion", length = 30, nullable = false)
   private String tipoAccion;
@@ -67,12 +72,4 @@ public class HistorialBalanceo {
 
   @Column(name = "creado_en", nullable = false)
   private Instant creadoEn;
-
-  public boolean esMovimiento() {
-    return ACCION_MOVER_RUTA.equals(tipoAccion);
-  }
-
-  public boolean esMovimientoOperario() {
-    return ACCION_MOVER_OPERARIO.equals(tipoAccion);
-  }
 }

@@ -3,7 +3,6 @@ import {
   Component,
   DestroyRef,
   ElementRef,
-  HostListener,
   computed,
   inject,
   signal,
@@ -21,6 +20,7 @@ import {
   ArchivoSimulacion,
   ConfiguracionSimulacion,
   ConfiguracionSimulacionRequest,
+  HistorialRegistroSimulacion,
   HistorialSimulacion,
   RutaSimulacion,
 } from '../../data/simulacion.model';
@@ -43,12 +43,12 @@ import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-
 import { SelectMultiple } from '../../../../../shared/ui/select-multiple/select-multiple';
 import {
   LIMITES,
-  OPERARIOS_INICIALES,
   PALETA_REGISTROS,
   VELOCIDAD_INICIAL,
   colorCluster,
   compararNombre,
   datosCarga,
+  etiquetaEstado,
   etiquetaRegistro,
   formatearHoras,
   formatearNumero,
@@ -58,6 +58,14 @@ import {
   tamanoArchivo,
 } from '../../simulacion-formato';
 
+type Paso = 'RUTAS' | 'OPERARIOS' | 'CERRAR';
+
+/**
+ * Simulación cluster por cluster, en el orden de las olas. El cluster en
+ * curso se trabaja en tres pasos: balancear sus rutas por bultos, asignar sus
+ * operarios con el equipo que llega de la ola anterior y cerrarlo. Al cerrarlo
+ * se habilita el siguiente; al cerrar el último, la simulación termina.
+ */
 @Component({
   selector: 'app-simulacion-configuracion',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -96,8 +104,10 @@ export class SimulacionConfiguracion {
   readonly puedeModificar = computed(() =>
     this.sesion.permisos().includes(PERMISOS.MODIFICAR_CONFIGURACION_SIMULACION),
   );
-  readonly formatearHoras = formatearHoras;
   readonly formatearNumero = formatearNumero;
+  readonly formatearHoras = formatearHoras;
+  readonly estadoRegistro = etiquetaEstado;
+  readonly limitesValidos = LIMITES;
 
   readonly registros = signal<ArchivoSimulacion[]>([]);
   readonly seleccionado = signal<number | null>(null);
@@ -110,59 +120,27 @@ export class SimulacionConfiguracion {
   /** Descarta respuestas viejas si el usuario cambia de registro rápido. */
   private solicitud = 0;
 
-  readonly limitesValidos = LIMITES;
+  // ---------------- Equipo y límites en edición ----------------
   readonly velocidad = signal(VELOCIDAD_INICIAL);
-  readonly operariosMaximos = signal(OPERARIOS_INICIALES);
-  /** Máximo de operarios por chute; null = reparto parejo del máximo global. */
-  readonly operariosPorChute = signal<number | null>(null);
+  /** Operarios del equipo: los mismos pasan de un cluster al siguiente. */
+  readonly equipo = signal(1);
+  /** Máximo de operarios en un chute; null = sin tope propio (hasta todo el equipo). */
+  readonly porChute = signal<number | null>(null);
   readonly limites = signal<Record<number, number>>({});
-  readonly operarios = signal<Record<number, number>>({});
-  readonly dirty = signal(false);
 
-  /** Operarios que suman los chutes con los valores en edición. */
-  readonly operariosAsignados = computed(() =>
-    Object.values(this.operarios()).reduce((total, valor) => total + valor, 0),
-  );
-
-  /** El tope debe cubrir lo ya asignado; si no, no se puede guardar. */
-  readonly excedeMaximo = computed(() => this.operariosAsignados() > this.operariosMaximos());
-
-  /** Con el tope justo, el balanceo no puede añadir operarios (solo mover rutas o reasignar). */
-  readonly sinCupo = computed(() => this.operariosAsignados() === this.operariosMaximos());
-
-  /**
-   * Tope por chute que aplicará el balanceo con los valores en edición: el
-   * definido o, si está vacío, el máximo global repartido entre los chutes.
-   */
-  readonly topePorChute = computed(() => {
-    const definido = this.operariosPorChute();
-    if (definido !== null) {
-      return definido;
+  /** Hay cambios del equipo o de algún límite sin guardar. */
+  readonly dirty = computed(() => {
+    const cfg = this.config();
+    if (!cfg) {
+      return false;
     }
-    const chutes = Math.max(1, this.config()?.chutes.length ?? 1);
-    return Math.max(
-      1,
-      Math.min(LIMITES.operariosPorChute, Math.ceil(this.operariosMaximos() / chutes)),
+    const limites = this.limites();
+    return (
+      Number(cfg.velocidadBase) !== this.velocidad() ||
+      Number(cfg.operariosMaximos) !== this.equipo() ||
+      (cfg.operariosPorChute ?? null) !== this.porChute() ||
+      cfg.clusters.some((cluster) => Number(cluster.limiteHoras) !== (limites[cluster.id] ?? 0))
     );
-  });
-
-  /**
-   * Chutes que pasan el máximo por chute definido. Cuenta también los
-   * operarios que dejaría «Restablecer» (la base del usuario), igual que el backend.
-   */
-  readonly chutesSobreTope = computed(() => {
-    const tope = this.operariosPorChute();
-    if (tope === null) {
-      return [];
-    }
-    const operarios = this.operarios();
-    return (this.config()?.chutes ?? [])
-      .map((chute) => {
-        const valor = operarios[chute.id] ?? chute.operarios;
-        const base = valor !== chute.operarios ? valor : chute.operariosOriginal;
-        return { nombre: chute.nombre, operarios: Math.max(valor, base) };
-      })
-      .filter((chute) => chute.operarios > tope);
   });
 
   readonly filtroChute = signal<number[]>([]);
@@ -177,66 +155,121 @@ export class SimulacionConfiguracion {
   readonly porPagina = signal(25);
 
   readonly guardando = signal(false);
-  readonly balanceando = signal(false);
+  /** Paso que se está ejecutando en el cluster en curso. */
+  readonly trabajando = signal<Paso | null>(null);
   readonly restableciendo = signal(false);
   readonly moviendo = signal(false);
-  /** Recarga tras balancear o restablecer: hasta que llegue, el formulario sigue bloqueado. */
+  /** Recarga tras un paso: hasta que llegue, las acciones siguen bloqueadas. */
   readonly recargando = signal(false);
   /** Una sola escritura a la vez: los botones de acción se deshabilitan juntos. */
   readonly ocupado = computed(
     () =>
       this.guardando() ||
-      this.balanceando() ||
+      this.trabajando() !== null ||
       this.restableciendo() ||
       this.moviendo() ||
       this.recargando(),
   );
 
-  readonly historial = signal<HistorialSimulacion[]>([]);
+  /** Todos los clusters cerrados: la simulación terminó. */
+  readonly finalizado = computed(() => this.config()?.archivo.estado === 'FINALIZADO');
+
+  /** Primer cluster sin cerrar (en el orden de las olas): el único que se trabaja. */
+  readonly enCurso = computed(
+    () => (this.config()?.clusters ?? []).find((cluster) => cluster.estado !== 'CERRADO') ?? null,
+  );
+
+  readonly clustersCerrados = computed(
+    () => (this.config()?.clusters ?? []).filter((cluster) => cluster.estado === 'CERRADO').length,
+  );
+
+  /**
+   * El equipo ya trabajó en clusters cerrados: para cambiarlo hay que reabrir
+   * el primero de ellos (los siguientes vuelven a la proyección).
+   */
+  readonly equipoBloqueado = computed(
+    () => (this.config()?.clusters ?? []).find((cluster) => cluster.estado === 'CERRADO') ?? null,
+  );
+
+  readonly historial = signal<HistorialRegistroSimulacion>({ lanzamientos: [], cambios: [] });
   readonly historialAbierto = signal(false);
   readonly historialCargando = signal(false);
 
   /**
-   * Historial agrupado por ejecución: los cambios de un mismo balanceo
-   * comparten fecha (el backend se la asigna junta); cada movimiento manual
-   * va aparte. Llega del más reciente al más antiguo.
+   * Historial de rutas agrupado: cada balanceo de un cluster con sus rutas
+   * movidas y su resultado, y cada movimiento manual aparte. Los cambios sin
+   * lanzamiento de versiones anteriores se agrupan por fecha. Del más reciente
+   * al más antiguo.
    */
   readonly historialAgrupado = computed(() => {
+    const { lanzamientos, cambios } = this.historial();
     const grupos: {
       clave: string;
       titulo: string;
+      mensaje: string | null;
       fecha: string;
       creadoPor: number | null;
-      rutas: number;
       separaciones: number;
-      reasignados: number;
-      anadidos: number;
+      rutas: number;
+      chutesOperarios: number;
       cambios: HistorialSimulacion[];
     }[] = [];
-    for (const cambio of this.historial()) {
-      const manual = cambio.motivo === 'MANUAL';
-      const ultimo = grupos[grupos.length - 1];
-      const mismaEjecucion =
-        !manual &&
-        ultimo !== undefined &&
-        ultimo.titulo === 'Balanceo' &&
-        ultimo.fecha === cambio.creadoEn &&
-        ultimo.creadoPor === cambio.creadoPor;
-      const grupo = mismaEjecucion
-        ? ultimo
-        : {
-            clave: `${cambio.creadoEn}-${cambio.id}`,
-            titulo: manual ? 'Movimiento manual' : 'Balanceo',
-            fecha: cambio.creadoEn,
-            creadoPor: cambio.creadoPor,
-            rutas: 0,
-            separaciones: 0,
-            reasignados: 0,
-            anadidos: 0,
-            cambios: [],
-          };
-      if (!mismaEjecucion) {
+    const nuevoGrupo = (
+      clave: string,
+      titulo: string,
+      mensaje: string | null,
+      fecha: string,
+      creadoPor: number | null,
+    ) => ({
+      clave,
+      titulo,
+      mensaje,
+      fecha,
+      creadoPor,
+      separaciones: 0,
+      rutas: 0,
+      chutesOperarios: 0,
+      cambios: [] as HistorialSimulacion[],
+    });
+    const porLanzamiento = new Map(
+      lanzamientos.map((lanzamiento) => {
+        const grupo = nuevoGrupo(
+          `l${lanzamiento.id}`,
+          `${lanzamiento.cluster} · ${
+            lanzamiento.fase === 'RUTAS' ? 'Balanceo de rutas' : 'Asignación de operarios'
+          }`,
+          lanzamiento.mensaje,
+          lanzamiento.creadoEn,
+          lanzamiento.creadoPor,
+        );
         grupos.push(grupo);
+        return [lanzamiento.id, grupo] as const;
+      }),
+    );
+    let anterior: (typeof grupos)[number] | undefined;
+    for (const cambio of cambios) {
+      const manual = cambio.motivo === 'MANUAL';
+      let grupo =
+        cambio.lanzamientoId === null ? undefined : porLanzamiento.get(cambio.lanzamientoId);
+      if (!grupo) {
+        if (
+          !manual &&
+          anterior !== undefined &&
+          anterior.fecha === cambio.creadoEn &&
+          anterior.creadoPor === cambio.creadoPor
+        ) {
+          grupo = anterior;
+        } else {
+          grupo = nuevoGrupo(
+            `c${cambio.id}`,
+            manual ? 'Movimiento manual' : 'Balanceo anterior',
+            null,
+            cambio.creadoEn,
+            cambio.creadoPor,
+          );
+          grupos.push(grupo);
+        }
+        anterior = manual ? undefined : grupo;
       }
       grupo.cambios.push(cambio);
       if (cambio.tipoAccion === 'MOVER_RUTA') {
@@ -244,16 +277,20 @@ export class SimulacionConfiguracion {
         if (cambio.motivo === 'SEPARACION') {
           grupo.separaciones++;
         }
-      } else if (cambio.tipoAccion === 'MOVER_OPERARIO') {
-        grupo.reasignados++;
-      } else if (cambio.tipoAccion === 'AÑADIR_OPERARIO') {
-        grupo.anadidos++;
+      } else if (cambio.tipoAccion === 'ASIGNAR_OPERARIOS') {
+        grupo.chutesOperarios++;
       }
     }
-    return grupos;
+    return grupos.sort((a, b) => Date.parse(b.fecha) - Date.parse(a.fecha));
   });
 
   readonly restablecerAbierto = signal(false);
+  /** Cluster cuyo restablecimiento se está confirmando. */
+  readonly clusterARestablecer = signal<{ id: number; nombre: string } | null>(null);
+  /** Cluster cerrado que se va a reabrir y los siguientes que vuelven a la proyección. */
+  readonly clusterAReabrir = signal<{ id: number; nombre: string; siguientes: string[] } | null>(
+    null,
+  );
 
   // ---------------- Carga de Excel desde configuración ----------------
   readonly subirAbierto = signal(false);
@@ -360,35 +397,21 @@ export class SimulacionConfiguracion {
     this.filtrosAbierto.update((abierto) => !abierto);
   }
 
-  readonly tieneLimites = computed(() =>
-    Object.values(this.limites()).some((limite) => Number(limite) > 0),
-  );
-
-  /** Bultos por chute según la carga agregada del servidor. */
-  private readonly bultosPorChute = computed(() => {
-    const mapa = new Map<number, number>();
-    for (const fila of this.config()?.carga ?? []) {
-      mapa.set(fila.chuteId, (mapa.get(fila.chuteId) ?? 0) + Number(fila.bultos));
-    }
-    return mapa;
-  });
-
   /**
-   * Tiempo de cierre de cada cluster con los parámetros en edición (vista
-   * previa antes de guardar): el máximo de sus chutes, y cada chute tarda
-   * bultos / (velocidad × operarios).
+   * Cada cluster en el orden de las olas: su carga, qué tan parejos están sus
+   * chutes en bultos ((más cargado − menos cargado) / promedio) y, si ya tiene
+   * operarios, cuántos, su tiempo frente al límite y cuántos siguen en su
+   * chute desde la ola anterior.
    */
   readonly resumenClusters = computed(() => {
     const cfg = this.config();
     if (!cfg) {
       return [];
     }
-    const operarios = this.operarios();
-    const limites = this.limites();
     const velocidad = this.velocidad() || VELOCIDAD_INICIAL;
-    const bultosPorChute = this.bultosPorChute();
+    const limites = this.limites();
+    const enCurso = this.enCurso()?.id ?? null;
     const indices = new Map(cfg.clusters.map((cluster, indice) => [cluster.id, indice]));
-
     const acumulado = new Map<
       number,
       {
@@ -397,7 +420,10 @@ export class SimulacionConfiguracion {
         lineas: number;
         cod: number;
         rutas: number;
-        chutes: Set<number>;
+        /** Bultos del cluster en cada chute. */
+        porChute: Map<number, number>;
+        /** Operarios de la ola en cada chute (solo con operarios asignados). */
+        operarios: Map<number, number>;
       }
     >();
     for (const fila of cfg.carga) {
@@ -407,39 +433,78 @@ export class SimulacionConfiguracion {
         lineas: 0,
         cod: 0,
         rutas: 0,
-        chutes: new Set<number>(),
+        porChute: new Map<number, number>(),
+        operarios: new Map<number, number>(),
       };
       actual.bultos += Number(fila.bultos);
       actual.unidades += Number(fila.unidades);
       actual.lineas += Number(fila.lineas);
       actual.cod += Number(fila.cod);
       actual.rutas += Number(fila.rutas);
-      actual.chutes.add(fila.chuteId);
+      actual.porChute.set(
+        fila.chuteId,
+        (actual.porChute.get(fila.chuteId) ?? 0) + Number(fila.bultos),
+      );
+      if (fila.operarios !== null) {
+        actual.operarios.set(fila.chuteId, Number(fila.operarios));
+      }
       acumulado.set(fila.clusterId, actual);
     }
 
-    return cfg.clusters.map((cluster) => {
+    return cfg.clusters.map((cluster, indice) => {
       const datos = acumulado.get(cluster.id);
+      const cargas = [...(datos?.porChute.values() ?? [])].filter((bultos) => bultos > 0);
+      const promedio = cargas.reduce((total, bultos) => total + bultos, 0) / (cargas.length || 1);
+      const dispersion =
+        cargas.length < 2
+          ? null
+          : Math.round(((Math.max(...cargas) - Math.min(...cargas)) / promedio) * 100);
+      const nombresIncompatibles = new Set(
+        cfg.clusters
+          .filter((otro) => cluster.incompatibles.includes(otro.id))
+          .map((otro) => otro.nombre),
+      );
+      const conOperarios = cluster.estado === 'LISTO' || cluster.estado === 'CERRADO';
       let tiempo = 0;
-      for (const chuteId of datos?.chutes ?? []) {
-        tiempo = Math.max(
-          tiempo,
-          horas(
-            bultosPorChute.get(chuteId) ?? 0,
-            velocidad,
-            operarios[chuteId] ?? OPERARIOS_INICIALES,
-          ),
-        );
+      let operarios = 0;
+      for (const [chuteId, bultos] of datos?.porChute ?? []) {
+        const enChute = datos?.operarios.get(chuteId) ?? 0;
+        operarios += enChute;
+        tiempo = Math.max(tiempo, horas(bultos, velocidad, enChute));
+      }
+      const previo = indice > 0 ? cfg.clusters[indice - 1] : null;
+      const operariosPrevios = previo ? acumulado.get(previo.id)?.operarios : undefined;
+      let siguen = 0;
+      for (const [chuteId, enChute] of datos?.operarios ?? []) {
+        siguen += Math.min(enChute, operariosPrevios?.get(chuteId) ?? 0);
       }
       const limite = limites[cluster.id] ?? 0;
       return {
         id: cluster.id,
         nombre: cluster.nombre,
+        estado: cluster.estado,
+        enCurso: cluster.id === enCurso,
+        cerrado: cluster.estado === 'CERRADO',
+        balanceado: cluster.estado !== 'PENDIENTE',
+        conOperarios,
+        /** Chutes donde comparte con su incompatible: al balancearlo, sus rutas salen de ahí. */
+        mezclas: cfg.mezclas
+          .filter(
+            (mezcla) =>
+              mezcla.clusters.includes(cluster.nombre) &&
+              mezcla.clusters.some((nombre) => nombresIncompatibles.has(nombre)),
+          )
+          .map((mezcla) => mezcla.chute),
         color: colorCluster(indices.get(cluster.id) ?? 0),
-        limite,
+        chutes: cargas.length,
+        dispersion,
+        operarios,
         tiempo,
-        excede: limite > 0 && tiempo > limite + 0.01,
-        sinLimite: limite <= 0,
+        limite,
+        cumple: conOperarios && limite > 0 && Number.isFinite(tiempo) && tiempo <= limite + 0.01,
+        previo: previo?.nombre ?? null,
+        siguen,
+        siguiente: cfg.clusters[indice + 1]?.nombre ?? null,
         bultos: datos?.bultos ?? 0,
         unidades: datos?.unidades ?? 0,
         lineas: datos?.lineas ?? 0,
@@ -462,21 +527,6 @@ export class SimulacionConfiguracion {
     this.cargarOpciones();
   }
 
-  /** Aviso del navegador al cerrar o recargar la pestaña con parámetros sin guardar. */
-  @HostListener('window:beforeunload', ['$event'])
-  alSalirDelNavegador(evento: BeforeUnloadEvent): void {
-    if (this.dirty()) {
-      evento.preventDefault();
-    }
-  }
-
-  /** Lo consulta el guard de la ruta antes de navegar a otra pantalla. */
-  puedeSalir(): boolean {
-    return (
-      !this.dirty() || window.confirm('Hay parámetros sin guardar. ¿Salir y descartar los cambios?')
-    );
-  }
-
   cargarOpciones(preferirId?: number): void {
     this.cargandoOpciones.set(true);
     this.errorOpciones.set(null);
@@ -492,11 +542,6 @@ export class SimulacionConfiguracion {
           if (lista.length === 0) {
             this.seleccionado.set(null);
             this.config.set(null);
-            return;
-          }
-          // Refrescar la lista no debe reemplazar la configuración abierta si
-          // hay parámetros sin guardar.
-          if (this.dirty() && this.seleccionado() !== null) {
             return;
           }
           const solicitado = Number(this.route.snapshot.queryParamMap.get('registro'));
@@ -517,28 +562,27 @@ export class SimulacionConfiguracion {
       this.notificaciones.advertencia('Operación en curso', 'Espera a que termine la operación.');
       return;
     }
-    if (this.dirty()) {
-      this.notificaciones.advertencia(
-        'Cambios sin guardar',
-        'Guarda los parámetros antes de cambiar de registro.',
-      );
+    if (this.avisarCambiosSinGuardar('cambiar de registro')) {
       return;
     }
     this.seleccionar(id);
   }
 
   actualizar(): void {
-    if (this.ocupado()) {
-      return;
+    if (!this.ocupado() && !this.avisarCambiosSinGuardar('actualizar')) {
+      this.cargarOpciones();
     }
+  }
+
+  /** Con el equipo o un límite sin guardar, avisa en lugar de descartarlos. */
+  private avisarCambiosSinGuardar(accion: string): boolean {
     if (this.dirty()) {
       this.notificaciones.advertencia(
         'Cambios sin guardar',
-        'Guarda los parámetros antes de actualizar los registros.',
+        `Guarda el equipo y los límites antes de ${accion}.`,
       );
-      return;
     }
-    this.cargarOpciones();
+    return this.dirty();
   }
 
   seleccionar(id: number | null): void {
@@ -567,10 +611,9 @@ export class SimulacionConfiguracion {
   }
 
   /**
-   * Carga la configuración (parámetros + carga agregada) y la primera página
-   * de rutas. Con `inicial` muestra el estado de carga a pantalla completa;
-   * si no (tras balancear o restablecer), recarga en segundo plano con el
-   * formulario bloqueado hasta que llegue, para no pisar lo que se edite.
+   * Carga la carga agregada por cluster y chute y la primera página de rutas.
+   * Con `inicial` muestra el estado de carga a pantalla completa; si no (tras
+   * balancear), recarga en segundo plano con las acciones bloqueadas.
    */
   private cargarConfiguracion(id: number, inicial = false): void {
     const solicitud = ++this.solicitud;
@@ -613,22 +656,21 @@ export class SimulacionConfiguracion {
       });
   }
 
+  /** Carga la configuración del servidor y descarta lo editado del equipo y los límites. */
   private aplicarConfiguracion(config: ConfiguracionSimulacion): void {
     this.config.set(config);
-    this.velocidad.set(Number(config.velocidadBase));
-    this.operariosMaximos.set(Math.max(1, Number(config.operariosMaximos) || config.chutes.length));
-    this.operariosPorChute.set(
-      config.operariosPorChute === null ? null : Number(config.operariosPorChute),
+    this.velocidad.set(Number(config.velocidadBase) || VELOCIDAD_INICIAL);
+    this.equipo.set(Math.max(1, Number(config.operariosMaximos) || 1));
+    this.porChute.set(
+      config.operariosPorChute === null || Number(config.operariosPorChute) <= 0
+        ? null
+        : Number(config.operariosPorChute),
     );
     this.limites.set(
       Object.fromEntries(
         config.clusters.map((cluster) => [cluster.id, Number(cluster.limiteHoras)]),
       ),
     );
-    this.operarios.set(
-      Object.fromEntries(config.chutes.map((chute) => [chute.id, chute.operarios])),
-    );
-    this.dirty.set(false);
   }
 
   private fuenteRutas(): Observable<Pagina<RutaSimulacion>> {
@@ -645,110 +687,21 @@ export class SimulacionConfiguracion {
     });
   }
 
-  getOperarios(chuteId: number): number {
-    return this.operarios()[chuteId] ?? OPERARIOS_INICIALES;
-  }
-
   campoInvalido(campo: 'nombreRegistro'): boolean {
     const control = this.formulario.controls[campo];
     return control.touched && control.invalid;
   }
 
-  colorDeCluster(clusterId: number): string {
-    const indice = (this.config()?.clusters ?? []).findIndex((cluster) => cluster.id === clusterId);
-    return colorCluster(Math.max(0, indice));
-  }
-
-  /** Tiempo que aporta esta ruta al chute (no el total acumulado del chute). */
-  tiempoRuta(ruta: RutaSimulacion): number {
-    return horas(
-      Number(ruta.totalBultos),
-      this.velocidad() || VELOCIDAD_INICIAL,
-      this.getOperarios(ruta.chuteId),
+  /** Las rutas de un cluster cerrado no se mueven sin reabrirlo. */
+  clusterCerrado(clusterId: number): boolean {
+    return (
+      this.config()?.clusters.find((cluster) => cluster.id === clusterId)?.estado === 'CERRADO'
     );
   }
 
-  setVelocidad(evento: Event): void {
-    const input = evento.target as HTMLInputElement;
-    const leido = Math.round(Number(input.value) * 100) / 100;
-    if (!Number.isFinite(leido) || leido <= 0) {
-      input.value = String(this.velocidad());
-      return;
-    }
-    const valor = Math.min(LIMITES.velocidad, leido);
-    input.value = String(valor);
-    this.velocidad.set(valor);
-    this.actualizarDirty();
-  }
-
-  setLimite(clusterId: number, evento: Event): void {
-    const input = evento.target as HTMLInputElement;
-    const valor = Math.round(Number(input.value) * 100) / 100;
-    const limite = Number.isFinite(valor) && valor >= 0 ? Math.min(LIMITES.horas, valor) : 0;
-    input.value = String(limite);
-    this.limites.set({ ...this.limites(), [clusterId]: limite });
-    this.actualizarDirty();
-  }
-
-  setOperarios(chuteId: number, evento: Event): void {
-    const input = evento.target as HTMLInputElement;
-    const valor = Number.parseInt(input.value, 10);
-    const asignados =
-      Number.isInteger(valor) && valor >= 1 ? Math.min(LIMITES.operariosPorChute, valor) : 1;
-    input.value = String(asignados);
-    this.operarios.set({ ...this.operarios(), [chuteId]: asignados });
-    this.actualizarDirty();
-  }
-
-  setOperariosMaximos(evento: Event): void {
-    const input = evento.target as HTMLInputElement;
-    const valor = Number.parseInt(input.value, 10);
-    const maximo =
-      Number.isInteger(valor) && valor >= 1 ? Math.min(LIMITES.operariosTotal, valor) : 1;
-    input.value = String(maximo);
-    this.operariosMaximos.set(maximo);
-    this.actualizarDirty();
-  }
-
-  /** Vacío = reparto parejo; si no, entre 1 y el tope técnico por chute. */
-  setOperariosPorChute(evento: Event): void {
-    const input = evento.target as HTMLInputElement;
-    if (input.value.trim() === '') {
-      this.operariosPorChute.set(null);
-      this.actualizarDirty();
-      return;
-    }
-    const valor = Number.parseInt(input.value, 10);
-    const tope =
-      Number.isInteger(valor) && valor >= 1 ? Math.min(LIMITES.operariosPorChute, valor) : 1;
-    input.value = String(tope);
-    this.operariosPorChute.set(tope);
-    this.actualizarDirty();
-  }
-
-  /**
-   * Los cambios se marcan comparando con lo último cargado del servidor: editar
-   * un valor y dejarlo igual no debe bloquear el cambio de registro ni la salida.
-   */
-  private actualizarDirty(): void {
-    const config = this.config();
-    if (!config) {
-      this.dirty.set(false);
-      return;
-    }
-    const limites = this.limites();
-    const operarios = this.operarios();
-    const iguales =
-      Number(config.velocidadBase) === this.velocidad() &&
-      Number(config.operariosMaximos) === this.operariosMaximos() &&
-      (config.operariosPorChute ?? null) === this.operariosPorChute() &&
-      config.clusters.every(
-        (cluster) => Number(cluster.limiteHoras) === (limites[cluster.id] ?? 0),
-      ) &&
-      config.chutes.every(
-        (chute) => chute.operarios === (operarios[chute.id] ?? OPERARIOS_INICIALES),
-      );
-    this.dirty.set(!iguales);
+  colorDeCluster(clusterId: number): string {
+    const indice = (this.config()?.clusters ?? []).findIndex((cluster) => cluster.id === clusterId);
+    return colorCluster(Math.max(0, indice));
   }
 
   setFiltroChute(ids: (number | string)[]): void {
@@ -809,6 +762,48 @@ export class SimulacionConfiguracion {
     this.rutas.recargar();
   }
 
+  setVelocidad(evento: Event): void {
+    const input = evento.target as HTMLInputElement;
+    const leido = Math.round(Number(input.value) * 100) / 100;
+    if (!Number.isFinite(leido) || leido <= 0) {
+      input.value = String(this.velocidad());
+      return;
+    }
+    const valor = Math.min(LIMITES.velocidad, leido);
+    input.value = String(valor);
+    this.velocidad.set(valor);
+  }
+
+  /** Vacío = sin tope propio; si no, entre 1 y el tope técnico por chute. */
+  setPorChute(evento: Event): void {
+    const input = evento.target as HTMLInputElement;
+    if (input.value.trim() === '') {
+      this.porChute.set(null);
+      return;
+    }
+    const valor = Number.parseInt(input.value, 10);
+    const tope =
+      Number.isInteger(valor) && valor >= 1 ? Math.min(LIMITES.operariosPorChute, valor) : 1;
+    input.value = String(tope);
+    this.porChute.set(tope);
+  }
+
+  setEquipo(evento: Event): void {
+    const input = evento.target as HTMLInputElement;
+    const valor = Number.parseInt(input.value, 10);
+    const equipo = Number.isInteger(valor) && valor >= 1 ? Math.min(LIMITES.equipo, valor) : 1;
+    input.value = String(equipo);
+    this.equipo.set(equipo);
+  }
+
+  setLimite(clusterId: number, evento: Event): void {
+    const input = evento.target as HTMLInputElement;
+    const valor = Math.round(Number(input.value) * 100) / 100;
+    const limite = Number.isFinite(valor) && valor >= 0 ? Math.min(LIMITES.horas, valor) : 0;
+    input.value = String(limite);
+    this.limites.set({ ...this.limites(), [clusterId]: limite });
+  }
+
   private peticion(): ConfiguracionSimulacionRequest | null {
     const config = this.config();
     if (!config) {
@@ -816,49 +811,20 @@ export class SimulacionConfiguracion {
     }
     return {
       velocidadBase: this.velocidad(),
-      operariosMaximos: this.operariosMaximos(),
-      operariosPorChute: this.operariosPorChute(),
+      operariosMaximos: this.equipo(),
+      operariosPorChute: this.porChute(),
       clusters: config.clusters.map((cluster) => ({
         clusterId: cluster.id,
         limiteHoras: this.limites()[cluster.id] ?? 0,
       })),
-      chutes: config.chutes.map((chute) => ({
-        chuteId: chute.id,
-        operarios: Math.max(1, this.getOperarios(chute.id)),
-      })),
     };
   }
 
-  /**
-   * El máximo global no puede quedar por debajo de lo asignado, ni un chute
-   * por encima del máximo por chute (el backend rechazaría el guardado).
-   */
-  private validarTope(): boolean {
-    if (this.excedeMaximo()) {
-      this.notificaciones.advertencia(
-        'Operarios insuficientes',
-        `Hay ${this.operariosAsignados()} operarios asignados y el máximo es ${this.operariosMaximos()}. Sube el máximo o reduce operarios en los chutes.`,
-      );
-      return false;
-    }
-    const sobreTope = this.chutesSobreTope();
-    if (sobreTope.length > 0) {
-      this.notificaciones.advertencia(
-        'Máximo por chute',
-        `${sobreTope.map((chute) => `${chute.nombre} (${chute.operarios})`).join(', ')} pasa(n) el máximo de ${this.operariosPorChute()} por chute. Ajusta esos chutes, sube el máximo o restablece el balanceo.`,
-      );
-      return false;
-    }
-    return true;
-  }
-
+  /** Guarda el equipo y los límites en edición. */
   guardar(): void {
     const id = this.seleccionado();
     const peticion = this.peticion();
     if (!id || !peticion || this.ocupado()) {
-      return;
-    }
-    if (!this.validarTope()) {
       return;
     }
     this.guardando.set(true);
@@ -867,41 +833,90 @@ export class SimulacionConfiguracion {
       .pipe(finalize(() => this.guardando.set(false)))
       .subscribe({
         next: (config) => {
-          if (this.seleccionado() !== id) {
-            return;
+          if (this.seleccionado() === id) {
+            this.aplicarConfiguracion(config);
           }
-          this.aplicarConfiguracion(config);
           this.notificaciones.exito(
-            'Parámetros guardados',
-            'Los límites y operarios quedaron actualizados.',
+            'Cambios guardados',
+            'El equipo y los límites quedaron al día.',
           );
         },
       });
   }
 
-  balancear(): void {
-    const id = this.seleccionado();
+  /**
+   * Guarda lo editado antes de un paso y aplica la respuesta: si el paso
+   * falla, lo guardado ya no figura como pendiente.
+   */
+  private conCambiosGuardados<T>(id: number, paso: () => Observable<T>): Observable<T> {
     const peticion = this.peticion();
-    if (!id || !peticion || this.ocupado()) {
-      return;
+    if (!this.dirty() || !peticion) {
+      return paso();
     }
-    if (!this.tieneLimites()) {
+    return this.api.guardarConfiguracion(id, peticion).pipe(
+      tap((config) => {
+        if (this.seleccionado() === id) {
+          this.aplicarConfiguracion(config);
+        }
+      }),
+      switchMap(() => paso()),
+    );
+  }
+
+  /**
+   * Paso 1 del cluster en curso: lo separa de su incompatible y reparte sus
+   * rutas para que sus chutes queden parejos en bultos.
+   */
+  balancear(cluster: { id: number; nombre: string }): void {
+    this.ejecutarPaso('RUTAS', cluster);
+  }
+
+  /**
+   * Paso 2: asigna sus operarios partiendo de donde quedó el equipo en la ola
+   * anterior. Necesita el límite de horas del cluster.
+   */
+  asignarOperarios(cluster: { id: number; nombre: string }): void {
+    if ((this.limites()[cluster.id] ?? 0) <= 0) {
       this.notificaciones.advertencia(
-        'Define los límites',
-        'Ingresa al menos un límite de horas por cluster antes de balancear.',
+        'Define el límite',
+        `Ingresa el límite de horas de ${cluster.nombre} para asignar sus operarios.`,
       );
       return;
     }
-    if (!this.validarTope()) {
+    this.ejecutarPaso('OPERARIOS', cluster);
+  }
+
+  /** Paso 3: cierra el cluster y el equipo pasa al siguiente con esta dotación. */
+  cerrar(cluster: { id: number; nombre: string }): void {
+    this.ejecutarPaso('CERRAR', cluster);
+  }
+
+  private ejecutarPaso(paso: Paso, cluster: { id: number; nombre: string }): void {
+    const id = this.seleccionado();
+    if (!id || this.ocupado()) {
       return;
     }
-    this.balanceando.set(true);
-    const operacion = this.dirty()
-      ? this.guardarAntes(id, peticion).pipe(switchMap(() => this.api.balancear(id)))
-      : this.api.balancear(id);
-    operacion.pipe(finalize(() => this.balanceando.set(false))).subscribe({
-      next: (resultado) => {
-        this.notificaciones.exito('Balanceo ejecutado', resultado.mensaje);
+    this.trabajando.set(paso);
+    const operacion: Observable<string> = this.conCambiosGuardados(id, () =>
+      paso === 'CERRAR'
+        ? this.api.cerrar(id, cluster.id).pipe(
+            tap((config) => this.actualizarEstadoEnLista(id, config.archivo.estado)),
+            switchMap(() => of(this.mensajeCierre(cluster.nombre))),
+          )
+        : this.api
+            .balancear(id, cluster.id, paso)
+            .pipe(switchMap((resultado) => of(resultado.mensaje))),
+    );
+    operacion.pipe(finalize(() => this.trabajando.set(null))).subscribe({
+      next: (mensaje) => {
+        this.notificaciones.exito(
+          paso === 'RUTAS'
+            ? `${cluster.nombre}: rutas balanceadas`
+            : paso === 'OPERARIOS'
+              ? `${cluster.nombre}: operarios asignados`
+              : `${cluster.nombre} cerrado`,
+          mensaje,
+        );
         if (this.seleccionado() === id) {
           this.cargarConfiguracion(id);
         }
@@ -909,20 +924,94 @@ export class SimulacionConfiguracion {
     });
   }
 
-  /**
-   * Guarda los parámetros en edición antes de otra operación y aplica la
-   * respuesta: si el segundo paso falla, lo guardado ya no figura como pendiente.
-   */
-  private guardarAntes(
-    id: number,
-    peticion: ConfiguracionSimulacionRequest,
-  ): Observable<ConfiguracionSimulacion> {
-    return this.api.guardarConfiguracion(id, peticion).pipe(
-      tap((config) => {
-        if (this.seleccionado() === id) {
-          this.aplicarConfiguracion(config);
-        }
-      }),
+  private mensajeCierre(nombre: string): string {
+    const indice = (this.config()?.clusters ?? []).findIndex(
+      (cluster) => cluster.nombre === nombre,
+    );
+    const siguiente = this.config()?.clusters[indice + 1]?.nombre;
+    return siguiente
+      ? `El equipo pasa a ${siguiente} con la dotación con la que terminó ${nombre}.`
+      : 'Era el último cluster: la simulación terminó. Revisa el resumen en el dashboard.';
+  }
+
+  confirmarRestablecerCluster(cluster: { id: number; nombre: string }): void {
+    if (!this.ocupado()) {
+      this.clusterARestablecer.set({ id: cluster.id, nombre: cluster.nombre });
+    }
+  }
+
+  restablecerCluster(): void {
+    const id = this.seleccionado();
+    const cluster = this.clusterARestablecer();
+    if (!id || !cluster || this.ocupado()) {
+      return;
+    }
+    this.restableciendo.set(true);
+    this.api
+      .restablecerCluster(id, cluster.id)
+      .pipe(finalize(() => this.restableciendo.set(false)))
+      .subscribe({
+        next: (config) => {
+          this.clusterARestablecer.set(null);
+          if (this.seleccionado() === id) {
+            this.aplicarConfiguracion(config);
+            this.rutas.recargar();
+          }
+          this.notificaciones.info(
+            `${cluster.nombre} restablecido`,
+            'Sus rutas volvieron a su chute original y su ola quedó sin operarios.',
+          );
+        },
+      });
+  }
+
+  /** Reabrir un cluster devuelve a la proyección a los que se trabajaron después. */
+  confirmarReabrir(cluster: { id: number; nombre: string }): void {
+    if (this.ocupado()) {
+      return;
+    }
+    const clusters = this.config()?.clusters ?? [];
+    const indice = clusters.findIndex((otro) => otro.id === cluster.id);
+    this.clusterAReabrir.set({
+      id: cluster.id,
+      nombre: cluster.nombre,
+      siguientes: clusters
+        .slice(indice + 1)
+        .filter((otro) => otro.estado !== 'PENDIENTE')
+        .map((otro) => otro.nombre),
+    });
+  }
+
+  reabrir(): void {
+    const id = this.seleccionado();
+    const cluster = this.clusterAReabrir();
+    if (!id || !cluster || this.ocupado()) {
+      return;
+    }
+    this.restableciendo.set(true);
+    this.api
+      .reabrir(id, cluster.id)
+      .pipe(finalize(() => this.restableciendo.set(false)))
+      .subscribe({
+        next: (config) => {
+          this.clusterAReabrir.set(null);
+          if (this.seleccionado() === id) {
+            this.aplicarConfiguracion(config);
+            this.rutas.recargar();
+          }
+          this.actualizarEstadoEnLista(id, config.archivo.estado);
+          this.notificaciones.info(
+            `${cluster.nombre} reabierto`,
+            'Conserva sus rutas y operarios; ya puedes cambiarlos.',
+          );
+        },
+      });
+  }
+
+  /** Mantiene al día el estado del registro en el selector sin recargar la lista. */
+  private actualizarEstadoEnLista(id: number, estado: string): void {
+    this.registros.update((lista) =>
+      lista.map((registro) => (registro.id === id ? { ...registro, estado } : registro)),
     );
   }
 
@@ -931,7 +1020,7 @@ export class SimulacionConfiguracion {
     if (!id) {
       return;
     }
-    this.historial.set([]);
+    this.historial.set({ lanzamientos: [], cambios: [] });
     this.directorio.cargar();
     this.historialAbierto.set(true);
     this.historialCargando.set(true);
@@ -967,7 +1056,7 @@ export class SimulacionConfiguracion {
           this.restablecerAbierto.set(false);
           this.notificaciones.info(
             'Datos restablecidos',
-            'Las rutas volvieron a su chute original y cada chute a los operarios que fijaste.',
+            'Todo volvió a la proyección: la simulación empieza de nuevo por el primer cluster.',
           );
           if (this.seleccionado() === id) {
             this.cargarConfiguracion(id);
@@ -995,28 +1084,23 @@ export class SimulacionConfiguracion {
     const id = this.seleccionado();
     const ruta = this.rutaAMover();
     const destino = this.chuteDestino();
-    const peticion = this.peticion();
-    if (!id || !ruta || destino === null || !peticion || this.ocupado()) {
+    if (!id || !ruta || destino === null || this.ocupado()) {
       return;
     }
     this.moviendo.set(true);
-    // Mover devuelve la configuración del servidor: si hay parámetros sin
-    // guardar, se envían primero para no perderlos al aplicar la respuesta.
-    const operacion = this.dirty()
-      ? this.guardarAntes(id, peticion).pipe(
-          switchMap(() => this.api.moverRuta(id, ruta.id, destino)),
-        )
-      : this.api.moverRuta(id, ruta.id, destino);
-    operacion.pipe(finalize(() => this.moviendo.set(false))).subscribe({
-      next: (config) => {
-        if (this.seleccionado() === id) {
-          this.aplicarConfiguracion(config);
-          this.rutas.recargar();
-        }
-        this.cerrarMover();
-        this.notificaciones.exito('Ruta movida', `La ruta ${ruta.codigoRuta} cambió de chute.`);
-      },
-    });
+    this.api
+      .moverRuta(id, ruta.id, destino)
+      .pipe(finalize(() => this.moviendo.set(false)))
+      .subscribe({
+        next: (config) => {
+          if (this.seleccionado() === id) {
+            this.aplicarConfiguracion(config);
+            this.rutas.recargar();
+          }
+          this.cerrarMover();
+          this.notificaciones.exito('Ruta movida', `La ruta ${ruta.codigoRuta} cambió de chute.`);
+        },
+      });
   }
 
   irADashboard(): void {
@@ -1031,17 +1115,9 @@ export class SimulacionConfiguracion {
   // ------------------------------------------------------------------
 
   abrirSelectorArchivo(): void {
-    if (this.ocupado()) {
-      return;
+    if (!this.ocupado() && !this.avisarCambiosSinGuardar('cargar otro Excel')) {
+      this.inputArchivo()?.nativeElement.click();
     }
-    if (this.dirty()) {
-      this.notificaciones.advertencia(
-        'Cambios sin guardar',
-        'Guarda los parámetros antes de cargar otro Excel.',
-      );
-      return;
-    }
-    this.inputArchivo()?.nativeElement.click();
   }
 
   seleccionarArchivo(evento: Event): void {

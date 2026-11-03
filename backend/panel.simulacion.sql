@@ -1,4 +1,4 @@
--- Active: 1791863596251@@mysql-hehiachi-mishima-servidor-local.g.aivencloud.com@25590@farmacias_peruanas
+-- Active: 1791152181635@@127.0.0.1@3306@farmacias_peruanas
 -- ############################################################
 -- 4. Panel Simulación: registros Excel, clusters, chutes, rutas e historial
 --    (origen: panel.simulacion.sql)
@@ -13,21 +13,26 @@ USE farmacias_peruanas;
 -- ============================================================
 -- 1) archivos_excel (Cabecera del archivo subido)
 -- ============================================================
-DROP TABLE IF EXISTS archivos_excel CASCADE;
-drop table if exists simulacion_config CASCADE;
-drop table if exists parametros_clusters CASCADE;
-drop table if exists parametros_chutes CASCADE;
-drop table if exists rutas_proyeccion CASCADE;
-drop table if exists historial_balanceo CASCADE;
-drop table if exists clusters CASCADE;
-drop table if exists chutes CASCADE;
+-- Reinstalación limpia: BORRA todos los datos del panel. Se eliminan primero
+-- las tablas que dependen de otras (MySQL ignora CASCADE y no deja borrar
+-- una tabla a la que aún apunta una clave foránea).
+DROP TABLE IF EXISTS historial_balanceo;
+DROP TABLE IF EXISTS lanzamientos_balanceo;
+DROP TABLE IF EXISTS operarios_ola;
+DROP TABLE IF EXISTS rutas_proyeccion;
+DROP TABLE IF EXISTS parametros_chutes;
+DROP TABLE IF EXISTS parametros_clusters;
+DROP TABLE IF EXISTS simulacion_config;
+DROP TABLE IF EXISTS chutes;
+DROP TABLE IF EXISTS clusters;
+DROP TABLE IF EXISTS archivos_excel;
 CREATE TABLE IF NOT EXISTS archivos_excel (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     nombre_registro VARCHAR(150) NOT NULL COMMENT 'Nombre del registro (Ej: Ventas Enero).',
     nombre_archivo VARCHAR(255) NOT NULL COMMENT 'Nombre original del archivo .xlsx/.csv.',
     etiqueta VARCHAR(50) NULL COMMENT 'Etiqueta visual (Ej: URGENTE, OK).',
     color_hex VARCHAR(10) NULL COMMENT 'Color del registro (Ej: #6366f1).',
-    estado ENUM('PROYECCION', 'BALANCEADO') NOT NULL DEFAULT 'PROYECCION' COMMENT 'Indica si los datos actuales son los originales o ya fueron modificados.',
+    estado ENUM('PROYECCION', 'EN_PROCESO', 'FINALIZADO') NOT NULL DEFAULT 'PROYECCION' COMMENT 'PROYECCION (ningún cluster empezado), EN_PROCESO (alguno empezado) o FINALIZADO (todos los clusters cerrados).',
     creado_por BIGINT NOT NULL COMMENT 'ID del usuario que subió el archivo.',
     actualizado_por BIGINT NOT NULL COMMENT 'ID del usuario que modificó por última vez.',
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)),
@@ -80,6 +85,7 @@ CREATE TABLE IF NOT EXISTS parametros_clusters (
     archivo_id BIGINT NOT NULL,
     cluster_id BIGINT NOT NULL,
     limite_horas DECIMAL(10, 2) NOT NULL DEFAULT 0.00 COMMENT 'Tiempo límite en horas para este cluster.',
+    estado ENUM('PENDIENTE', 'RUTAS', 'LISTO', 'CERRADO') NOT NULL DEFAULT 'PENDIENTE' COMMENT 'Avance del cluster, que se trabaja de a uno en el orden de las olas: PENDIENTE, RUTAS (rutas balanceadas), LISTO (operarios asignados) o CERRADO (el equipo pasa al siguiente).',
     PRIMARY KEY (archivo_id, cluster_id),
     CONSTRAINT fk_param_cluster_archivo FOREIGN KEY (archivo_id) REFERENCES archivos_excel (id) ON DELETE CASCADE,
     CONSTRAINT fk_param_cluster_cluster FOREIGN KEY (cluster_id) REFERENCES clusters (id) ON DELETE CASCADE
@@ -91,8 +97,7 @@ CREATE TABLE IF NOT EXISTS parametros_clusters (
 CREATE TABLE IF NOT EXISTS parametros_chutes (
     archivo_id BIGINT NOT NULL,
     chute_id BIGINT NOT NULL,
-    operarios INT NOT NULL DEFAULT 1 COMMENT 'Cantidad de operarios asignados.',
-    operarios_original INT NOT NULL DEFAULT 1 COMMENT 'Operarios fijados por el usuario: base del comparativo y de Restablecer.',
+    operarios INT NOT NULL DEFAULT 0 COMMENT 'Operarios base que fija el usuario: los de la proyección, el «antes» del comparativo.',
     PRIMARY KEY (archivo_id, chute_id),
     CONSTRAINT fk_param_chute_archivo FOREIGN KEY (archivo_id) REFERENCES archivos_excel (id) ON DELETE CASCADE,
     CONSTRAINT fk_param_chute_chute FOREIGN KEY (chute_id) REFERENCES chutes (id) ON DELETE CASCADE
@@ -101,6 +106,17 @@ CREATE TABLE IF NOT EXISTS parametros_chutes (
 -- ============================================================
 -- 7) rutas_proyeccion (El corazón de los datos y búsquedas masivas)
 -- ============================================================
+CREATE TABLE IF NOT EXISTS operarios_ola (
+    archivo_id BIGINT NOT NULL,
+    cluster_id BIGINT NOT NULL,
+    chute_id BIGINT NOT NULL,
+    operarios INT NOT NULL DEFAULT 0 COMMENT 'Operarios que el paso 2 asignó al chute en la ola de este cluster.',
+    PRIMARY KEY (archivo_id, cluster_id, chute_id),
+    CONSTRAINT fk_operarios_ola_archivo FOREIGN KEY (archivo_id) REFERENCES archivos_excel (id) ON DELETE CASCADE,
+    CONSTRAINT fk_operarios_ola_cluster FOREIGN KEY (cluster_id) REFERENCES clusters (id),
+    CONSTRAINT fk_operarios_ola_chute FOREIGN KEY (chute_id) REFERENCES chutes (id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Operarios por chute en cada ola (clusters LISTO o CERRADO).';
+
 CREATE TABLE IF NOT EXISTS rutas_proyeccion (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     archivo_id BIGINT NOT NULL,
@@ -126,24 +142,41 @@ CREATE TABLE IF NOT EXISTS rutas_proyeccion (
 -- ============================================================
 -- 8) historial_balanceo (Log de cambios del algoritmo)
 -- ============================================================
+CREATE TABLE IF NOT EXISTS lanzamientos_balanceo (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    archivo_id BIGINT NOT NULL,
+    cluster_id BIGINT NOT NULL COMMENT 'Cluster (ola) lanzado.',
+    fase ENUM('RUTAS', 'OPERARIOS') NOT NULL COMMENT 'RUTAS: paso 1; OPERARIOS: paso 2 o su recálculo.',
+    mensaje VARCHAR(1000) NOT NULL COMMENT 'Resultado del lanzamiento tal como lo vio el usuario.',
+    creado_por BIGINT NOT NULL,
+    creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)),
+    CONSTRAINT fk_lanzamiento_archivo FOREIGN KEY (archivo_id) REFERENCES archivos_excel (id) ON DELETE CASCADE,
+    CONSTRAINT fk_lanzamiento_cluster FOREIGN KEY (cluster_id) REFERENCES clusters (id),
+    CONSTRAINT fk_lanzamiento_creado_por FOREIGN KEY (creado_por) REFERENCES usuarios (id),
+    INDEX idx_lanzamientos_archivo_cluster (archivo_id, cluster_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Cada lanzamiento de un cluster: quién, cuándo y con qué resultado.';
+
 CREATE TABLE IF NOT EXISTS historial_balanceo (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     archivo_id BIGINT NOT NULL,
+    lanzamiento_id BIGINT NULL COMMENT 'Lanzamiento que hizo el cambio; NULL = movimiento manual.',
     tipo_accion ENUM(
         'MOVER_RUTA',
         'AÑADIR_OPERARIO',
-        'MOVER_OPERARIO'
+        'MOVER_OPERARIO',
+        'ASIGNAR_OPERARIOS'
     ) NOT NULL,
     ruta_id BIGINT NULL COMMENT 'FK a la ruta que se movió.',
     chute_origen_id BIGINT NULL COMMENT 'Chute del que sale la ruta o el operario.',
     chute_destino_id BIGINT NULL COMMENT 'Chute al que llega la ruta o el operario.',
     chute_modificado_id BIGINT NULL COMMENT 'Chute al que se le sumó el operario.',
     motivo ENUM('BALANCEO', 'SEPARACION', 'MANUAL') NOT NULL DEFAULT 'BALANCEO' COMMENT 'BALANCEO: ajuste de tiempos; SEPARACION: CL1 y CL2 no comparten chute; MANUAL: movido por el usuario.',
-    operarios_origen INT NULL COMMENT 'Operarios del chute de origen después de la acción.',
-    operarios_destino INT NULL COMMENT 'Operarios del chute de destino (o modificado) después de la acción.',
+    operarios_origen INT NULL COMMENT 'MOVER_RUTA: operarios del chute de origen; ASIGNAR_OPERARIOS: los del chute en la ola antes del paso 2.',
+    operarios_destino INT NULL COMMENT 'MOVER_RUTA: operarios del chute de destino; ASIGNAR_OPERARIOS: los del chute en la ola después del paso 2.',
     creado_por BIGINT NOT NULL,
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)),
     CONSTRAINT fk_historial_archivo FOREIGN KEY (archivo_id) REFERENCES archivos_excel (id) ON DELETE CASCADE,
+    CONSTRAINT fk_historial_lanzamiento FOREIGN KEY (lanzamiento_id) REFERENCES lanzamientos_balanceo (id) ON DELETE CASCADE,
     CONSTRAINT fk_historial_ruta FOREIGN KEY (ruta_id) REFERENCES rutas_proyeccion (id) ON DELETE SET NULL,
     CONSTRAINT fk_historial_origen FOREIGN KEY (chute_origen_id) REFERENCES chutes (id),
     CONSTRAINT fk_historial_destino FOREIGN KEY (chute_destino_id) REFERENCES chutes (id),

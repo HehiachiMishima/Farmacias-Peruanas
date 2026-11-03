@@ -6,7 +6,9 @@ import java.util.List;
 public record ChuteComparativoResponse(
     Long id,
     String chute,
+    /** Base del usuario. */
     int operariosOriginal,
+    /** En la vista de un cluster, los de su ola; en la vista final, el máximo entre sus olas. */
     int operariosBalanceado,
     int rutasOriginal,
     int rutasBalanceado,

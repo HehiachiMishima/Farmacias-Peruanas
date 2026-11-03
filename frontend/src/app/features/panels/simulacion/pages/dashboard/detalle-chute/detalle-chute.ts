@@ -26,7 +26,7 @@ import {
   RutaSimulacion,
 } from '../../../data/simulacion.model';
 import { SimulacionApi } from '../../../data/simulacion.api';
-import { compararNombre, formatearHoras, formatearNumero } from '../../../simulacion-formato';
+import { compararNombre, formatearNumero } from '../../../simulacion-formato';
 
 type TipoFiltro = '' | 'B2C' | 'B2B';
 
@@ -35,30 +35,6 @@ interface Movimiento {
   tipo: 'quedo' | 'interna' | 'sale' | 'llega';
   /** Salió para separar CL1 de CL2. */
   separa?: boolean;
-}
-
-interface Indicador {
-  etiqueta: string;
-  antes: string;
-  despues: string;
-  variacion: string;
-  /** cambio: varió sin juicio de valor; mejora/empeora solo para el tiempo. */
-  tono: 'igual' | 'cambio' | 'mejora' | 'empeora';
-}
-
-/** Indicador de conteo o volumen: la variación se muestra con signo («+3», «−2», «=»). */
-function par(etiqueta: string, antes: number, despues: number, decimales: number): Indicador {
-  const delta = Number(despues) - Number(antes);
-  const igual = Math.abs(delta) < 0.005;
-  return {
-    etiqueta,
-    antes: formatearNumero(antes, decimales),
-    despues: formatearNumero(despues, decimales),
-    variacion: igual
-      ? '='
-      : `${delta > 0 ? '+' : '−'}${formatearNumero(Math.abs(delta), decimales)}`,
-    tono: igual ? 'igual' : 'cambio',
-  };
 }
 
 /** Estado de un lado del chute (antes o después): su página, totales y carga. */
@@ -105,9 +81,10 @@ export class SimulacionDetalleChute {
   readonly clusters = input<ClusterComparativoSimulacion[]>([]);
   /** Movimientos de rutas entre chutes del registro (para el flujo del conjunto). */
   readonly movimientos = input<MovimientoChuteSimulacion[]>([]);
+  /** Vista del lanzamiento de un cluster: solo sus rutas, sin elegir otro cluster. */
+  readonly clusterFijo = input<number | null>(null);
 
   readonly formatearNumero = formatearNumero;
-  readonly formatearHoras = formatearHoras;
 
   readonly texto = signal('');
   /** Lo que muestra el buscador; el filtro se aplica tras la pausa de escritura. */
@@ -143,7 +120,7 @@ export class SimulacionDetalleChute {
     () =>
       this.texto().trim().length > 0 ||
       this.tipo() !== '' ||
-      this.clusterId() !== null ||
+      this.clusterId() !== this.clusterFijo() ||
       this.soloCambios(),
   );
 
@@ -191,61 +168,11 @@ export class SimulacionDetalleChute {
     };
   });
 
-  /**
-   * Indicadores del conjunto en pares antes → después. Rutas, bultos y
-   * operarios se suman; el cierre es el del chute más lento, que es el que
-   * define cuándo termina el grupo.
-   */
-  readonly indicadores = computed<Indicador[]>(() => {
-    const chutes = this.chutes();
-    if (chutes.length === 0) {
-      return [];
-    }
-    const suma = (valor: (chute: ChuteComparativoSimulacion) => number) =>
-      chutes.reduce((total, chute) => total + Number(valor(chute)), 0);
-    const maximo = (valor: (chute: ChuteComparativoSimulacion) => number) =>
-      Math.max(...chutes.map((chute) => Number(valor(chute))));
-    const cierreAntes = maximo((c) => c.tiempoOriginal);
-    const cierreDespues = maximo((c) => c.tiempoBalanceado);
-    const tiempo = cierreDespues - cierreAntes;
-    return [
-      par(
-        'Rutas',
-        suma((c) => c.rutasOriginal),
-        suma((c) => c.rutasBalanceado),
-        0,
-      ),
-      par(
-        'Bultos',
-        suma((c) => c.bultosOriginal),
-        suma((c) => c.bultosBalanceado),
-        2,
-      ),
-      par(
-        'Operarios',
-        suma((c) => c.operariosOriginal),
-        suma((c) => c.operariosBalanceado),
-        0,
-      ),
-      {
-        etiqueta: chutes.length > 1 ? 'Cierre (chute más lento)' : 'Tiempo de cierre',
-        antes: formatearHoras(cierreAntes),
-        despues: formatearHoras(cierreDespues),
-        variacion:
-          Math.abs(tiempo) < 0.005
-            ? '='
-            : `${tiempo > 0 ? '+' : '−'}${formatearHoras(Math.abs(tiempo))}`,
-        // En el tiempo, bajar es la mejora que busca el balanceo.
-        tono: Math.abs(tiempo) < 0.005 ? 'igual' : tiempo < 0 ? 'mejora' : 'empeora',
-      },
-    ];
-  });
-
   /** Chutes que hoy juntan CL1 y CL2: sin balancear o sin otro chute libre para separarlos. */
   readonly mezclados = computed(() => this.chutes().filter((chute) => chute.mezclaBalanceada));
 
   constructor() {
-    // Cada selección de chutes limpia los filtros y recarga ambos lados.
+    // Cada selección de chutes (o lado) limpia los filtros y recarga lo visible.
     effect(() => {
       const clave = this.ids().join(',');
       untracked(() => this.activar(clave));
@@ -305,7 +232,7 @@ export class SimulacionDetalleChute {
     this.textoBusqueda.set('');
     this.texto.set('');
     this.tipo.set('');
-    this.clusterId.set(null);
+    this.clusterId.set(this.clusterFijo());
     this.soloCambios.set(false);
   }
 

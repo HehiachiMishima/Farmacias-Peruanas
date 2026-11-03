@@ -17,8 +17,12 @@ import oracle.common.model.Auditable;
 @Setter
 public class ArchivoExcel extends Auditable {
 
+  /** Ningún cluster lanzado: como se cargó el Excel (o tras «Restablecer»). */
   public static final String ESTADO_PROYECCION = "PROYECCION";
-  public static final String ESTADO_BALANCEADO = "BALANCEADO";
+  /** Algún cluster empezado y no todos cerrados. */
+  public static final String ESTADO_EN_PROCESO = "EN_PROCESO";
+  /** Todos los clusters cerrados: la simulación terminó. */
+  public static final String ESTADO_FINALIZADO = "FINALIZADO";
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)

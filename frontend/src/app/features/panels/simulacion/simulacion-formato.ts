@@ -1,16 +1,14 @@
 import { ArchivoSimulacion } from './data/simulacion.model';
 
-/** Valores iniciales del backend al registrar un archivo. */
+/** Velocidad con la que arranca un registro (bultos por hora de cada operario). */
 export const VELOCIDAD_INICIAL = 100;
-export const OPERARIOS_INICIALES = 1;
 
 /** Topes que valida el backend (Limites.java): el formulario no deja pasarlos. */
 export const LIMITES = {
+  equipo: 10_000,
   operariosPorChute: 50,
-  operariosTotal: 10_000,
   horas: 744,
   velocidad: 100_000,
-  chutesDetalle: 50,
 } as const;
 
 export interface ColorRegistro {
@@ -91,11 +89,6 @@ export function colorCluster(indice: number): string {
   return PALETA_CLUSTERS[indice % PALETA_CLUSTERS.length];
 }
 
-/** Horas que tarda un chute: bultos / (velocidad × operarios); operarios mínimo 1. */
-export function horas(bultos: number, velocidad: number, operarios: number): number {
-  return velocidad > 0 ? bultos / (velocidad * Math.max(1, operarios)) : 0;
-}
-
 /** Orden natural sin mayúsculas: CHUTE 2 antes que CHUTE 10. */
 export function compararNombre(a: string, b: string): number {
   return a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' });
@@ -108,9 +101,49 @@ export function etiquetaRegistro(registro: ArchivoSimulacion): string {
     : registro.nombreRegistro;
 }
 
+/** Estados del registro: ningún cluster lanzado, alguno lanzado y simulación cerrada. */
+export const ESTADOS_REGISTRO = [
+  { id: 'PROYECCION', etiqueta: 'Proyección' },
+  { id: 'EN_PROCESO', etiqueta: 'En proceso' },
+  { id: 'FINALIZADO', etiqueta: 'Finalizado' },
+] as const;
+
+export function etiquetaEstado(estado: string): string {
+  return ESTADOS_REGISTRO.find((e) => e.id === estado)?.etiqueta ?? 'Proyección';
+}
+
+/** Avance de cada cluster, que se trabaja de a uno en el orden de las olas. */
+export const ESTADOS_CLUSTER = [
+  { id: 'PENDIENTE', etiqueta: 'Sin empezar' },
+  { id: 'RUTAS', etiqueta: 'Rutas balanceadas' },
+  { id: 'LISTO', etiqueta: 'Con operarios' },
+  { id: 'CERRADO', etiqueta: 'Cerrado' },
+] as const;
+
+export function etiquetaEstadoCluster(estado: string): string {
+  return ESTADOS_CLUSTER.find((e) => e.id === estado)?.etiqueta ?? 'Sin empezar';
+}
+
+/**
+ * Horas que tarda un chute: bultos / (velocidad × operarios). Sin operarios no
+ * hay tiempo calculable: se devuelve Infinity para mostrar «Sin operarios».
+ */
+export function horas(bultos: number, velocidad: number, operarios: number): number {
+  if (bultos <= 0) {
+    return 0;
+  }
+  if (operarios <= 0 || velocidad <= 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return bultos / (velocidad * operarios);
+}
+
 /** Convierte horas decimales a un texto compacto: 3.5 → «3h 30m». */
 export function formatearHoras(horas: number | null | undefined): string {
-  if (!horas || horas <= 0) {
+  if (horas === null || horas === undefined || !Number.isFinite(horas)) {
+    return 'Sin operarios';
+  }
+  if (horas <= 0) {
     return '0m';
   }
   const minutosTotales = Math.round(horas * 60);

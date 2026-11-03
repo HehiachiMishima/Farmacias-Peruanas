@@ -15,6 +15,7 @@ import {
   ArchivoSimulacion,
   ChuteComparativoSimulacion,
   DashboardSimulacion,
+  FlujoOperariosSimulacion,
 } from '../../data/simulacion.model';
 import { SimulacionApi } from '../../data/simulacion.api';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
@@ -26,12 +27,13 @@ import { porcentaje } from '../../../../../shared/ui/charts/formato';
 import { Kpi } from '../../../../../shared/ui/charts/kpi';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
+import { Modal } from '../../../../../shared/ui/modal/modal';
 import { ChipFiltro, FiltrosActivos } from '../../../../../shared/ui/panel-filtros/filtros-activos';
 import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtros';
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 import { SelectMultiple } from '../../../../../shared/ui/select-multiple/select-multiple';
 import {
-  LIMITES,
+  etiquetaEstadoCluster,
   etiquetaRegistro,
   formatearHoras,
   formatearNumero,
@@ -39,6 +41,30 @@ import {
 import { SimulacionDetalleChute } from './detalle-chute/detalle-chute';
 
 type Metrica = 'rutas' | 'bultos' | 'unidades' | 'lineas' | 'cod';
+
+/**
+ * Cluster que se abre al entrar a un registro sin terminar: el primero sin
+ * cerrar si ya empezó; si no, el último trabajado. Null si no hay ninguno.
+ */
+function olaPorDefecto(dashboard: DashboardSimulacion): number | null {
+  const trabajadas = dashboard.olas.filter((ola) => ola.estado !== 'PENDIENTE');
+  const enCurso = trabajadas.find((ola) => ola.estado !== 'CERRADO');
+  return (enCurso ?? trabajadas[trabajadas.length - 1])?.clusterId ?? null;
+}
+
+/**
+ * Diferencia de bultos entre chutes, igual que la mide el paso 1:
+ * (chute más cargado − menos cargado) / promedio, en %. Null con menos de dos
+ * chutes con carga.
+ */
+function dispersion(bultos: number[]): number | null {
+  const cargas = bultos.filter((valor) => valor > 0);
+  if (cargas.length < 2) {
+    return null;
+  }
+  const promedio = cargas.reduce((total, valor) => total + valor, 0) / cargas.length;
+  return Math.round(((Math.max(...cargas) - Math.min(...cargas)) / promedio) * 100);
+}
 
 /**
  * Métricas de carga por chute: qué campos comparar, cómo se llaman y con
@@ -89,9 +115,11 @@ const METRICAS: ReadonlyArray<{
 ];
 
 /**
- * Dashboard ejecutivo de simulación: comparativo antes vs. después del
- * balanceo. Por chute se compara la carga (rutas, bultos, unidades, líneas, COD);
- * por cluster, solo el tiempo de cierre frente a su límite.
+ * Dashboard de simulación. Cada cluster se ve por separado, en el orden en que
+ * se trabaja: primero sus rutas (carga por chute antes y después, qué tan
+ * parejos quedaron sus bultos) y luego sus operarios (lo que recibe de la ola
+ * anterior frente a lo asignado, su cierre frente al límite y el paso de
+ * gente). Al cerrar el último cluster se habilita el resumen de todas las olas.
  */
 @Component({
   selector: 'app-simulacion-dashboard',
@@ -102,6 +130,7 @@ const METRICAS: ReadonlyArray<{
     ComparativoChart,
     EmptyState,
     Icon,
+    Modal,
     SelectBuscable,
     SelectMultiple,
     PanelFiltros,
@@ -121,6 +150,7 @@ export class SimulacionDashboard {
   readonly metricas = METRICAS;
   readonly formatearHoras = formatearHoras;
   readonly formatearNumero = formatearNumero;
+  readonly estadoCluster = etiquetaEstadoCluster;
   /** Valores de carga en el gráfico: enteros con separador de miles. */
   readonly formatoCarga = (valor: number): string => formatearNumero(valor);
 
@@ -136,6 +166,8 @@ export class SimulacionDashboard {
   private solicitud = 0;
 
   readonly metrica = signal<Metrica>('rutas');
+  /** Cluster que se ve; null = resumen de todas las olas. */
+  readonly vista = signal<number | null>(null);
 
   // ---------------- Filtros del panel (múltiples) ----------------
   readonly filtrosAbierto = signal(false);
@@ -168,35 +200,34 @@ export class SimulacionDashboard {
     );
   });
 
-  /**
-   * Chutes del detalle de rutas: los que elige el filtro de chutes (uno o
-   * más), solo si siguen visibles con el filtro de clusters. Sin chutes
-   * elegidos no hay detalle, para no imponerse a los filtros.
-   */
-  readonly chutesDetalle = computed(() =>
-    this.filtroChutes().length === 0 ? [] : this.chutesVisibles(),
-  );
-
-  /** El detalle consulta hasta LIMITES.chutesDetalle chutes a la vez (tope del backend). */
-  readonly maxChutesDetalle = LIMITES.chutesDetalle;
-  readonly demasiadosChutes = computed(() => this.chutesDetalle().length > LIMITES.chutesDetalle);
-
-  /** Chutes elegidos que el filtro de clusters deja fuera del detalle. */
-  readonly chutesOcultos = computed(() => {
-    const visibles = new Set(this.chutesDetalle().map((chute) => chute.chute));
-    return this.filtroChutes().filter((chute) => !visibles.has(chute));
+  /** Chute cuyas rutas se abren al pulsar su nombre en el cuadro. */
+  readonly detalleChute = signal<ChuteComparativoSimulacion | null>(null);
+  /** Lista estable para el detalle: un arreglo nuevo en la plantilla se recrearía en cada ciclo. */
+  readonly chutesModal = computed(() => {
+    const chute = this.detalleChute();
+    return chute ? [chute] : [];
   });
 
-  /** «CHUTE 1», «CHUTE 1 y CHUTE 2», «CHUTE 1, CHUTE 2 y CHUTE 3» o «5 chutes». */
   readonly tituloDetalle = computed(() => {
-    const nombres = this.chutesDetalle().map((chute) => chute.chute);
-    if (nombres.length > 3) {
-      return `${formatearNumero(nombres.length)} chutes`;
-    }
-    return nombres.length > 1
-      ? `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`
-      : (nombres[0] ?? '');
+    const chute = this.detalleChute();
+    return chute ? `Rutas de ${chute.chute}: antes vs. después` : '';
   });
+
+  readonly subtituloDetalle =
+    'Las rutas que tenía al cargar el Excel y las que tiene tras el balanceo, agrupadas por cluster.';
+
+  abrirDetalle(chute: ChuteComparativoSimulacion): void {
+    this.detalleChute.set(chute);
+  }
+
+  cerrarDetalle(): void {
+    this.detalleChute.set(null);
+  }
+
+  /** Texto del chute en el cuadro: al pulsarlo se abren sus rutas antes y después. */
+  tituloDetalleChute(chute: ChuteComparativoSimulacion): string {
+    return `Ver las rutas de ${chute.chute} antes y después del balanceo`;
+  }
 
   readonly clustersVisibles = computed(() => {
     const filtro = this.filtroClusters();
@@ -263,38 +294,164 @@ export class SimulacionDashboard {
     return this.registros().find((registro) => registro.id === id) ?? null;
   });
 
-  /** BALANCEADO = hay ajustes (balanceo o movimientos manuales) que comparar. */
-  readonly estaBalanceado = computed(() => this.registroSeleccionado()?.estado === 'BALANCEADO');
+  /** Con algún cluster lanzado hay rutas repartidas que comparar; en proyección, nada. */
+  readonly estaBalanceado = computed(() => {
+    const estado = this.registroSeleccionado()?.estado;
+    return estado === 'EN_PROCESO' || estado === 'FINALIZADO';
+  });
+  readonly finalizado = computed(() => this.registroSeleccionado()?.estado === 'FINALIZADO');
 
+  readonly olas = computed(() => this.dashboard()?.olas ?? []);
+  readonly olaActual = computed(
+    () => this.olas().find((ola) => ola.clusterId === this.vista()) ?? null,
+  );
+  /** Ola anterior a la que se ve: de ella llega el equipo. */
+  readonly olaPrevia = computed(() => {
+    const indice = this.olas().findIndex((ola) => ola.clusterId === this.vista());
+    return indice > 0 ? this.olas()[indice - 1].cluster : null;
+  });
+  /** La ola que se ve ya tiene sus operarios asignados. */
+  readonly operariosListos = computed(() => {
+    const estado = this.olaActual()?.estado;
+    return estado === 'LISTO' || estado === 'CERRADO';
+  });
+
+  /** Operarios que cambian de chute al pasar de una ola a la siguiente (todas las transiciones). */
+  readonly operariosEntreOlas = computed(() =>
+    (this.dashboard()?.flujoOperarios ?? []).reduce(
+      (total, paso) => total + Math.min(paso.salen, paso.llegan),
+      0,
+    ),
+  );
+
+  /**
+   * Indicadores de arriba. En la vista de un cluster, los de sus rutas: qué tan
+   * parejos quedaron sus chutes, su chute más cargado y las rutas que movió.
+   * En el resumen, el cierre total, las rutas movidas y el paso de gente.
+   */
   readonly tarjetas = computed(() => {
-    const kpis = this.dashboard()?.kpis;
-    if (!kpis) {
+    const datos = this.dashboard();
+    if (!datos) {
       return [];
     }
+    const kpis = datos.kpis;
+    const ola = this.olaActual();
+    if (!ola) {
+      return [
+        {
+          etiqueta: 'Cierre de la operación',
+          valor: formatearHoras(kpis.tiempoBalanceado),
+          icono: 'reloj',
+          color: 'var(--accent)',
+          detalle: `Suma de ${formatearNumero(this.olas().length)} ola(s), una tras otra`,
+        },
+        {
+          etiqueta: 'Rutas movidas',
+          valor: `${formatearNumero(kpis.rutasMovidas)} rutas`,
+          icono: 'flecha',
+          color: 'var(--violet)',
+          detalle: 'en otro chute para igualar los bultos de cada ola',
+        },
+        {
+          etiqueta: 'Cambios de chute',
+          valor: `${formatearNumero(this.operariosEntreOlas())} operario(s)`,
+          icono: 'usuarios',
+          color: 'var(--success)',
+          detalle: 'se movieron de chute al pasar de una ola a la siguiente',
+        },
+      ];
+    }
+    const chutes = datos.chutes;
+    const antes = chutes.map((chute) => Number(chute.bultosOriginal));
+    const despues = chutes.map((chute) => Number(chute.bultosBalanceado));
+    const difAntes = dispersion(antes);
+    const difDespues = dispersion(despues);
+    const maxAntes = Math.max(0, ...antes);
+    const maxDespues = Math.max(0, ...despues);
+    const separados = chutes.filter((chute) => chute.clustersSeparados.length > 0).length;
     return [
       {
-        etiqueta: 'Cierre de la operación',
-        valor: formatearHoras(kpis.tiempoBalanceado),
-        icono: 'reloj',
-        color: 'var(--accent)',
-        detalle: `Antes ${formatearHoras(kpis.tiempoOriginal)} · cluster más lento`,
-      },
-      {
-        etiqueta: 'Tiempo ahorrado',
-        valor: formatearHoras(kpis.tiempoAhorrado),
-        icono: 'tendencia',
-        color: 'var(--success)',
+        etiqueta: 'Diferencia de bultos',
+        valor: difDespues === null ? '—' : `${difDespues} %`,
+        icono: 'paquete',
+        color: 'var(--info)',
         detalle:
-          kpis.tiempoOriginal > 0
-            ? `${porcentaje(kpis.tiempoAhorrado / kpis.tiempoOriginal)} menos que la proyección`
-            : 'Sin proyección de referencia',
+          difAntes === null
+            ? 'Su ola tiene un solo chute'
+            : `Entre sus chutes · antes ${difAntes} % · meta: 10 % o menos`,
       },
       {
-        etiqueta: 'Ajustes realizados',
+        etiqueta: 'Chute más cargado',
+        valor: `${formatearNumero(maxDespues)} bultos`,
+        icono: 'almacen',
+        color: 'var(--accent)',
+        detalle:
+          maxAntes > 0
+            ? `Antes ${formatearNumero(maxAntes)} · ${this.variacion(maxAntes, maxDespues)}: es el que marca el cierre`
+            : 'Sin carga',
+      },
+      {
+        etiqueta: 'Rutas movidas',
         valor: `${formatearNumero(kpis.rutasMovidas)} rutas`,
         icono: 'flecha',
         color: 'var(--violet)',
-        detalle: `en otro chute · ${formatearNumero(kpis.operariosMovidos)} operario(s) reasignado(s) · ${formatearNumero(kpis.operariosAgregados)} añadido(s)`,
+        detalle:
+          separados > 0
+            ? `en otro chute · separa CL1 y CL2 en ${formatearNumero(separados)} chute(s)`
+            : 'en otro chute para igualar sus bultos',
+      },
+    ];
+  });
+
+  /**
+   * Indicadores de la sección de operarios del cluster: su cierre frente al
+   * límite (y si nadie se moviera), cuántos operarios usa y cuántos cambian de
+   * chute al llegar de la ola anterior.
+   */
+  readonly tarjetasOperarios = computed(() => {
+    const datos = this.dashboard();
+    const ola = this.olaActual();
+    if (!datos || !ola) {
+      return [];
+    }
+    const kpis = datos.kpis;
+    const cluster = datos.clusters[0];
+    const previa = this.olaPrevia();
+    const asignados = datos.chutes.reduce((total, chute) => total + chute.operariosBalanceado, 0);
+    const paso = datos.flujoOperarios[0];
+    const limite = cluster && Number(cluster.limiteHoras) > 0 ? Number(cluster.limiteHoras) : null;
+    return [
+      {
+        etiqueta: `Cierre de ${ola.cluster}`,
+        valor: formatearHoras(kpis.tiempoBalanceado),
+        icono: 'reloj',
+        color: cluster?.excede ? 'var(--danger)' : 'var(--success)',
+        detalle:
+          (limite === null
+            ? 'Sin límite'
+            : `Límite ${formatearHoras(limite)} · ${cluster?.excede ? 'excede' : 'cumple'}`) +
+          (kpis.tiempoOriginal !== null
+            ? ` · sin mover gente: ${formatearHoras(kpis.tiempoOriginal)}`
+            : ''),
+      },
+      {
+        etiqueta: 'Operarios en la ola',
+        valor: formatearNumero(asignados),
+        icono: 'usuarios',
+        color: 'var(--violet)',
+        detalle:
+          previa && paso
+            ? `De los ${formatearNumero(paso.quedan + paso.salen)} que terminaron ${previa}, ${formatearNumero(paso.quedan)} siguen en su chute`
+            : 'Primera ola: el equipo empieza aquí',
+      },
+      {
+        etiqueta: 'Cambios de chute',
+        valor: paso ? `${formatearNumero(Math.min(paso.salen, paso.llegan))}` : '—',
+        icono: 'flecha',
+        color: 'var(--accent)',
+        detalle: paso
+          ? `${formatearNumero(paso.quedan)} se quedan · ${formatearNumero(paso.salen)} salen · ${formatearNumero(paso.llegan)} llegan`
+          : 'Nadie llega de otra ola',
       },
     ];
   });
@@ -309,15 +466,22 @@ export class SimulacionDashboard {
     }));
   });
 
-  /** Tiempo de cierre por cluster: antes vs. después, con su límite. */
-  readonly gruposCluster = computed<GrupoComparativo[]>(() =>
-    this.clustersVisibles().map((cluster) => ({
-      etiqueta: cluster.cluster,
-      antes: Number(cluster.tiempoOriginal),
-      despues: Number(cluster.tiempoBalanceado),
-      limite: Number(cluster.limiteHoras),
+  /** Operarios por chute: lo que recibe de la ola anterior vs. lo asignado. */
+  readonly gruposOperarios = computed<GrupoComparativo[]>(() =>
+    this.chutesVisibles().map((chute) => ({
+      etiqueta: chute.chute,
+      antes: chute.operariosOriginal,
+      despues: chute.operariosBalanceado,
     })),
   );
+
+  readonly totalOperarios = computed(() => {
+    const chutes = this.chutesVisibles();
+    return {
+      antes: chutes.reduce((total, chute) => total + chute.operariosOriginal, 0),
+      despues: chutes.reduce((total, chute) => total + chute.operariosBalanceado, 0),
+    };
+  });
 
   /** Totales de las cinco métricas (fila final del cuadro por chute). */
   readonly totalesChute = computed(() => {
@@ -371,9 +535,10 @@ export class SimulacionDashboard {
   }
 
   seleccionar(id: number | null): void {
-    // Los filtros se conservan al recargar el mismo registro («Actualizar»).
+    // Los filtros y la vista se conservan al recargar el mismo registro («Actualizar»).
     if (id !== this.seleccionado()) {
       this.limpiarFiltros();
+      this.vista.set(null);
     }
     this.seleccionado.set(id);
     this.dashboard.set(null);
@@ -398,7 +563,7 @@ export class SimulacionDashboard {
     this.cargando.set(true);
     this.error.set(null);
     this.api
-      .dashboard(id)
+      .dashboard(id, this.vista())
       .pipe(
         finalize(() => {
           if (solicitud === this.solicitud) {
@@ -409,9 +574,18 @@ export class SimulacionDashboard {
       )
       .subscribe({
         next: (dashboard) => {
-          if (solicitud === this.solicitud) {
-            this.dashboard.set(dashboard);
+          if (solicitud !== this.solicitud) {
+            return;
           }
+          // Sin terminar, el resumen no está disponible: se abre el cluster en
+          // curso (o el último trabajado).
+          const ola = this.vista() === null && !this.finalizado() ? olaPorDefecto(dashboard) : null;
+          if (ola !== null) {
+            this.vista.set(ola);
+            this.cargar();
+            return;
+          }
+          this.dashboard.set(dashboard);
         },
         error: (err: unknown) => {
           if (solicitud === this.solicitud) {
@@ -421,8 +595,11 @@ export class SimulacionDashboard {
       });
   }
 
-  /** Variación relativa «+12 %» / «−8 %»; «—» si no había base. */
-  variacion(antes: number, despues: number): string {
+  /** Variación relativa «+12 %» / «−8 %»; «—» si no había base o falta un tiempo. */
+  variacion(antes: number | null | undefined, despues: number | null | undefined): string {
+    if (antes == null || despues == null) {
+      return '—';
+    }
     if (antes <= 0) {
       return despues > 0 ? 'nuevo' : '—';
     }
@@ -433,11 +610,49 @@ export class SimulacionDashboard {
   }
 
   /**
+   * Cambia entre la vista de un cluster y el resumen sin vaciar la pantalla:
+   * los datos anteriores quedan atenuados hasta que llegan los nuevos. El
+   * filtro de cluster no aplica dentro de la vista de un cluster.
+   */
+  elegirVista(clusterId: number | null): void {
+    if (clusterId === this.vista()) {
+      return;
+    }
+    this.vista.set(clusterId);
+    this.filtroClusters.set([]);
+    this.cargar();
+  }
+
+  /** Texto del movimiento de un chute entre dos olas. */
+  movimientoOperarios(chute: FlujoOperariosSimulacion['chutes'][number]): string {
+    const resta = chute.despues - chute.antes;
+    return resta > 0
+      ? `Llegan ${formatearNumero(resta)}`
+      : resta < 0
+        ? `Salen ${formatearNumero(-resta)}`
+        : 'Se quedan';
+  }
+
+  /** Diferencia absoluta «+2» / «−1» / «0»: en operarios importa cuántos, no el porcentaje. */
+  diferencia(antes: number, despues: number): string {
+    const resta = despues - antes;
+    return resta > 0
+      ? `+${formatearNumero(resta)}`
+      : resta < 0
+        ? `−${formatearNumero(-resta)}`
+        : '0';
+  }
+
+  /**
    * Color de la variación. En tiempo, bajar es bueno (verde) y subir es malo
    * (ámbar); en carga, mover bultos no es bueno ni malo: solo se marca el sentido.
    */
-  claseVariacion(antes: number, despues: number, bajarEsBueno: boolean): string {
-    if (Math.abs(despues - antes) < 0.005) {
+  claseVariacion(
+    antes: number | null | undefined,
+    despues: number | null | undefined,
+    bajarEsBueno: boolean,
+  ): string {
+    if (antes == null || despues == null || Math.abs(despues - antes) < 0.005) {
       return '';
     }
     const baja = despues < antes;

@@ -64,6 +64,67 @@
     color: var(--accent);
     box-shadow: var(--shadow-xs);
   }
+
+  &:disabled {
+    color: var(--text-3);
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
+/* Vista de un cluster: 4 KPIs (cierre, diferencia de bultos, ahorro y ajustes) en una fila. */
+.dash-kpis:has(> :last-child:nth-child(4)) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+
+  @include bp.down(lg) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Selector de vista: el lanzamiento de cada cluster o el resultado final. */
+.dash-vistas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin: 0 0 var(--space-4);
+
+  .segmento__opcion {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__punto {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-3);
+
+    &--rutas {
+      background: var(--info);
+    }
+
+    &--listo {
+      background: var(--success);
+    }
+  }
+
+  &__nota {
+    font-size: var(--fs-xs);
+    color: var(--text-3);
+  }
+
+  @include bp.down(sm) {
+    .segmento {
+      width: 100%;
+    }
+
+    .segmento__opcion {
+      flex: 1 1 auto;
+      justify-content: center;
+    }
+  }
 }
 
 /* Cuadro ejecutivo bajo cada gráfico: tabla a todo el ancho de la tarjeta. */
@@ -133,6 +194,35 @@
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
+/* Chute del cuadro: al pulsarlo se abren sus rutas antes y después. */
+.cuadro__chute {
+  margin: 0;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent);
+  background: none;
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+
+  &:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--ring);
+  }
+}
+
 .cuadro__delta {
   display: block;
   font-size: 0.66rem;
@@ -167,6 +257,26 @@
   margin: calc(var(--space-2) * -1) 0 var(--space-4);
 }
 
+/* Vista final con clusters aún sin balancear: aviso de que el resultado es parcial. */
+.dash-paso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: var(--fs-sm);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+
+  span {
+    flex: 1 1 280px;
+    color: var(--text);
+  }
+}
+
 /* Chute que mezcla CL1 y CL2 sin destino posible: advertencia del dashboard. */
 .dash-mezcla {
   display: flex;
@@ -183,4 +293,129 @@
   span {
     color: var(--text);
   }
+}
+
+/* Flujo de operarios entre olas: una sección por transición (CL1 → CL2…). */
+.flujo-total {
+  align-self: center;
+  padding: 2px 10px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--violet);
+  background: color-mix(in srgb, var(--violet) 12%, transparent);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.flujo-olas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+
+  @include bp.down(sm) {
+    padding: var(--space-3);
+  }
+}
+
+.flujo-ola {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+
+  &__titulo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    font-size: var(--fs-sm);
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  &__resumen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .cuadro {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  /* Cuatro columnas: no necesita el ancho mínimo de los cuadros de carga. */
+  .dash-tabla {
+    min-width: 320px;
+  }
+}
+
+.flujo-dato {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+
+  strong {
+    font-size: var(--fs-sm);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &--salen strong {
+    color: var(--warning);
+  }
+
+  &--llegan strong {
+    color: var(--success);
+  }
+}
+
+.flujo-mov {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-3);
+
+  &--salen {
+    color: var(--warning);
+  }
+
+  &--llegan {
+    color: var(--success);
+  }
+}
+
+/* Título de cada parte de la vista de un cluster: 1 · Rutas y 2 · Operarios. */
+.dash-seccion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-3);
+  font-size: var(--fs-lg);
+  font-weight: 800;
+  color: var(--text);
+
+  ui-icon {
+    color: var(--accent);
+  }
+
+  &__sub {
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    color: var(--text-3);
+  }
+}
+
+.dash-grid + .dash-seccion {
+  margin-top: var(--space-6);
 }

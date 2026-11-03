@@ -32,11 +32,6 @@
   &__ayuda {
     font-size: var(--fs-xs);
     color: var(--text-3);
-
-    &--alerta {
-      color: var(--danger);
-      font-weight: 600;
-    }
   }
 
   /* Ficha del registro a la izquierda y acciones a la derecha, a la misma altura. */
@@ -79,6 +74,29 @@
       flex: 1 1 calc(50% - var(--space-2));
     }
   }
+}
+
+/* Avance de la simulación: clusters cerrados sobre el total. */
+.config-paso {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--success);
+  background: var(--success-soft);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* Avance pendiente: aún faltan clusters por terminar. */
+.config-paso--pendiente {
+  color: var(--text-2);
+  background: var(--surface-2);
+  border-color: var(--border);
 }
 
 .config-info {
@@ -202,46 +220,6 @@
     }
   }
 
-  &__tiempo {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-
-    strong {
-      font-family: var(--font-display);
-      font-size: var(--fs-2xl);
-      font-weight: 800;
-      line-height: 1.05;
-      color: var(--cluster-color, var(--accent));
-      font-variant-numeric: tabular-nums;
-    }
-  }
-
-  &__label {
-    font-size: var(--fs-xs);
-    color: var(--text-3);
-  }
-
-  &__limite {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-
-    .ui-label {
-      flex: none;
-      margin: 0;
-      font-size: var(--fs-xs);
-    }
-
-    .ui-input {
-      flex: 1;
-      height: 32px;
-      padding: 0 var(--space-2);
-      text-align: center;
-      font-weight: 700;
-    }
-  }
-
   &__stats {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -276,18 +254,121 @@
     }
   }
 
-  &--excede {
-    background: color-mix(in srgb, var(--danger) 4%, var(--surface));
-    border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
-    border-left-color: var(--cluster-color, var(--accent));
+  /* Cerrado: su resultado; en espera: cuándo se habilita. */
+  &__resumen {
+    margin: 0;
+    font-size: var(--fs-sm);
+    color: var(--text-2);
 
-    .cluster-card__tiempo strong {
-      color: var(--danger);
+    strong {
+      color: var(--text);
     }
   }
 
-  &--sin-limite .cluster-card__tiempo strong {
+  /* Restablecer el cluster en curso o reabrir uno cerrado. */
+  &__acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: auto;
+  }
+
+  /* El único cluster que se trabaja: resalta sobre los demás. */
+  &--en-curso {
+    grid-column: 1 / -1;
+    border-color: color-mix(in srgb, var(--cluster-color, var(--accent)) 45%, var(--border));
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Esperando a que se cierre el anterior. */
+  &--bloqueado {
+    opacity: 0.7;
+  }
+}
+
+/* Los tres pasos del cluster en curso: rutas, operarios y cierre. */
+.cluster-pasos {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @include bp.down(md) {
+    grid-template-columns: 1fr;
+  }
+
+  &__item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    min-width: 0;
+    padding: var(--space-3);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+
+    .ui-btn {
+      margin-top: auto;
+    }
+
+    &--hecho {
+      background: var(--success-soft);
+      border-color: color-mix(in srgb, var(--success) 30%, var(--border));
+
+      .cluster-pasos__titulo::after {
+        content: ' ✓';
+        color: var(--success);
+      }
+    }
+
+    &--espera {
+      opacity: 0.6;
+    }
+  }
+
+  &__titulo {
+    font-size: var(--fs-sm);
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  &__dato {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--fs-xs);
+    line-height: 1.45;
     color: var(--text-2);
+  }
+
+  &__aviso {
+    font-size: var(--fs-xs);
+    line-height: 1.4;
+    color: var(--warning);
+  }
+
+  &__limite {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+
+    .ui-label {
+      flex: none;
+      margin: 0;
+      font-size: var(--fs-xs);
+    }
+
+    .ui-input {
+      width: 90px;
+      height: 32px;
+      padding: 0 var(--space-2);
+      text-align: center;
+      font-weight: 700;
+    }
   }
 }
 
@@ -310,13 +391,39 @@
   }
 }
 
-.ops-input {
-  width: 68px;
-  height: 30px;
-  padding: 0 var(--space-2);
-  margin-left: auto;
-  text-align: center;
+/* Avance del cluster junto a su nombre: cerrado, en curso o en espera. */
+.cluster-paso {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: auto;
+  padding: 1px 8px;
+  font-size: 0.66rem;
   font-weight: 700;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  white-space: nowrap;
+
+  &--listo {
+    color: var(--success);
+    background: var(--success-soft);
+    border-color: color-mix(in srgb, var(--success) 30%, transparent);
+  }
+
+  &--en-curso {
+    color: var(--info);
+    background: var(--info-soft);
+    border-color: color-mix(in srgb, var(--info) 30%, transparent);
+  }
+}
+
+.historial-grupo__mensaje {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-2);
 }
 
 .cluster-chip {
@@ -404,11 +511,6 @@
 .config-spinner {
   width: 16px;
   height: 16px;
-}
-
-.confirm__desc--aviso {
-  color: var(--warning);
-  font-weight: 600;
 }
 
 .archivo-chip {

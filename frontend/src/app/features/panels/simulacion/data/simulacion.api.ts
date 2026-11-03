@@ -6,7 +6,8 @@ import {
   ConfiguracionSimulacion,
   ConfiguracionSimulacionRequest,
   DashboardSimulacion,
-  HistorialSimulacion,
+  FaseBalanceo,
+  HistorialRegistroSimulacion,
   RegistroSimulacionActualizarRequest,
   RutaSimulacion,
   RutasDashboardFiltros,
@@ -68,6 +69,7 @@ export class SimulacionApi {
     });
   }
 
+  /** Equipo (operarios y velocidad) y límites de horas de los clusters. */
   guardarConfiguracion(
     id: number,
     peticion: ConfiguracionSimulacionRequest,
@@ -85,20 +87,48 @@ export class SimulacionApi {
     );
   }
 
-  balancear(id: number): Observable<BalanceoSimulacion> {
-    return this.api.post<BalanceoSimulacion>(`/simulacion/registros/${id}/balancear`);
+  /** Trabaja el cluster en curso: paso 1 (RUTAS) o paso 2 (OPERARIOS) de su ola. */
+  balancear(id: number, clusterId: number, fase: FaseBalanceo): Observable<BalanceoSimulacion> {
+    return this.api.post<BalanceoSimulacion>(
+      `/simulacion/registros/${id}/clusters/${clusterId}/balancear?fase=${fase}`,
+    );
+  }
+
+  /** El cluster en curso vuelve a la proyección; los demás no cambian. */
+  restablecerCluster(id: number, clusterId: number): Observable<ConfiguracionSimulacion> {
+    return this.api.post<ConfiguracionSimulacion>(
+      `/simulacion/registros/${id}/clusters/${clusterId}/restablecer`,
+    );
   }
 
   restablecer(id: number): Observable<void> {
     return this.api.post<void>(`/simulacion/registros/${id}/restablecer`);
   }
 
-  historial(id: number): Observable<HistorialSimulacion[]> {
-    return this.api.get<HistorialSimulacion[]>(`/simulacion/registros/${id}/historial`);
+  /** Cierra el cluster en curso: el equipo pasa al siguiente con esta dotación. */
+  cerrar(id: number, clusterId: number): Observable<ConfiguracionSimulacion> {
+    return this.api.post<ConfiguracionSimulacion>(
+      `/simulacion/registros/${id}/clusters/${clusterId}/cerrar`,
+    );
   }
 
-  dashboard(id: number): Observable<DashboardSimulacion> {
-    return this.api.get<DashboardSimulacion>(`/simulacion/registros/${id}/dashboard`);
+  /** Reabre un cluster cerrado; los siguientes vuelven a la proyección. */
+  reabrir(id: number, clusterId: number): Observable<ConfiguracionSimulacion> {
+    return this.api.post<ConfiguracionSimulacion>(
+      `/simulacion/registros/${id}/clusters/${clusterId}/reabrir`,
+    );
+  }
+
+  historial(id: number): Observable<HistorialRegistroSimulacion> {
+    return this.api.get<HistorialRegistroSimulacion>(`/simulacion/registros/${id}/historial`);
+  }
+
+  /** Sin clusterId, el resumen del registro; con él, la vista de ese cluster. */
+  dashboard(id: number, clusterId: number | null = null): Observable<DashboardSimulacion> {
+    return this.api.get<DashboardSimulacion>(
+      `/simulacion/registros/${id}/dashboard`,
+      clusterId === null ? {} : { clusterId },
+    );
   }
 
   /** Rutas de un lado del chute (antes o después), paginadas y con totales del filtro. */

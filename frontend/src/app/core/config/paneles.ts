@@ -162,7 +162,7 @@ export const PANEL_SIMULACION: PanelDef = {
     {
       id: 'configuracion',
       nombre: 'Configuración',
-      descripcion: 'Límites por cluster, operarios por chute y balanceo.',
+      descripcion: 'Balanceo de rutas por cluster para igualar los bultos de sus chutes.',
       icono: 'control',
       ruta: 'configuracion',
       permiso: PERMISOS.VER_CONFIGURACION_SIMULACION,

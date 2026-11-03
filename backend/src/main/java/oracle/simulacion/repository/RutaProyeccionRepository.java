@@ -79,7 +79,10 @@ public interface RutaProyeccionRepository
       """)
   List<CargaRutas> cargaOriginalPorArchivo(@Param("archivoId") Long archivoId);
 
-  /** Rutas que cambiaron de chute, agrupadas por (chute original, chute actual). */
+  /**
+   * Rutas que cambiaron de chute, agrupadas por (chute original, chute actual).
+   * Con clusterId, solo las de ese cluster (vista de un lanzamiento).
+   */
   @Query("""
       SELECT r.chuteOriginalId AS origen,
              r.chuteId AS destino,
@@ -87,9 +90,11 @@ public interface RutaProyeccionRepository
         FROM RutaProyeccion r
        WHERE r.archivoId = :archivoId
          AND r.chuteId <> r.chuteOriginalId
+         AND (:clusterId IS NULL OR r.clusterId = :clusterId)
        GROUP BY r.chuteOriginalId, r.chuteId
       """)
-  List<MovimientoRutas> movimientosPorArchivo(@Param("archivoId") Long archivoId);
+  List<MovimientoRutas> movimientosPorArchivo(
+      @Param("archivoId") Long archivoId, @Param("clusterId") Long clusterId);
 
   /** Devuelve todas las rutas del archivo a su chute original sin recorrerlas una a una. */
   @Modifying
@@ -100,15 +105,6 @@ public interface RutaProyeccionRepository
          AND r.chuteId <> r.chuteOriginalId
       """)
   int restaurarChutes(@Param("archivoId") Long archivoId);
-
-  /** Rutas que hoy están en un chute distinto al de la carga (define si el registro está balanceado). */
-  @Query("""
-      SELECT COUNT(r)
-        FROM RutaProyeccion r
-       WHERE r.archivoId = :archivoId
-         AND r.chuteId <> r.chuteOriginalId
-      """)
-  long contarFueraDeOrigen(@Param("archivoId") Long archivoId);
 
   /** Totales del detalle de rutas; cada lado añade su filtro de chute (ver abajo). */
   String RESUMEN =

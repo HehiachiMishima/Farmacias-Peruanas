@@ -10,4 +10,6 @@ public record CargaSimulacionResponse(
     BigDecimal bultos,
     BigDecimal unidades,
     BigDecimal lineas,
-    long cod) {}
+    long cod,
+    /** Operarios del chute en la ola de este cluster; null = la ola aún no tiene operarios. */
+    Integer operarios) {}

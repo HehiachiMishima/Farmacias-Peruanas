@@ -71,20 +71,16 @@ public class SimulacionLotesRepository {
         });
   }
 
+  /** Los operarios iniciales son la base de cada chute hasta que el usuario la cambie. */
   public void insertarParametrosChute(Long archivoId, Collection<Long> chuteIds, int operarios) {
-    // Los operarios iniciales son también la base que deja «Restablecer».
     jdbc.batchUpdate(
-        """
-        INSERT INTO parametros_chutes (archivo_id, chute_id, operarios, operarios_original)
-        VALUES (?, ?, ?, ?)
-        """,
+        "INSERT INTO parametros_chutes (archivo_id, chute_id, operarios) VALUES (?, ?, ?)",
         new ArrayList<>(chuteIds),
         LOTE,
         (ps, chuteId) -> {
           ps.setLong(1, archivoId);
           ps.setLong(2, chuteId);
           ps.setInt(3, operarios);
-          ps.setInt(4, operarios);
         });
   }
 
@@ -99,25 +95,26 @@ public class SimulacionLotesRepository {
     jdbc.batchUpdate(
         """
         INSERT INTO historial_balanceo
-            (archivo_id, tipo_accion, ruta_id, chute_origen_id, chute_destino_id,
-             chute_modificado_id, motivo, operarios_origen, operarios_destino,
-             creado_por, creado_en)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (archivo_id, lanzamiento_id, tipo_accion, ruta_id, chute_origen_id,
+             chute_destino_id, chute_modificado_id, motivo, operarios_origen,
+             operarios_destino, creado_por, creado_en)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         logs,
         LOTE,
         (ps, log) -> {
           ps.setLong(1, log.getArchivoId());
-          ps.setString(2, log.getTipoAccion());
-          ps.setObject(3, log.getRutaId(), Types.BIGINT);
-          ps.setObject(4, log.getChuteOrigenId(), Types.BIGINT);
-          ps.setObject(5, log.getChuteDestinoId(), Types.BIGINT);
-          ps.setObject(6, log.getChuteModificadoId(), Types.BIGINT);
-          ps.setString(7, log.getMotivo());
-          ps.setObject(8, log.getOperariosOrigen(), Types.INTEGER);
-          ps.setObject(9, log.getOperariosDestino(), Types.INTEGER);
-          ps.setLong(10, log.getCreadoPor());
-          ps.setTimestamp(11, Timestamp.from(log.getCreadoEn()));
+          ps.setObject(2, log.getLanzamientoId(), Types.BIGINT);
+          ps.setString(3, log.getTipoAccion());
+          ps.setObject(4, log.getRutaId(), Types.BIGINT);
+          ps.setObject(5, log.getChuteOrigenId(), Types.BIGINT);
+          ps.setObject(6, log.getChuteDestinoId(), Types.BIGINT);
+          ps.setObject(7, log.getChuteModificadoId(), Types.BIGINT);
+          ps.setString(8, log.getMotivo());
+          ps.setObject(9, log.getOperariosOrigen(), Types.INTEGER);
+          ps.setObject(10, log.getOperariosDestino(), Types.INTEGER);
+          ps.setLong(11, log.getCreadoPor());
+          ps.setTimestamp(12, Timestamp.from(log.getCreadoEn()));
         });
   }
 

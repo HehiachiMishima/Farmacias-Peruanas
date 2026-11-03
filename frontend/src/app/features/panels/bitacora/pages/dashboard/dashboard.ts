@@ -14,7 +14,6 @@ import { Kpi } from '../../../../../shared/ui/charts/kpi';
 import { ItemRanking, RankingTiles } from '../../../../../shared/ui/charts/ranking-tiles';
 import { RingChart, SegmentoAnillo } from '../../../../../shared/ui/charts/ring-chart';
 import { GrupoApilado, StackedBars } from '../../../../../shared/ui/charts/stacked-bars';
-import { ItemTreemap, Treemap } from '../../../../../shared/ui/charts/treemap';
 import { ItemWaffle, WaffleChart } from '../../../../../shared/ui/charts/waffle-chart';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
 import { Icon } from '../../../../../shared/ui/icon/icon';
@@ -45,7 +44,6 @@ import { RangoFechas, RangoRapido } from '../../../../../shared/ui/panel-filtros
     Kpi,
     RankingTiles,
     RingChart,
-    Treemap,
     WaffleChart,
     StackedBars,
     PanelFiltros,
@@ -153,15 +151,6 @@ export class DashboardBitacora {
   });
 
   // ---------------- Gráficos ----------------
-  /** Sistemas por volumen (treemap): área = casos, con su MTTR como detalle. */
-  readonly mapaSistemas = computed<ItemTreemap[]>(() =>
-    (this.datos()?.sistemas ?? []).map((g) => ({
-      etiqueta: g.etiqueta,
-      valor: g.total,
-      detalle: `MTTR ${duracion(g.mttrSegundos)}`,
-    })),
-  );
-
   /** Tipos más repetidos, con el sistema al que pertenecen. */
   readonly rankingTipos = computed<ItemRanking[]>(() =>
     (this.datos()?.tipos ?? []).map((t) => ({

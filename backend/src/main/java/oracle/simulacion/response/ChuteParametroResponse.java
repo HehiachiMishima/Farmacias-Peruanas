@@ -2,9 +2,6 @@ package oracle.simulacion.response;
 
 import java.util.List;
 
-/**
- * Operarios de un chute (actuales y los que fijó el usuario) y los clusters
- * que hoy tienen rutas en él, para validar destinos sin juntar CL1 y CL2.
- */
+/** Operarios base de un chute (los que fija el usuario) y los clusters con rutas en él. */
 public record ChuteParametroResponse(
-    Long id, String nombre, Integer operarios, Integer operariosOriginal, List<Long> clusterIds) {}
+    Long id, String nombre, Integer operarios, List<Long> clusterIds) {}

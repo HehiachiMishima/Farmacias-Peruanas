@@ -6,7 +6,8 @@ export interface ArchivoSimulacion {
   nombreArchivo: string;
   etiqueta: string | null;
   colorHex: string | null;
-  estado: 'PROYECCION' | 'BALANCEADO' | string;
+  /** PROYECCION → EN_PROCESO (algún cluster empezado) → FINALIZADO (todos cerrados). */
+  estado: EstadoSimulacion;
   rutas: number;
   chutes: number;
   bultos: number;
@@ -20,20 +21,28 @@ export interface ArchivoSimulacion {
   actualizadoPor: number | null;
 }
 
+export type EstadoSimulacion = 'PROYECCION' | 'EN_PROCESO' | 'FINALIZADO' | string;
+
+/**
+ * Avance de un cluster. Se trabajan de a uno en el orden de las olas: rutas
+ * balanceadas (RUTAS), operarios asignados (LISTO) y cerrado (CERRADO).
+ */
+export type EstadoCluster = 'PENDIENTE' | 'RUTAS' | 'LISTO' | 'CERRADO' | string;
+
 export interface ClusterParametroSimulacion {
   id: number;
   nombre: string;
   limiteHoras: number;
   /** Clusters con los que no puede compartir chute (CL1 con CL2). */
   incompatibles: number[];
+  estado: EstadoCluster;
 }
 
 export interface ChuteParametroSimulacion {
   id: number;
   nombre: string;
+  /** Base que fija el usuario: los operarios de la proyección (el «antes»). */
   operarios: number;
-  /** Operarios que fijó el usuario: base del comparativo y de «Restablecer». */
-  operariosOriginal: number;
   /** Clusters con rutas hoy en el chute. */
   clusterIds: number[];
 }
@@ -65,17 +74,19 @@ export interface CargaSimulacion {
   unidades: number;
   lineas: number;
   cod: number;
+  /** Operarios del chute en la ola de este cluster; null = la ola aún no tiene operarios asignados. */
+  operarios: number | null;
 }
 
 /** Parámetros y carga agregada; las rutas se piden aparte, paginadas. */
 export interface ConfiguracionSimulacion {
   archivo: ArchivoSimulacion;
   velocidadBase: number;
-  /** Tope global de operarios disponibles para todo el registro. */
+  /** Tope global de operarios disponibles en cada ola; el pool se reutiliza entre olas. */
   operariosMaximos: number;
   /** Máximo de operarios en un chute definido por el usuario; null = reparto parejo. */
   operariosPorChute: number | null;
-  /** Tope por chute que aplica el balanceo (el definido o el reparto parejo). */
+  /** Tope por chute que aplica el balanceo: el definido o, si no hay, el equipo completo. */
   topePorChute: number;
   clusters: ClusterParametroSimulacion[];
   chutes: ChuteParametroSimulacion[];
@@ -92,35 +103,28 @@ export interface RutasSimulacionFiltros {
   chuteIds: number[];
 }
 
+/** Equipo (operarios y velocidad) y límites de horas de los clusters. */
+export interface ConfiguracionSimulacionRequest {
+  velocidadBase: number;
+  /** Operarios del equipo: los mismos pasan de un cluster al siguiente. */
+  operariosMaximos: number;
+  /** Máximo por chute; null = reparto parejo del equipo. */
+  operariosPorChute: number | null;
+  clusters: { clusterId: number; limiteHoras: number }[];
+}
+
 export interface RegistroSimulacionActualizarRequest {
   nombreRegistro: string;
   etiqueta: string;
   colorHex: string;
 }
 
-export interface ClusterLimiteRequest {
-  clusterId: number;
-  limiteHoras: number;
-}
-
-export interface ChuteOperariosRequest {
-  chuteId: number;
-  operarios: number;
-}
-
-export interface ConfiguracionSimulacionRequest {
-  velocidadBase: number;
-  operariosMaximos: number;
-  /** null = reparto parejo del máximo global. */
-  operariosPorChute: number | null;
-  clusters: ClusterLimiteRequest[];
-  chutes: ChuteOperariosRequest[];
-}
-
 export interface HistorialSimulacion {
   id: number;
-  tipoAccion: 'MOVER_RUTA' | 'AÑADIR_OPERARIO' | 'MOVER_OPERARIO' | string;
-  /** BALANCEO: ajuste de tiempos; SEPARACION: CL1 y CL2; MANUAL: hecho por el usuario. */
+  /** Lanzamiento que hizo el cambio; null = movimiento manual o de una versión anterior. */
+  lanzamientoId: number | null;
+  tipoAccion: 'MOVER_RUTA' | 'ASIGNAR_OPERARIOS' | string;
+  /** BALANCEO: paso 1 o 2; SEPARACION: CL1 y CL2; MANUAL: hecho por el usuario. */
   motivo: 'BALANCEO' | 'SEPARACION' | 'MANUAL' | string;
   rutaId: number | null;
   ruta: string | null;
@@ -130,26 +134,53 @@ export interface HistorialSimulacion {
   chuteOrigen: string | null;
   chuteDestino: string | null;
   chuteModificado: string | null;
-  /** Operarios después de la acción en el chute de origen y en el de destino o modificado. */
+  /**
+   * MOVER_RUTA: operarios del chute de origen y destino tras el cambio.
+   * ASIGNAR_OPERARIOS: operarios del chute en la ola antes (origen) y después (destino).
+   */
   operariosOrigen: number | null;
   operariosDestino: number | null;
   creadoEn: string;
   creadoPor: number | null;
 }
 
+/** Un lanzamiento de un cluster con el resultado que vio el usuario. */
+export interface LanzamientoSimulacion {
+  id: number;
+  clusterId: number;
+  cluster: string;
+  fase: FaseBalanceo;
+  mensaje: string;
+  creadoEn: string;
+  creadoPor: number | null;
+}
+
+export interface HistorialRegistroSimulacion {
+  /** Del más reciente al más antiguo. */
+  lanzamientos: LanzamientoSimulacion[];
+  cambios: HistorialSimulacion[];
+}
+
+/** RUTAS: reparte las rutas de la ola de un cluster; OPERARIOS: asigna los operarios de su ola. */
+export type FaseBalanceo = 'RUTAS' | 'OPERARIOS';
+
 export interface BalanceoSimulacion {
+  clusterId: number;
+  cluster: string;
+  fase: FaseBalanceo;
+  /** Estado del cluster tras el paso: RUTAS o LISTO. */
+  estado: EstadoCluster;
   rutasMovidas: number;
-  operariosAgregados: number;
-  /** Operarios que pasaron de un chute con holgura a un cuello de botella. */
-  operariosMovidos: number;
+  /** Operarios asignados en la ola tras el paso 2. */
+  operariosAsignados: number;
   mensaje: string;
 }
 
 export interface SimulacionKpis {
-  /** Tiempo del cluster más lento (h) antes y después de los ajustes. */
-  tiempoOriginal: number;
-  tiempoBalanceado: number;
-  tiempoAhorrado: number;
+  /** Cierre de la operación: suma de las olas (h) antes y después. null = sin operarios. */
+  tiempoOriginal: number | null;
+  tiempoBalanceado: number | null;
+  tiempoAhorrado: number | null;
   /** Rutas que hoy están en un chute distinto al original. */
   rutasMovidas: number;
   /** Operarios por encima de los que fijó el usuario. */
@@ -165,8 +196,9 @@ export interface SimulacionKpis {
 export interface ClusterComparativoSimulacion {
   id: number;
   cluster: string;
-  tiempoOriginal: number;
-  tiempoBalanceado: number;
+  /** Tiempo de cierre de la ola; null = algún chute se quedó sin operarios. */
+  tiempoOriginal: number | null;
+  tiempoBalanceado: number | null;
   limiteHoras: number;
   excede: boolean;
   bultosOriginal: number;
@@ -180,7 +212,9 @@ export interface ClusterComparativoSimulacion {
 export interface ChuteComparativoSimulacion {
   id: number;
   chute: string;
+  /** En la vista de un cluster, los que recibe de la ola anterior; en el resumen, 0. */
   operariosOriginal: number;
+  /** En la vista de un cluster, los asignados a su ola; en el resumen, el máximo entre sus olas. */
   operariosBalanceado: number;
   /** Cantidad de rutas asignadas al chute antes y después del balanceo. */
   rutasOriginal: number;
@@ -188,8 +222,9 @@ export interface ChuteComparativoSimulacion {
   /** Rutas que el balanceo sacó del chute y las que trajo de otros. */
   rutasSalieron: number;
   rutasLlegaron: number;
-  tiempoOriginal: number;
-  tiempoBalanceado: number;
+  /** null = el chute tiene bultos pero ningún operario. */
+  tiempoOriginal: number | null;
+  tiempoBalanceado: number | null;
   estado: 'MEJORO' | 'AUMENTO' | 'IGUAL' | string;
   bultosOriginal: number;
   bultosBalanceado: number;
@@ -226,6 +261,28 @@ export interface DashboardSimulacion {
   mezclas: ChuteMezcladoSimulacion[];
   /** Movimientos de rutas entre chutes: flujo de cualquier grupo de chutes. */
   movimientos: MovimientoChuteSimulacion[];
+  /** Clusters en el orden de las olas con su avance: arman el selector de vistas. */
+  olas: OlaSimulacion[];
+  /** Paso de operarios entre olas seguidas con operarios asignados (solo en la vista final). */
+  flujoOperarios: FlujoOperariosSimulacion[];
+}
+
+export interface OlaSimulacion {
+  clusterId: number;
+  cluster: string;
+  estado: EstadoCluster;
+}
+
+/** Operarios que siguen en su chute, salen de uno o llegan a otro al pasar de una ola a la siguiente. */
+export interface FlujoOperariosSimulacion {
+  origenId: number;
+  origen: string;
+  destinoId: number;
+  destino: string;
+  quedan: number;
+  salen: number;
+  llegan: number;
+  chutes: { chuteId: number; chute: string; antes: number; despues: number }[];
 }
 
 export interface ChuteMezcladoSimulacion {
