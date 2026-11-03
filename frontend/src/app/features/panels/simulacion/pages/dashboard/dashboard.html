@@ -31,19 +31,21 @@
       (valorCambia)="seleccionar($event)"
     />
   </div>
-  <button
-    type="button"
-    class="ui-btn ui-btn--secondary"
-    [attr.aria-expanded]="filtrosAbierto()"
-    aria-controls="simulacion-dashboard-filtros"
-    (click)="alternarFiltros()"
-  >
-    <ui-icon name="filtro" [size]="18" />
-    Filtros
-    @if (filtrosActivos() > 0) {
-      <span class="filtros-badge">{{ filtrosActivos() }}</span>
-    }
-  </button>
+  @if (vista() !== null) {
+    <button
+      type="button"
+      class="ui-btn ui-btn--secondary"
+      [attr.aria-expanded]="filtrosAbierto()"
+      aria-controls="simulacion-dashboard-filtros"
+      (click)="alternarFiltros()"
+    >
+      <ui-icon name="filtro" [size]="18" />
+      Filtros
+      @if (filtrosActivos() > 0) {
+        <span class="filtros-badge">{{ filtrosActivos() }}</span>
+      }
+    </button>
+  }
   <button
     type="button"
     class="ui-btn ui-btn--secondary"
@@ -226,139 +228,147 @@
       <span class="dash-seccion__sub">Reparto por bultos entre sus chutes</span>
     </h2>
   }
-  <section class="dash-kpis" [attr.aria-label]="olaActual() ? 'Rutas' : 'Resumen'">
-    @for (tarjeta of tarjetas(); track tarjeta.etiqueta) {
-      <ui-kpi
-        [etiqueta]="tarjeta.etiqueta"
-        [valor]="tarjeta.valor"
-        [icono]="tarjeta.icono"
-        [color]="tarjeta.color"
-        [detalle]="tarjeta.detalle"
-      />
-    }
-  </section>
+  @if (olaActual()) {
+    <section class="dash-kpis" aria-label="Rutas">
+      @for (tarjeta of tarjetas(); track tarjeta.etiqueta) {
+        <ui-kpi
+          [etiqueta]="tarjeta.etiqueta"
+          [valor]="tarjeta.valor"
+          [icono]="tarjeta.icono"
+          [color]="tarjeta.color"
+          [detalle]="tarjeta.detalle"
+        />
+      }
+    </section>
+  }
 
-  <div class="dash-grid" [class.dash-grid--cargando]="cargando()">
-    <article class="dash-card" [class.dash-card--cargando]="cargando()">
-      <header class="dash-card__head">
-        <div class="dash-card__titulos">
-          <h2 class="dash-card__titulo">
-            <ui-icon name="paquete" [size]="18" /> Carga por chute: antes vs. después
-          </h2>
-          <p class="dash-card__sub">
-            @if (olaActual(); as ola) {
-              Cómo cambió la carga de {{ ola.cluster }} en cada chute al mover sus rutas.
-            } @else {
-              Cómo cambió la carga de cada chute al mover rutas.
+  @if (olaActual()) {
+    <div class="dash-grid" [class.dash-grid--cargando]="cargando()">
+      <article class="dash-card" [class.dash-card--cargando]="cargando()">
+        <header class="dash-card__head">
+          <div class="dash-card__titulos">
+            <h2 class="dash-card__titulo">
+              <ui-icon name="paquete" [size]="18" /> Carga por chute: antes vs. después
+            </h2>
+            <p class="dash-card__sub">
+              @if (olaActual(); as ola) {
+                Cómo cambió la carga de {{ ola.cluster }} en cada chute al mover sus rutas.
+              } @else {
+                Cómo cambió la carga de cada chute al mover rutas.
+              }
+              Elige la métrica y pulsa un chute para ver sus rutas antes y después.
+            </p>
+          </div>
+          <div class="segmento" role="tablist" aria-label="Métrica de carga">
+            @for (m of metricas; track m.id) {
+              <button
+                type="button"
+                role="tab"
+                class="segmento__opcion"
+                [class.segmento__opcion--activa]="metrica() === m.id"
+                [attr.aria-selected]="metrica() === m.id"
+                (click)="metrica.set(m.id)"
+              >
+                {{ m.nombre }}
+              </button>
             }
-            Elige la métrica y pulsa un chute para ver sus rutas antes y después.
-          </p>
-        </div>
-        <div class="segmento" role="tablist" aria-label="Métrica de carga">
-          @for (m of metricas; track m.id) {
-            <button
-              type="button"
-              role="tab"
-              class="segmento__opcion"
-              [class.segmento__opcion--activa]="metrica() === m.id"
-              [attr.aria-selected]="metrica() === m.id"
-              (click)="metrica.set(m.id)"
-            >
-              {{ m.nombre }}
-            </button>
+          </div>
+        </header>
+        <div class="dash-card__body">
+          @if (gruposChute().length > 0) {
+            <ui-comparativo
+              [datos]="gruposChute()"
+              [formato]="formatoCarga"
+              etiquetaAntes="Antes del balanceo"
+              etiquetaDespues="Después del balanceo"
+              color="var(--accent)"
+              [altura]="320"
+            />
+          } @else {
+            <div class="dash-card__vacio">Sin chutes para comparar.</div>
           }
         </div>
-      </header>
-      <div class="dash-card__body">
-        @if (gruposChute().length > 0) {
-          <ui-comparativo
-            [datos]="gruposChute()"
-            [formato]="formatoCarga"
-            etiquetaAntes="Antes del balanceo"
-            etiquetaDespues="Después del balanceo"
-            color="var(--accent)"
-            [altura]="320"
-          />
-        } @else {
-          <div class="dash-card__vacio">Sin chutes para comparar.</div>
-        }
-      </div>
 
-      <div class="dash-tabla-wrap cuadro dash-tabla-wrap--scroll">
-        <table class="dash-tabla cuadro__tabla">
-          <thead>
-            <tr>
-              <th rowspan="2">Chute</th>
-              @for (m of metricas; track m.id) {
-                <th
-                  colspan="2"
-                  class="cuadro__grupo"
-                  [class.cuadro__grupo--activo]="metrica() === m.id"
-                >
-                  {{ m.nombre }}
-                </th>
-              }
-            </tr>
-            <tr>
-              @for (m of metricas; track m.id) {
-                <th class="num" [class.cuadro__col--activa]="metrica() === m.id">Antes</th>
-                <th class="num" [class.cuadro__col--activa]="metrica() === m.id">Después</th>
-              }
-            </tr>
-          </thead>
-          <tbody>
-            @for (chute of chutesVisibles(); track chute.chute) {
+        <div class="dash-tabla-wrap cuadro dash-tabla-wrap--scroll">
+          <table class="dash-tabla cuadro__tabla">
+            <thead>
               <tr>
-                <td class="fuerte">
-                  <button
-                    type="button"
-                    class="cuadro__chute"
-                    [attr.title]="tituloDetalleChute(chute)"
-                    [attr.aria-label]="tituloDetalleChute(chute)"
-                    (click)="abrirDetalle(chute)"
-                  >
-                    {{ chute.chute }}
-                  </button>
-                </td>
+                <th rowspan="2">Chute</th>
                 @for (m of metricas; track m.id) {
-                  <td class="num u-muted" [class.cuadro__col--activa]="metrica() === m.id">
-                    {{ formatearNumero(m.antes(chute), m.decimales) }}
-                  </td>
-                  <td class="num" [class.cuadro__col--activa]="metrica() === m.id">
-                    <span class="fuerte">{{ formatearNumero(m.despues(chute), m.decimales) }}</span>
-                    <span
-                      class="cuadro__delta"
-                      [class]="claseVariacion(m.antes(chute), m.despues(chute), false)"
+                  <th
+                    colspan="2"
+                    class="cuadro__grupo"
+                    [class.cuadro__grupo--activo]="metrica() === m.id"
+                  >
+                    {{ m.nombre }}
+                  </th>
+                }
+              </tr>
+              <tr>
+                @for (m of metricas; track m.id) {
+                  <th class="num" [class.cuadro__col--activa]="metrica() === m.id">Antes</th>
+                  <th class="num" [class.cuadro__col--activa]="metrica() === m.id">Después</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (chute of chutesVisibles(); track chute.chute) {
+                <tr>
+                  <td class="fuerte">
+                    <button
+                      type="button"
+                      class="cuadro__chute"
+                      [attr.title]="tituloDetalleChute(chute)"
+                      [attr.aria-label]="tituloDetalleChute(chute)"
+                      (click)="abrirDetalle(chute)"
                     >
-                      {{ variacion(m.antes(chute), m.despues(chute)) }}
-                    </span>
+                      {{ chute.chute }}
+                    </button>
+                  </td>
+                  @for (m of metricas; track m.id) {
+                    <td class="num u-muted" [class.cuadro__col--activa]="metrica() === m.id">
+                      {{ formatearNumero(m.antes(chute), m.decimales) }}
+                    </td>
+                    <td class="num" [class.cuadro__col--activa]="metrica() === m.id">
+                      <span class="fuerte">{{
+                        formatearNumero(m.despues(chute), m.decimales)
+                      }}</span>
+                      <span
+                        class="cuadro__delta"
+                        [class]="claseVariacion(m.antes(chute), m.despues(chute), false)"
+                      >
+                        {{ variacion(m.antes(chute), m.despues(chute)) }}
+                      </span>
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td class="fuerte">Total</td>
+                @for (total of totalesChute(); track $index) {
+                  <td class="num">
+                    {{ formatearNumero(total.antes, metricas[$index].decimales) }}
+                  </td>
+                  <td class="num fuerte">
+                    {{ formatearNumero(total.despues, metricas[$index].decimales) }}
                   </td>
                 }
               </tr>
-            }
-          </tbody>
-          <tfoot>
-            <tr>
-              <td class="fuerte">Total</td>
-              @for (total of totalesChute(); track $index) {
-                <td class="num">{{ formatearNumero(total.antes, metricas[$index].decimales) }}</td>
-                <td class="num fuerte">
-                  {{ formatearNumero(total.despues, metricas[$index].decimales) }}
-                </td>
-              }
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-      @if (vista() === null && filtroClusters().length > 0) {
-        <p class="filtro-nota cuadro__nota">
-          <ui-icon name="info" [size]="14" />
-          Con filtro de cluster se listan los chutes que lo atienden, con toda su carga (también la
-          de otros clusters en ese chute).
-        </p>
-      }
-    </article>
-  </div>
+            </tfoot>
+          </table>
+        </div>
+        @if (vista() === null && filtroClusters().length > 0) {
+          <p class="filtro-nota cuadro__nota">
+            <ui-icon name="info" [size]="14" />
+            Con filtro de cluster se listan los chutes que lo atienden, con toda su carga (también
+            la de otros clusters en ese chute).
+          </p>
+        }
+      </article>
+    </div>
+  }
 
   @if (olaActual(); as ola) {
     <h2 class="dash-seccion">
@@ -388,161 +398,114 @@
           <header class="dash-card__head">
             <div class="dash-card__titulos">
               <h2 class="dash-card__titulo">
-                <ui-icon name="usuarios" [size]="18" /> Operarios por chute: recibidos vs. asignados
+                <ui-icon name="usuarios" [size]="18" /> Dotación por chute
               </h2>
               <p class="dash-card__sub">
                 @if (olaPrevia(); as previa) {
-                  Recibidos: los que cada chute tenía al terminar {{ previa }}. Asignados: los que
-                  quedaron tras reacomodar el equipo para que {{ olaActual()?.cluster }} cumpla su
-                  límite. El tiempo «recibido» es el de la ola si nadie se moviera.
+                  Cuántos operarios tenía cada chute al terminar {{ previa }} y cuántos tiene en
+                  {{ olaActual()?.cluster }}. La barra es el tiempo del chute; la línea, el límite;
+                  el trazo gris, cuánto tardaría si nadie se moviera.
                 } @else {
-                  Es la primera ola: el equipo empieza aquí, sin dotación previa.
+                  Operarios de cada chute en la primera ola. La barra es el tiempo del chute y la
+                  línea, el límite de la ola.
                 }
               </p>
+              @if (dotacionOla().paso; as paso) {
+                <ul class="flujo-resumen" aria-label="Paso del equipo desde {{ paso.origen }}">
+                  <li class="flujo-dato flujo-dato--quedan">
+                    <strong>{{ formatearNumero(paso.quedan) }}</strong> se quedan
+                  </li>
+                  <li class="flujo-dato flujo-dato--salen">
+                    <strong>{{ formatearNumero(paso.salen) }}</strong> salen
+                  </li>
+                  <li class="flujo-dato flujo-dato--llegan">
+                    <strong>{{ formatearNumero(paso.llegan) }}</strong> llegan
+                  </li>
+                </ul>
+              }
             </div>
+            <span class="flujo-total">
+              {{ formatearNumero(dotacionOla().asignados) }} de
+              {{ formatearNumero(dashboard()?.equipo ?? 0) }} operarios
+              @if (dashboard()?.maximoPorChute; as maximo) {
+                · máx. {{ maximo }} por chute
+              }
+            </span>
           </header>
-          <div class="dash-card__body">
-            @if (gruposOperarios().length > 0) {
-              <ui-comparativo
-                [datos]="gruposOperarios()"
-                [formato]="formatoCarga"
-                [etiquetaAntes]="olaPrevia() ? 'Al terminar ' + olaPrevia() : 'Sin ola anterior'"
-                etiquetaDespues="Asignados"
-                color="var(--violet)"
-                [altura]="280"
-              />
-            } @else {
-              <div class="dash-card__vacio">Sin chutes para comparar.</div>
-            }
-          </div>
-
           <div class="dash-tabla-wrap cuadro dash-tabla-wrap--scroll">
-            <table class="dash-tabla cuadro__tabla">
+            <table class="dash-tabla cuadro__tabla dotacion">
               <thead>
                 <tr>
-                  <th rowspan="2">Chute</th>
-                  <th colspan="3" class="cuadro__grupo">Operarios</th>
-                  <th colspan="2" class="cuadro__grupo">Tiempo en la ola</th>
-                </tr>
-                <tr>
-                  <th class="num">Recibidos</th>
-                  <th class="num">Asignados</th>
-                  <th class="num">Diferencia</th>
-                  <th class="num">Sin mover gente</th>
-                  <th class="num">Asignados</th>
+                  <th>Chute</th>
+                  <th class="num">Bultos</th>
+                  <th class="num">Operarios</th>
+                  <th>Movimiento</th>
+                  <th class="dotacion__tiempo-col">
+                    Tiempo vs. límite
+                    @if (dotacionOla().limite > 0) {
+                      ({{ formatearHoras(dotacionOla().limite) }})
+                    }
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                @for (chute of chutesVisibles(); track chute.chute) {
+                @for (fila of dotacionOla().filas; track fila.id) {
                   <tr>
-                    <td class="fuerte">{{ chute.chute }}</td>
-                    <td class="num u-muted">{{ formatearNumero(chute.operariosOriginal) }}</td>
-                    <td class="num fuerte">{{ formatearNumero(chute.operariosBalanceado) }}</td>
-                    <td
-                      class="num"
-                      [class]="
-                        claseVariacion(chute.operariosOriginal, chute.operariosBalanceado, false)
-                      "
-                    >
-                      {{ diferencia(chute.operariosOriginal, chute.operariosBalanceado) }}
-                    </td>
-                    <td class="num u-muted">{{ formatearHoras(chute.tiempoOriginal) }}</td>
+                    <td class="fuerte">{{ fila.nombre }}</td>
                     <td class="num">
-                      <span class="fuerte">{{ formatearHoras(chute.tiempoBalanceado) }}</span>
-                      <span
-                        class="cuadro__delta"
-                        [class]="claseVariacion(chute.tiempoOriginal, chute.tiempoBalanceado, true)"
-                      >
-                        {{ variacion(chute.tiempoOriginal, chute.tiempoBalanceado) }}
-                      </span>
+                      {{ formatearNumero(fila.bultos) }}
+                    </td>
+                    <td class="num">
+                      @if (olaPrevia()) {
+                        <span class="u-muted">{{ fila.recibidos }} →</span>
+                      }
+                      <strong>{{ fila.asignados }}</strong>
+                    </td>
+                    <td>
+                      @if (!olaPrevia()) {
+                        <span class="u-muted">Primera ola</span>
+                      } @else if (fila.movimiento > 0) {
+                        <span class="flujo-mov flujo-mov--llegan"
+                          >Llegan {{ fila.movimiento }}</span
+                        >
+                      } @else if (fila.movimiento < 0) {
+                        <span class="flujo-mov flujo-mov--salen">Salen {{ -fila.movimiento }}</span>
+                      } @else {
+                        <span class="flujo-mov">Se quedan</span>
+                      }
+                    </td>
+                    <td>
+                      @if (fila.bultos === 0) {
+                        <span class="u-muted">Sin carga en {{ ola.cluster }}</span>
+                      } @else {
+                        <div class="tiempo" [class.tiempo--excede]="fila.excede">
+                          <span class="tiempo__pista">
+                            @if (olaPrevia() && fila.sinMover !== null) {
+                              <span
+                                class="tiempo__sin-mover"
+                                [style.width.%]="fila.barraSinMover"
+                                [title]="'Si nadie se moviera: ' + formatearHoras(fila.sinMover)"
+                              ></span>
+                            }
+                            <span class="tiempo__barra" [style.width.%]="fila.barra"></span>
+                            @if (dotacionOla().limite > 0) {
+                              <span
+                                class="tiempo__limite"
+                                [style.left.%]="dotacionOla().posLimite"
+                                aria-hidden="true"
+                              ></span>
+                            }
+                          </span>
+                          <span class="tiempo__texto">{{ formatearHoras(fila.tiempo) }}</span>
+                        </div>
+                      }
                     </td>
                   </tr>
                 }
               </tbody>
-              <tfoot>
-                <tr>
-                  <td class="fuerte">Total</td>
-                  <td class="num">{{ formatearNumero(totalOperarios().antes) }}</td>
-                  <td class="num fuerte">{{ formatearNumero(totalOperarios().despues) }}</td>
-                  <td class="num">
-                    {{ diferencia(totalOperarios().antes, totalOperarios().despues) }}
-                  </td>
-                  <td colspan="2"></td>
-                </tr>
-              </tfoot>
             </table>
           </div>
         </article>
-        @if (datos.flujoOperarios.length > 0) {
-          <article class="dash-card" [class.dash-card--cargando]="cargando()">
-            <header class="dash-card__head">
-              <div class="dash-card__titulos">
-                <h2 class="dash-card__titulo">
-                  <ui-icon name="usuarios" [size]="18" /> Paso del equipo desde {{ olaPrevia() }}
-                </h2>
-                <p class="dash-card__sub">
-                  Quiénes siguen en su chute, quiénes salen de uno y quiénes llegan a otro al pasar
-                  de {{ olaPrevia() }} a {{ olaActual()?.cluster }}.
-                </p>
-              </div>
-              @if (operariosEntreOlas() > 0) {
-                <span class="flujo-total">
-                  {{ formatearNumero(operariosEntreOlas()) }} operario(s) cambian de chute
-                </span>
-              }
-            </header>
-            <div class="flujo-olas">
-              @for (paso of datos.flujoOperarios; track paso.origenId) {
-                <section class="flujo-ola" [attr.aria-label]="paso.origen + ' a ' + paso.destino">
-                  <h3 class="flujo-ola__titulo">
-                    {{ paso.origen }} <ui-icon name="flecha" [size]="14" /> {{ paso.destino }}
-                  </h3>
-                  <ul class="flujo-ola__resumen">
-                    <li class="flujo-dato flujo-dato--quedan">
-                      <strong>{{ formatearNumero(paso.quedan) }}</strong> se quedan
-                    </li>
-                    <li class="flujo-dato flujo-dato--salen">
-                      <strong>{{ formatearNumero(paso.salen) }}</strong> salen
-                    </li>
-                    <li class="flujo-dato flujo-dato--llegan">
-                      <strong>{{ formatearNumero(paso.llegan) }}</strong> llegan
-                    </li>
-                  </ul>
-                  <div class="dash-tabla-wrap cuadro">
-                    <table class="dash-tabla cuadro__tabla">
-                      <thead>
-                        <tr>
-                          <th>Chute</th>
-                          <th class="num">En {{ paso.origen }}</th>
-                          <th class="num">En {{ paso.destino }}</th>
-                          <th>Movimiento</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        @for (chute of paso.chutes; track chute.chuteId) {
-                          <tr>
-                            <td class="fuerte">{{ chute.chute }}</td>
-                            <td class="num u-muted">{{ formatearNumero(chute.antes) }}</td>
-                            <td class="num fuerte">{{ formatearNumero(chute.despues) }}</td>
-                            <td>
-                              <span
-                                class="flujo-mov"
-                                [class.flujo-mov--salen]="chute.despues < chute.antes"
-                                [class.flujo-mov--llegan]="chute.despues > chute.antes"
-                              >
-                                {{ movimientoOperarios(chute) }}
-                              </span>
-                            </td>
-                          </tr>
-                        }
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              }
-            </div>
-          </article>
-        }
       </div>
     } @else {
       <p class="dash-paso" role="status">
@@ -567,123 +530,139 @@
         <header class="dash-card__head">
           <div class="dash-card__titulos">
             <h2 class="dash-card__titulo">
-              <ui-icon name="reloj" [size]="18" /> Cierre de cada ola
+              <ui-icon name="analisis" [size]="18" /> Resumen por cluster
             </h2>
             <p class="dash-card__sub">
-              Las olas se trabajan una tras otra con el mismo equipo, así que el cierre total es la
-              suma de sus tiempos.
+              Carga de cada cluster, rutas movidas y su cierre establecido frente al conseguido.
             </p>
           </div>
         </header>
-
-        <div class="dash-tabla-wrap cuadro">
-          <table class="dash-tabla cuadro__tabla">
+        <div class="dash-tabla-wrap cuadro dash-tabla-wrap--scroll">
+          <table class="dash-tabla cuadro__tabla ejecutivo">
             <thead>
               <tr>
                 <th>Cluster</th>
-                <th class="num">Cierre</th>
-                <th class="num">Límite</th>
-                <th>Estado</th>
+                <th class="num">Bultos</th>
+                <th class="num">Líneas</th>
+                <th class="num">Unidades</th>
+                <th class="num">COD</th>
+                <th class="num">Cierre establecido</th>
+                <th class="num">Cierre conseguido</th>
+                <th class="num">Rutas movidas</th>
               </tr>
             </thead>
             <tbody>
-              @for (cluster of clustersVisibles(); track cluster.cluster) {
+              @for (fila of cuadro().filas; track fila.ola.clusterId) {
                 <tr>
-                  <td class="fuerte">{{ cluster.cluster }}</td>
-                  <td class="num fuerte">{{ formatearHoras(cluster.tiempoBalanceado) }}</td>
-                  <td class="num">
-                    {{ cluster.limiteHoras > 0 ? formatearHoras(cluster.limiteHoras) : '—' }}
-                  </td>
                   <td>
-                    @if (cluster.tiempoBalanceado === null) {
-                      <span class="ui-badge ui-badge--danger">Sin operarios</span>
-                    } @else if (cluster.limiteHoras > 0) {
-                      <span
-                        class="ui-badge"
-                        [class.ui-badge--danger]="cluster.excede"
-                        [class.ui-badge--success]="!cluster.excede"
-                      >
-                        {{ cluster.excede ? 'Excede' : 'Cumple' }}
-                      </span>
-                    } @else {
-                      <span class="ui-badge ui-badge--neutral">Sin límite</span>
-                    }
+                    <span class="ejecutivo__cluster" [style.--cluster-color]="fila.color">
+                      {{ fila.ola.cluster }}
+                    </span>
                   </td>
+                  <td class="num">{{ formatearNumero(fila.ola.bultos) }}</td>
+                  <td class="num">{{ formatearNumero(fila.ola.lineas) }}</td>
+                  <td class="num">{{ formatearNumero(fila.ola.unidades) }}</td>
+                  <td class="num">{{ formatearNumero(fila.ola.cod) }}</td>
+                  <td class="num">
+                    {{ fila.limite === null ? '—' : formatearHoras(fila.limite) }}
+                  </td>
+                  <td
+                    class="num ejecutivo__cierre"
+                    [class.ejecutivo__cierre--excede]="fila.excede"
+                    [class.ejecutivo__cierre--cumple]="fila.limite !== null && !fila.excede"
+                  >
+                    {{ formatearHoras(fila.cierre) }}
+                  </td>
+                  <td class="num">{{ formatearNumero(fila.ola.rutasMovidas) }}</td>
                 </tr>
               }
             </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td class="num">{{ formatearNumero(cuadro().total.bultos) }}</td>
+                <td class="num">{{ formatearNumero(cuadro().total.lineas) }}</td>
+                <td class="num">{{ formatearNumero(cuadro().total.unidades) }}</td>
+                <td class="num">{{ formatearNumero(cuadro().total.cod) }}</td>
+                <td class="num">
+                  {{ cuadro().total.limite === null ? '—' : formatearHoras(cuadro().total.limite) }}
+                </td>
+                <td class="num">
+                  {{ formatearHoras(cuadro().total.cierre) }}
+                </td>
+                <td class="num">{{ formatearNumero(cuadro().total.rutasMovidas) }}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </article>
+
       <article class="dash-card" [class.dash-card--cargando]="cargando()">
         <header class="dash-card__head">
           <div class="dash-card__titulos">
             <h2 class="dash-card__titulo">
-              <ui-icon name="usuarios" [size]="18" /> Flujo de operarios entre olas
+              <ui-icon name="usuarios" [size]="18" /> Dónde estuvo el equipo
             </h2>
             <p class="dash-card__sub">
-              El mismo equipo pasa de una ola a la siguiente: se quedan los que siguen en su chute;
-              los demás salen de un chute o llegan a otro.
+              Operarios de cada chute en cada ola. Entre una ola y la siguiente, los que no
+              coinciden de chute son los que se movieron.
             </p>
           </div>
           @if (operariosEntreOlas() > 0) {
             <span class="flujo-total">
-              {{ formatearNumero(operariosEntreOlas()) }} operario(s) cambian de chute
+              {{ formatearNumero(operariosEntreOlas()) }} cambio(s) de chute en total
             </span>
           }
         </header>
-        @if (datos.flujoOperarios.length === 0) {
-          <div class="dash-card__vacio">Con una sola ola no hay paso de gente entre olas.</div>
+        @if (dotacion().filas.length === 0) {
+          <div class="dash-card__vacio">Ninguna ola tiene operarios asignados.</div>
         } @else {
-          <div class="flujo-olas">
-            @for (paso of datos.flujoOperarios; track paso.origenId) {
-              <section class="flujo-ola" [attr.aria-label]="paso.origen + ' a ' + paso.destino">
-                <h3 class="flujo-ola__titulo">
-                  {{ paso.origen }} <ui-icon name="flecha" [size]="14" /> {{ paso.destino }}
-                </h3>
-                <ul class="flujo-ola__resumen">
-                  <li class="flujo-dato flujo-dato--quedan">
-                    <strong>{{ formatearNumero(paso.quedan) }}</strong> se quedan
-                  </li>
-                  <li class="flujo-dato flujo-dato--salen">
-                    <strong>{{ formatearNumero(paso.salen) }}</strong> salen
-                  </li>
-                  <li class="flujo-dato flujo-dato--llegan">
-                    <strong>{{ formatearNumero(paso.llegan) }}</strong> llegan
-                  </li>
-                </ul>
-                <div class="dash-tabla-wrap cuadro">
-                  <table class="dash-tabla cuadro__tabla">
-                    <thead>
-                      <tr>
-                        <th>Chute</th>
-                        <th class="num">En {{ paso.origen }}</th>
-                        <th class="num">En {{ paso.destino }}</th>
-                        <th>Movimiento</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      @for (chute of paso.chutes; track chute.chuteId) {
-                        <tr>
-                          <td class="fuerte">{{ chute.chute }}</td>
-                          <td class="num u-muted">{{ formatearNumero(chute.antes) }}</td>
-                          <td class="num fuerte">{{ formatearNumero(chute.despues) }}</td>
-                          <td>
-                            <span
-                              class="flujo-mov"
-                              [class.flujo-mov--salen]="chute.despues < chute.antes"
-                              [class.flujo-mov--llegan]="chute.despues > chute.antes"
-                            >
-                              {{ movimientoOperarios(chute) }}
-                            </span>
-                          </td>
-                        </tr>
+          <div class="dash-tabla-wrap cuadro dash-tabla-wrap--scroll">
+            <table class="dash-tabla cuadro__tabla matriz">
+              <thead>
+                <tr>
+                  <th>Chute</th>
+                  @for (ola of olas(); track ola.clusterId) {
+                    <th class="num">{{ ola.cluster }}</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (fila of dotacion().filas; track fila.chute) {
+                  <tr>
+                    <td class="fuerte">{{ fila.chute }}</td>
+                    @for (celda of fila.celdas; track $index) {
+                      <td class="num matriz__celda" [style.--intensidad.%]="celda.intensidad">
+                        {{ celda.operarios === 0 ? '·' : celda.operarios }}
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td class="fuerte">Total</td>
+                  @for (total of dotacion().totales; track $index) {
+                    <td class="num fuerte">{{ formatearNumero(total) }}</td>
+                  }
+                </tr>
+                <tr>
+                  <td>Cambian de chute</td>
+                  @for (cambio of dotacion().cambios; track $index) {
+                    <td class="num">
+                      @if (cambio) {
+                        {{ formatearNumero(cambio.cambian) }}
+                        <span class="u-muted"
+                          >· {{ formatearNumero(cambio.quedan) }} se quedan</span
+                        >
+                      } @else {
+                        <span class="u-muted">inicio</span>
                       }
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            }
+                    </td>
+                  }
+                </tr>
+              </tfoot>
+            </table>
           </div>
         }
       </article>

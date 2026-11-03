@@ -96,6 +96,17 @@ public interface RutaProyeccionRepository
   List<MovimientoRutas> movimientosPorArchivo(
       @Param("archivoId") Long archivoId, @Param("clusterId") Long clusterId);
 
+  /** Rutas movidas de cada cluster (hoy en un chute distinto al original). */
+  @Query("""
+      SELECT r.clusterId AS clusterId,
+             COUNT(r) AS rutas
+        FROM RutaProyeccion r
+       WHERE r.archivoId = :archivoId
+         AND r.chuteId <> r.chuteOriginalId
+       GROUP BY r.clusterId
+      """)
+  List<RutasMovidasCluster> rutasMovidasPorCluster(@Param("archivoId") Long archivoId);
+
   /** Devuelve todas las rutas del archivo a su chute original sin recorrerlas una a una. */
   @Modifying
   @Query("""

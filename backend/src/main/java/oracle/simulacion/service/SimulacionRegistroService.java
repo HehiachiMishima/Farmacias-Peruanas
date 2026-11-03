@@ -378,10 +378,6 @@ public class SimulacionRegistroService {
     return guardado;
   }
 
-  private ArchivoExcel buscar(Long id) {
-    return archivoRepo.findById(id).orElseThrow(() -> noExiste(id));
-  }
-
   private ArchivoExcel buscarBloqueado(Long id) {
     return archivoRepo.bloquear(id).orElseThrow(() -> noExiste(id));
   }

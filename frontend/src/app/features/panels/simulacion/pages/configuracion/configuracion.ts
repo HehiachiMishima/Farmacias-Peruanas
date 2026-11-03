@@ -10,7 +10,6 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Observable, Subject, debounceTime, finalize, of, switchMap, tap } from 'rxjs';
@@ -21,7 +20,6 @@ import {
   ConfiguracionSimulacion,
   ConfiguracionSimulacionRequest,
   HistorialRegistroSimulacion,
-  HistorialSimulacion,
   RutaSimulacion,
 } from '../../data/simulacion.model';
 import { Pagina } from '../../../../../core/models';
@@ -30,7 +28,6 @@ import { SesionStore } from '../../../../../core/services/sesion';
 import { SimulacionApi } from '../../data/simulacion.api';
 import { ListadoRemoto } from '../../../../../core/utils/listado-remoto';
 import { DirectorioUsuarios } from '../../../../../core/services/directorio-usuarios';
-import { ActorLabelPipe } from '../../../../../shared/pipes/actor-label.pipe';
 import { ColumnasRedimensionables } from '../../../../../shared/directives/columnas-redimensionables.directive';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
 import { EmptyState } from '../../../../../shared/ui/empty-state/empty-state';
@@ -50,15 +47,22 @@ import {
   datosCarga,
   etiquetaEstado,
   etiquetaRegistro,
-  formatearHoras,
   formatearNumero,
-  horas,
   nombreRegistroSugerido,
   problemaArchivoExcel,
   tamanoArchivo,
 } from '../../simulacion-formato';
-
-type Paso = 'RUTAS' | 'OPERARIOS' | 'CERRAR';
+import { SimulacionClusterCard } from './cluster-card/cluster-card';
+import {
+  Paso,
+  agruparHistorial,
+  normalizarEquipo,
+  normalizarPorChute,
+  normalizarVelocidad,
+  resumirClusters,
+} from './configuracion.logica';
+import { SimulacionGuiaBalanceo } from './guia-balanceo/guia-balanceo';
+import { SimulacionHistorialCambios } from './historial-cambios/historial-cambios';
 
 /**
  * Simulación cluster por cluster, en el orden de las olas. El cluster en
@@ -70,8 +74,6 @@ type Paso = 'RUTAS' | 'OPERARIOS' | 'CERRAR';
   selector: 'app-simulacion-configuracion',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    DatePipe,
-    ActorLabelPipe,
     ReactiveFormsModule,
     HasPermiso,
     ColumnasRedimensionables,
@@ -83,6 +85,9 @@ type Paso = 'RUTAS' | 'OPERARIOS' | 'CERRAR';
     SelectMultiple,
     PanelFiltros,
     FiltrosActivos,
+    SimulacionClusterCard,
+    SimulacionHistorialCambios,
+    SimulacionGuiaBalanceo,
   ],
   templateUrl: './configuracion.html',
   styleUrl: './configuracion.scss',
@@ -105,7 +110,6 @@ export class SimulacionConfiguracion {
     this.sesion.permisos().includes(PERMISOS.MODIFICAR_CONFIGURACION_SIMULACION),
   );
   readonly formatearNumero = formatearNumero;
-  readonly formatearHoras = formatearHoras;
   readonly estadoRegistro = etiquetaEstado;
   readonly limitesValidos = LIMITES;
 
@@ -158,17 +162,12 @@ export class SimulacionConfiguracion {
   /** Paso que se está ejecutando en el cluster en curso. */
   readonly trabajando = signal<Paso | null>(null);
   readonly restableciendo = signal(false);
-  readonly moviendo = signal(false);
   /** Recarga tras un paso: hasta que llegue, las acciones siguen bloqueadas. */
   readonly recargando = signal(false);
   /** Una sola escritura a la vez: los botones de acción se deshabilitan juntos. */
   readonly ocupado = computed(
     () =>
-      this.guardando() ||
-      this.trabajando() !== null ||
-      this.restableciendo() ||
-      this.moviendo() ||
-      this.recargando(),
+      this.guardando() || this.trabajando() !== null || this.restableciendo() || this.recargando(),
   );
 
   /** Todos los clusters cerrados: la simulación terminó. */
@@ -195,94 +194,7 @@ export class SimulacionConfiguracion {
   readonly historialAbierto = signal(false);
   readonly historialCargando = signal(false);
 
-  /**
-   * Historial de rutas agrupado: cada balanceo de un cluster con sus rutas
-   * movidas y su resultado, y cada movimiento manual aparte. Los cambios sin
-   * lanzamiento de versiones anteriores se agrupan por fecha. Del más reciente
-   * al más antiguo.
-   */
-  readonly historialAgrupado = computed(() => {
-    const { lanzamientos, cambios } = this.historial();
-    const grupos: {
-      clave: string;
-      titulo: string;
-      mensaje: string | null;
-      fecha: string;
-      creadoPor: number | null;
-      separaciones: number;
-      rutas: number;
-      chutesOperarios: number;
-      cambios: HistorialSimulacion[];
-    }[] = [];
-    const nuevoGrupo = (
-      clave: string,
-      titulo: string,
-      mensaje: string | null,
-      fecha: string,
-      creadoPor: number | null,
-    ) => ({
-      clave,
-      titulo,
-      mensaje,
-      fecha,
-      creadoPor,
-      separaciones: 0,
-      rutas: 0,
-      chutesOperarios: 0,
-      cambios: [] as HistorialSimulacion[],
-    });
-    const porLanzamiento = new Map(
-      lanzamientos.map((lanzamiento) => {
-        const grupo = nuevoGrupo(
-          `l${lanzamiento.id}`,
-          `${lanzamiento.cluster} · ${
-            lanzamiento.fase === 'RUTAS' ? 'Balanceo de rutas' : 'Asignación de operarios'
-          }`,
-          lanzamiento.mensaje,
-          lanzamiento.creadoEn,
-          lanzamiento.creadoPor,
-        );
-        grupos.push(grupo);
-        return [lanzamiento.id, grupo] as const;
-      }),
-    );
-    let anterior: (typeof grupos)[number] | undefined;
-    for (const cambio of cambios) {
-      const manual = cambio.motivo === 'MANUAL';
-      let grupo =
-        cambio.lanzamientoId === null ? undefined : porLanzamiento.get(cambio.lanzamientoId);
-      if (!grupo) {
-        if (
-          !manual &&
-          anterior !== undefined &&
-          anterior.fecha === cambio.creadoEn &&
-          anterior.creadoPor === cambio.creadoPor
-        ) {
-          grupo = anterior;
-        } else {
-          grupo = nuevoGrupo(
-            `c${cambio.id}`,
-            manual ? 'Movimiento manual' : 'Balanceo anterior',
-            null,
-            cambio.creadoEn,
-            cambio.creadoPor,
-          );
-          grupos.push(grupo);
-        }
-        anterior = manual ? undefined : grupo;
-      }
-      grupo.cambios.push(cambio);
-      if (cambio.tipoAccion === 'MOVER_RUTA') {
-        grupo.rutas++;
-        if (cambio.motivo === 'SEPARACION') {
-          grupo.separaciones++;
-        }
-      } else if (cambio.tipoAccion === 'ASIGNAR_OPERARIOS') {
-        grupo.chutesOperarios++;
-      }
-    }
-    return grupos.sort((a, b) => Date.parse(b.fecha) - Date.parse(a.fecha));
-  });
+  readonly historialAgrupado = computed(() => agruparHistorial(this.historial()));
 
   readonly restablecerAbierto = signal(false);
   /** Cluster cuyo restablecimiento se está confirmando. */
@@ -306,10 +218,6 @@ export class SimulacionConfiguracion {
     colorHex: [PALETA_REGISTROS[0].hex],
   });
 
-  readonly moverAbierto = signal(false);
-  readonly rutaAMover = signal<RutaSimulacion | null>(null);
-  readonly chuteDestino = signal<number | null>(null);
-
   /** Rutas paginadas en el servidor: un registro puede tener decenas de miles. */
   readonly rutas = new ListadoRemoto<RutaSimulacion>(
     () => this.fuenteRutas(),
@@ -331,33 +239,6 @@ export class SimulacionConfiguracion {
       .sort((a, b) => compararNombre(a.nombre, b.nombre))
       .map((cluster) => ({ id: cluster.id, etiqueta: cluster.nombre })),
   );
-
-  /**
-   * Chutes a los que se puede mover la ruta: todos menos el actual y los que
-   * ya tienen un cluster incompatible (CL1 y CL2 no comparten chute).
-   */
-  readonly destinosMover = computed(() => {
-    const ruta = this.rutaAMover();
-    const cfg = this.config();
-    if (!ruta || !cfg) {
-      return { opciones: [], excluidos: [] as string[] };
-    }
-    const incompatibles = new Set(
-      cfg.clusters.find((cluster) => cluster.id === ruta.clusterId)?.incompatibles ?? [],
-    );
-    const bloqueados = new Set(
-      cfg.chutes
-        .filter((chute) => chute.clusterIds.some((id) => incompatibles.has(id)))
-        .map((chute) => chute.id),
-    );
-    const opciones = this.opcionesChute().filter(
-      (chute) => chute.id !== ruta.chuteId && !bloqueados.has(chute.id),
-    );
-    const excluidos = this.opcionesChute()
-      .filter((chute) => chute.id !== ruta.chuteId && bloqueados.has(chute.id))
-      .map((chute) => chute.etiqueta);
-    return { opciones, excluidos };
-  });
 
   readonly filtrosActivos = computed(
     () =>
@@ -397,121 +278,10 @@ export class SimulacionConfiguracion {
     this.filtrosAbierto.update((abierto) => !abierto);
   }
 
-  /**
-   * Cada cluster en el orden de las olas: su carga, qué tan parejos están sus
-   * chutes en bultos ((más cargado − menos cargado) / promedio) y, si ya tiene
-   * operarios, cuántos, su tiempo frente al límite y cuántos siguen en su
-   * chute desde la ola anterior.
-   */
+  /** Cada cluster en el orden de las olas, tal como lo muestra su tarjeta. */
   readonly resumenClusters = computed(() => {
     const cfg = this.config();
-    if (!cfg) {
-      return [];
-    }
-    const velocidad = this.velocidad() || VELOCIDAD_INICIAL;
-    const limites = this.limites();
-    const enCurso = this.enCurso()?.id ?? null;
-    const indices = new Map(cfg.clusters.map((cluster, indice) => [cluster.id, indice]));
-    const acumulado = new Map<
-      number,
-      {
-        bultos: number;
-        unidades: number;
-        lineas: number;
-        cod: number;
-        rutas: number;
-        /** Bultos del cluster en cada chute. */
-        porChute: Map<number, number>;
-        /** Operarios de la ola en cada chute (solo con operarios asignados). */
-        operarios: Map<number, number>;
-      }
-    >();
-    for (const fila of cfg.carga) {
-      const actual = acumulado.get(fila.clusterId) ?? {
-        bultos: 0,
-        unidades: 0,
-        lineas: 0,
-        cod: 0,
-        rutas: 0,
-        porChute: new Map<number, number>(),
-        operarios: new Map<number, number>(),
-      };
-      actual.bultos += Number(fila.bultos);
-      actual.unidades += Number(fila.unidades);
-      actual.lineas += Number(fila.lineas);
-      actual.cod += Number(fila.cod);
-      actual.rutas += Number(fila.rutas);
-      actual.porChute.set(
-        fila.chuteId,
-        (actual.porChute.get(fila.chuteId) ?? 0) + Number(fila.bultos),
-      );
-      if (fila.operarios !== null) {
-        actual.operarios.set(fila.chuteId, Number(fila.operarios));
-      }
-      acumulado.set(fila.clusterId, actual);
-    }
-
-    return cfg.clusters.map((cluster, indice) => {
-      const datos = acumulado.get(cluster.id);
-      const cargas = [...(datos?.porChute.values() ?? [])].filter((bultos) => bultos > 0);
-      const promedio = cargas.reduce((total, bultos) => total + bultos, 0) / (cargas.length || 1);
-      const dispersion =
-        cargas.length < 2
-          ? null
-          : Math.round(((Math.max(...cargas) - Math.min(...cargas)) / promedio) * 100);
-      const nombresIncompatibles = new Set(
-        cfg.clusters
-          .filter((otro) => cluster.incompatibles.includes(otro.id))
-          .map((otro) => otro.nombre),
-      );
-      const conOperarios = cluster.estado === 'LISTO' || cluster.estado === 'CERRADO';
-      let tiempo = 0;
-      let operarios = 0;
-      for (const [chuteId, bultos] of datos?.porChute ?? []) {
-        const enChute = datos?.operarios.get(chuteId) ?? 0;
-        operarios += enChute;
-        tiempo = Math.max(tiempo, horas(bultos, velocidad, enChute));
-      }
-      const previo = indice > 0 ? cfg.clusters[indice - 1] : null;
-      const operariosPrevios = previo ? acumulado.get(previo.id)?.operarios : undefined;
-      let siguen = 0;
-      for (const [chuteId, enChute] of datos?.operarios ?? []) {
-        siguen += Math.min(enChute, operariosPrevios?.get(chuteId) ?? 0);
-      }
-      const limite = limites[cluster.id] ?? 0;
-      return {
-        id: cluster.id,
-        nombre: cluster.nombre,
-        estado: cluster.estado,
-        enCurso: cluster.id === enCurso,
-        cerrado: cluster.estado === 'CERRADO',
-        balanceado: cluster.estado !== 'PENDIENTE',
-        conOperarios,
-        /** Chutes donde comparte con su incompatible: al balancearlo, sus rutas salen de ahí. */
-        mezclas: cfg.mezclas
-          .filter(
-            (mezcla) =>
-              mezcla.clusters.includes(cluster.nombre) &&
-              mezcla.clusters.some((nombre) => nombresIncompatibles.has(nombre)),
-          )
-          .map((mezcla) => mezcla.chute),
-        color: colorCluster(indices.get(cluster.id) ?? 0),
-        chutes: cargas.length,
-        dispersion,
-        operarios,
-        tiempo,
-        limite,
-        cumple: conOperarios && limite > 0 && Number.isFinite(tiempo) && tiempo <= limite + 0.01,
-        previo: previo?.nombre ?? null,
-        siguen,
-        siguiente: cfg.clusters[indice + 1]?.nombre ?? null,
-        bultos: datos?.bultos ?? 0,
-        unidades: datos?.unidades ?? 0,
-        lineas: datos?.lineas ?? 0,
-        cod: datos?.cod ?? 0,
-        rutas: datos?.rutas ?? 0,
-      };
-    });
+    return cfg ? resumirClusters(cfg, this.velocidad() || VELOCIDAD_INICIAL, this.limites()) : [];
   });
 
   constructor() {
@@ -692,13 +462,6 @@ export class SimulacionConfiguracion {
     return control.touched && control.invalid;
   }
 
-  /** Las rutas de un cluster cerrado no se mueven sin reabrirlo. */
-  clusterCerrado(clusterId: number): boolean {
-    return (
-      this.config()?.clusters.find((cluster) => cluster.id === clusterId)?.estado === 'CERRADO'
-    );
-  }
-
   colorDeCluster(clusterId: number): string {
     const indice = (this.config()?.clusters ?? []).findIndex((cluster) => cluster.id === clusterId);
     return colorCluster(Math.max(0, indice));
@@ -764,43 +527,26 @@ export class SimulacionConfiguracion {
 
   setVelocidad(evento: Event): void {
     const input = evento.target as HTMLInputElement;
-    const leido = Math.round(Number(input.value) * 100) / 100;
-    if (!Number.isFinite(leido) || leido <= 0) {
-      input.value = String(this.velocidad());
-      return;
-    }
-    const valor = Math.min(LIMITES.velocidad, leido);
+    const valor = normalizarVelocidad(input.value) ?? this.velocidad();
     input.value = String(valor);
     this.velocidad.set(valor);
   }
 
-  /** Vacío = sin tope propio; si no, entre 1 y el tope técnico por chute. */
-  setPorChute(evento: Event): void {
-    const input = evento.target as HTMLInputElement;
-    if (input.value.trim() === '') {
-      this.porChute.set(null);
-      return;
-    }
-    const valor = Number.parseInt(input.value, 10);
-    const tope =
-      Number.isInteger(valor) && valor >= 1 ? Math.min(LIMITES.operariosPorChute, valor) : 1;
-    input.value = String(tope);
-    this.porChute.set(tope);
-  }
-
   setEquipo(evento: Event): void {
     const input = evento.target as HTMLInputElement;
-    const valor = Number.parseInt(input.value, 10);
-    const equipo = Number.isInteger(valor) && valor >= 1 ? Math.min(LIMITES.equipo, valor) : 1;
+    const equipo = normalizarEquipo(input.value);
     input.value = String(equipo);
     this.equipo.set(equipo);
   }
 
-  setLimite(clusterId: number, evento: Event): void {
+  setPorChute(evento: Event): void {
     const input = evento.target as HTMLInputElement;
-    const valor = Math.round(Number(input.value) * 100) / 100;
-    const limite = Number.isFinite(valor) && valor >= 0 ? Math.min(LIMITES.horas, valor) : 0;
-    input.value = String(limite);
+    const tope = normalizarPorChute(input.value);
+    input.value = tope === null ? '' : String(tope);
+    this.porChute.set(tope);
+  }
+
+  setLimite(clusterId: number, limite: number): void {
     this.limites.set({ ...this.limites(), [clusterId]: limite });
   }
 
@@ -872,8 +618,9 @@ export class SimulacionConfiguracion {
   }
 
   /**
-   * Paso 2: asigna sus operarios partiendo de donde quedó el equipo en la ola
-   * anterior. Necesita el límite de horas del cluster.
+   * Paso 2: reparte todo el equipo para que la ola cierre lo antes posible,
+   * partiendo de donde quedó en la ola anterior. Necesita el límite de horas
+   * del cluster para decir si cumple.
    */
   asignarOperarios(cluster: { id: number; nombre: string }): void {
     if ((this.limites()[cluster.id] ?? 0) <= 0) {
@@ -1065,44 +812,6 @@ export class SimulacionConfiguracion {
       });
   }
 
-  abrirMover(ruta: RutaSimulacion): void {
-    if (this.ocupado()) {
-      return;
-    }
-    this.rutaAMover.set(ruta);
-    this.chuteDestino.set(null);
-    this.moverAbierto.set(true);
-  }
-
-  cerrarMover(): void {
-    this.moverAbierto.set(false);
-    this.rutaAMover.set(null);
-    this.chuteDestino.set(null);
-  }
-
-  confirmarMover(): void {
-    const id = this.seleccionado();
-    const ruta = this.rutaAMover();
-    const destino = this.chuteDestino();
-    if (!id || !ruta || destino === null || this.ocupado()) {
-      return;
-    }
-    this.moviendo.set(true);
-    this.api
-      .moverRuta(id, ruta.id, destino)
-      .pipe(finalize(() => this.moviendo.set(false)))
-      .subscribe({
-        next: (config) => {
-          if (this.seleccionado() === id) {
-            this.aplicarConfiguracion(config);
-            this.rutas.recargar();
-          }
-          this.cerrarMover();
-          this.notificaciones.exito('Ruta movida', `La ruta ${ruta.codigoRuta} cambió de chute.`);
-        },
-      });
-  }
-
   irADashboard(): void {
     const id = this.seleccionado();
     void this.router.navigate(['/simulacion/dashboard'], {
@@ -1191,10 +900,6 @@ export class SimulacionConfiguracion {
           }
         },
       });
-  }
-
-  abrirExplicacion(): void {
-    this.explicacionAbierta.set(true);
   }
 
   irARegistro(): void {

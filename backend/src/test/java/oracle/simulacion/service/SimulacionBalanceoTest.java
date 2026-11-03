@@ -45,6 +45,7 @@ import oracle.simulacion.repository.OperarioOlaRepository;
 import oracle.simulacion.repository.ParametroChuteRepository;
 import oracle.simulacion.repository.ParametroClusterRepository;
 import oracle.simulacion.repository.RutaProyeccionRepository;
+import oracle.simulacion.repository.RutasMovidasCluster;
 import oracle.simulacion.repository.SimulacionConfigRepository;
 import oracle.simulacion.repository.SimulacionLotesRepository;
 import oracle.simulacion.request.ChuteOperariosRequest;
@@ -57,6 +58,7 @@ import oracle.simulacion.response.BalanceoResponse;
 import oracle.simulacion.response.ChuteComparativoResponse;
 import oracle.simulacion.response.DashboardSimulacionResponse;
 import oracle.simulacion.response.FlujoOperariosResponse;
+import oracle.simulacion.response.OlaSimulacionResponse;
 import oracle.simulacion.response.RutasDashboardResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -382,8 +384,9 @@ class SimulacionBalanceoTest {
   }
 
   @Test
-  void operariosDaElMinimoYLuegoAlChuteMasLentoHastaCumplir() {
-    // CL1 (límite 2 h, velocidad 100): CHUTE 1 con 600 bultos necesita 3; CHUTE 2 con 300, 2.
+  void operariosUsaTodoElEquipoParaBajarElCierre() {
+    // CL1 (límite 2 h, velocidad 100): con 3 y 2 ya cumpliría, pero trabajan los 10 del equipo.
+    // 6 y 3 cierran en 1 h; el que sobra va al chute con más bultos.
     ParametroCluster cl1 = limite(CL1, "2", ParametroCluster.ESTADO_RUTAS);
     ArchivoExcel archivo = archivo();
     archivo.setEstado(ArchivoExcel.ESTADO_EN_PROCESO);
@@ -401,11 +404,13 @@ class SimulacionBalanceoTest {
 
     BalanceoResponse resultado = lanzar(CL1, FaseBalanceo.OPERARIOS);
 
-    assertEquals(Map.of(1L, 3, 2L, 2), olaGuardada());
+    assertEquals(Map.of(1L, 7, 2L, 3), olaGuardada());
     verify(lotes).insertarHistorial(logs.capture());
     assertTrue(logs.getValue().stream().allMatch((log) -> log.getOperariosOrigen() == 0));
-    assertEquals(5, resultado.operariosAsignados());
-    assertTrue(resultado.mensaje().contains("Cumple su límite"), resultado.mensaje());
+    assertEquals(10, resultado.operariosAsignados());
+    assertTrue(
+        resultado.mensaje().contains("Cumple su límite: 1.00 h de 2.00 h"), resultado.mensaje());
+    assertFalse(resultado.mensaje().contains("sin chute"), resultado.mensaje());
     assertEquals(ParametroCluster.ESTADO_LISTO, cl1.getEstado());
     assertEquals("LISTO", resultado.estado());
   }
@@ -449,12 +454,15 @@ class SimulacionBalanceoTest {
 
     assertEquals(Map.of(1L, 2), olaGuardada());
     assertTrue(resultado.mensaje().contains("algún chute más de 2"), resultado.mensaje());
+    assertTrue(
+        resultado.mensaje().contains("8 sin chute: cada chute con carga ya tiene el máximo de 2"),
+        resultado.mensaje());
   }
 
   @Test
   void operariosDeLaOlaAnteriorSiguenEnSuChute() {
-    // CL1 cerró con 4 en CHUTE 1, que también atiende CL3: esa gente se queda ahí, aunque a
-    // CL3 le baste con 1. La ola de CL1 no cambia.
+    // CL1 cerró con 4 en CHUTE 1, que también atiende CL3: esa gente se queda ahí y llegan
+    // los otros 6 del equipo. La ola de CL1 no cambia.
     OperarioOla olaCl1 = ola(CL1, 1L, 4);
     prepararRegistro(
         archivo(),
@@ -471,7 +479,7 @@ class SimulacionBalanceoTest {
 
     BalanceoResponse resultado = lanzar(CL3, FaseBalanceo.OPERARIOS);
 
-    assertEquals(Map.of(1L, 4), olaGuardada());
+    assertEquals(Map.of(1L, 10), olaGuardada());
     assertEquals(4, olaCl1.getOperarios());
     assertTrue(
         resultado.mensaje().contains("Desde CL1, 4 siguen en su chute"), resultado.mensaje());
@@ -512,9 +520,9 @@ class SimulacionBalanceoTest {
   }
 
   @Test
-  void conElEquipoCompletoSeMueveGenteDeUnChuteQueSigueCumpliendo() {
-    // CL1 cerró con los 4 del equipo en CHUTE 1. En CL2, CHUTE 1 (100 bultos) cumple con 2 y
-    // CHUTE 2 (300 bultos) necesita 2 para cumplir 2 h: se mueven 2 de CHUTE 1 a CHUTE 2.
+  void conElEquipoCompletoLaGenteVaDondeMasBajaElCierre() {
+    // CL1 cerró con los 4 del equipo en CHUTE 1. En CL2, CHUTE 1 tiene 100 bultos y CHUTE 2,
+    // 300: 1 y 3 cierran en 1 h (2 y 2 tardarían 1,5 h), así que 3 pasan a CHUTE 2.
     SimulacionConfig config = configuracion("100", 4);
     config.setOperariosPorChute(4);
     prepararRegistro(
@@ -534,19 +542,59 @@ class SimulacionBalanceoTest {
 
     BalanceoResponse resultado = lanzar(CL2, FaseBalanceo.OPERARIOS);
 
-    assertEquals(Map.of(1L, 2, 2L, 2), olaGuardada());
+    assertEquals(Map.of(1L, 1, 2L, 3), olaGuardada());
     assertEquals(4, resultado.operariosAsignados());
-    assertTrue(resultado.mensaje().contains("Cumple su límite"), resultado.mensaje());
+    assertTrue(
+        resultado.mensaje().contains("Desde CL1, 1 siguen en su chute"), resultado.mensaje());
+    assertTrue(
+        resultado.mensaje().contains("Cumple su límite: 1.00 h de 2.00 h"), resultado.mensaje());
+  }
+
+  @Test
+  void aIgualCierreSeMueveLaMenorCantidadDeGente() {
+    // CL1 cerró con 3 en CHUTE 1 y 3 en CHUTE 2. En CL2 (100, 100 y 200 bultos) ningún
+    // reparto de 6 baja de 1 h: bastan 1, 1 y 2, y los 2 que sobran se quedan en su chute
+    // en vez de ir a CHUTE 3.
+    prepararRegistro(
+        archivo(),
+        configuracion("100", 6),
+        List.of(
+            limite(CL1, "2", ParametroCluster.ESTADO_CERRADO),
+            limite(CL2, "2", ParametroCluster.ESTADO_RUTAS)),
+        List.of(operarios(1L, 0), operarios(2L, 0), operarios(3L, 0)),
+        List.of(ola(CL1, 1L, 3), ola(CL1, 2L, 3)),
+        List.of(cluster(CL1, "CL1"), cluster(CL2, "CL2")),
+        List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2"), chute(3L, "CHUTE 3")));
+    when(rutaRepo.cargaPorArchivo(10L))
+        .thenReturn(
+            List.of(
+                carga(CL1, 1L, 1, "300"),
+                carga(CL1, 2L, 1, "300"),
+                carga(CL2, 1L, 1, "100"),
+                carga(CL2, 2L, 1, "100"),
+                carga(CL2, 3L, 1, "200")));
+
+    BalanceoResponse resultado = lanzar(CL2, FaseBalanceo.OPERARIOS);
+
+    Map<Long, Integer> ola = olaGuardada();
+    assertEquals(2, ola.get(3L));
+    assertEquals(6, resultado.operariosAsignados());
+    assertTrue(
+        resultado.mensaje().contains("Desde CL1, 4 siguen en su chute"), resultado.mensaje());
+    assertTrue(
+        resultado.mensaje().contains("Cumple su límite: 1.00 h de 2.00 h"), resultado.mensaje());
   }
 
   @Test
   void operariosSeRecalculanDesdeCero() {
-    // La ola tenía 5 en CHUTE 1; con 600 bultos y 2 h de límite bastan 3.
+    // La ola tenía 5 en CHUTE 1; ahora el máximo por chute es 3.
     OperarioOla olaCl1 = ola(CL1, 1L, 5);
     ParametroChute chute1 = operarios(1L, 1);
+    SimulacionConfig config = configuracion("100", 10);
+    config.setOperariosPorChute(3);
     prepararRegistro(
         archivo(),
-        configuracion("100", 10),
+        config,
         List.of(limite(CL1, "2", ParametroCluster.ESTADO_LISTO)),
         List.of(chute1),
         List.of(olaCl1),
@@ -1040,6 +1088,41 @@ class SimulacionBalanceoTest {
         flujo.chutes().stream().map((c) -> c.chute()).toList());
     // En el resumen, el chute muestra el máximo entre sus olas.
     assertEquals(4, dashboard.chutes().get(0).operariosBalanceado());
+    // Dotación: cada chute con sus operarios en CL1 y CL3; resultado de cada ola.
+    assertEquals(
+        List.of(List.of(4, 2), List.of(4, 0), List.of(0, 4), List.of(0, 2)),
+        dashboard.dotacion().stream().map((fila) -> fila.operarios()).toList());
+    // CL1: 400 / (100 × 4) = 1 h; CL3: su chute más lento, 400 / (100 × 4) = 1 h.
+    assertEquals(0, BigDecimal.ONE.compareTo(dashboard.olas().get(0).tiempoCierre()));
+    assertEquals(0, BigDecimal.ONE.compareTo(dashboard.olas().get(1).tiempoCierre()));
+  }
+
+  @Test
+  void resumenDaElCuadroDeCadaCluster() {
+    ArchivoExcel archivo = archivo();
+    archivo.setEstado(ArchivoExcel.ESTADO_FINALIZADO);
+    // CL1 con límite 2 h: 400 y 400 bultos con 4 y 4 operarios → cierra en 1 h.
+    prepararLectura(
+        archivo,
+        List.of(limite(CL1, "2", ParametroCluster.ESTADO_CERRADO)),
+        List.of(operarios(1L, 4), operarios(2L, 4)),
+        List.of(ola(CL1, 1L, 4), ola(CL1, 2L, 4)),
+        List.of(cluster(CL1, "CL1")),
+        List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
+    when(rutaRepo.cargaOriginalPorArchivo(10L))
+        .thenReturn(List.of(carga(CL1, 1L, 3, "600"), carga(CL1, 2L, 1, "200")));
+    when(rutaRepo.cargaPorArchivo(10L))
+        .thenReturn(List.of(carga(CL1, 1L, 2, "400"), carga(CL1, 2L, 2, "400")));
+    when(rutaRepo.movimientosPorArchivo(10L, null)).thenReturn(List.of(movimiento(1L, 2L, 1)));
+    when(rutaRepo.rutasMovidasPorCluster(10L)).thenReturn(List.of(movidas(CL1, 1)));
+
+    DashboardSimulacionResponse dashboard = servicio.dashboard(10L, null).block().datos();
+
+    OlaSimulacionResponse ola = dashboard.olas().get(0);
+    assertEquals(0, new BigDecimal("2").compareTo(ola.limiteHoras()));
+    assertEquals(0, BigDecimal.ONE.compareTo(ola.tiempoCierre()));
+    assertEquals(0, new BigDecimal("800").compareTo(ola.bultos()));
+    assertEquals(1, ola.rutasMovidas());
   }
 
   // ---------------- Apoyo ----------------
@@ -1086,6 +1169,18 @@ class SimulacionBalanceoTest {
 
       public BigDecimal getCod() {
         return BigDecimal.ZERO;
+      }
+    };
+  }
+
+  private static RutasMovidasCluster movidas(Long clusterId, long rutas) {
+    return new RutasMovidasCluster() {
+      public Long getClusterId() {
+        return clusterId;
+      }
+
+      public Long getRutas() {
+        return rutas;
       }
     };
   }

@@ -1,26 +1,24 @@
 <header class="page-head">
   <div>
     <h1 class="page-head__title">Configuración y balanceo</h1>
-    <p class="page-head__sub">
-      Trabaja un cluster a la vez, en el orden de las olas: balancea sus rutas por bultos, asigna
-      sus operarios y ciérralo para pasar el equipo al siguiente.
-    </p>
   </div>
-  @if (seleccionado()) {
-    <button
-      *hasPermiso="permisos.VER_DASHBOARD_SIMULACION"
-      type="button"
-      class="ui-btn ui-btn--secondary"
-      (click)="irADashboard()"
-    >
-      <ui-icon name="dashboard" [size]="18" />
-      Ver dashboard
+  <div class="page-head__acciones">
+    <button type="button" class="ui-btn ui-btn--ghost" (click)="explicacionAbierta.set(true)">
+      <ui-icon name="info" [size]="18" />
+      ¿Cómo balancea?
     </button>
-  }
-  <button type="button" class="ui-btn ui-btn--secondary" (click)="abrirExplicacion()">
-    <ui-icon name="info" [size]="18" />
-    ¿Cómo balancea?
-  </button>
+    @if (seleccionado()) {
+      <button
+        *hasPermiso="permisos.VER_DASHBOARD_SIMULACION"
+        type="button"
+        class="ui-btn ui-btn--secondary"
+        (click)="irADashboard()"
+      >
+        <ui-icon name="dashboard" [size]="18" />
+        Ver dashboard
+      </button>
+    }
+  </div>
 </header>
 
 <input
@@ -258,232 +256,20 @@
   } @else {
     <section class="cluster-grid" aria-label="Clusters en el orden de las olas">
       @for (cluster of resumenClusters(); track cluster.id) {
-        <article
-          class="cluster-card"
-          [class.cluster-card--en-curso]="cluster.enCurso"
-          [class.cluster-card--bloqueado]="!cluster.enCurso && !cluster.cerrado"
-          [style.--cluster-color]="cluster.color"
-        >
-          <header class="cluster-card__head">
-            <span class="cluster-card__nombre" [title]="cluster.nombre">{{ cluster.nombre }}</span>
-            <span
-              class="cluster-paso"
-              [class.cluster-paso--listo]="cluster.cerrado"
-              [class.cluster-paso--en-curso]="cluster.enCurso"
-            >
-              @if (cluster.cerrado) {
-                <ui-icon name="check" [size]="12" /> Cerrado
-              } @else if (cluster.enCurso) {
-                En curso
-              } @else {
-                <ui-icon name="lock" [size]="12" /> En espera
-              }
-            </span>
-            @if (cluster.dispersion !== null) {
-              <span
-                class="ui-badge"
-                [class.ui-badge--success]="cluster.dispersion <= 10"
-                [class.ui-badge--warning]="cluster.dispersion > 10"
-                title="Diferencia de bultos entre sus chutes"
-              >
-                {{ cluster.dispersion }} %
-              </span>
-            }
-          </header>
-
-          <dl class="cluster-card__stats">
-            <div>
-              <dt>Rutas</dt>
-              <dd>{{ formatearNumero(cluster.rutas) }}</dd>
-            </div>
-            <div>
-              <dt>Bultos</dt>
-              <dd>{{ formatearNumero(cluster.bultos) }}</dd>
-            </div>
-            <div>
-              <dt>Chutes</dt>
-              <dd>{{ formatearNumero(cluster.chutes) }}</dd>
-            </div>
-          </dl>
-
-          @if (cluster.enCurso) {
-            <ol class="cluster-pasos" [attr.aria-label]="'Pasos de ' + cluster.nombre">
-              <li
-                class="cluster-pasos__item"
-                [class.cluster-pasos__item--hecho]="cluster.balanceado"
-              >
-                <span class="cluster-pasos__titulo">1 · Rutas</span>
-                <span class="cluster-pasos__dato">
-                  @if (cluster.dispersion === null) {
-                    Su carga está en un solo chute.
-                  } @else {
-                    Diferencia de bultos entre sus chutes: {{ cluster.dispersion }} % (meta: 10 % o
-                    menos).
-                  }
-                </span>
-                @if (!cluster.balanceado && cluster.mezclas.length > 0) {
-                  <span class="cluster-pasos__aviso">
-                    Comparte {{ cluster.mezclas.join(', ') }} con un cluster incompatible: al
-                    balancear, sale de ahí el que tenga menos rutas.
-                  </span>
-                }
-                @if (!cluster.balanceado) {
-                  <button
-                    *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
-                    type="button"
-                    class="ui-btn ui-btn--primary ui-btn--sm"
-                    (click)="balancear(cluster)"
-                    [disabled]="ocupado()"
-                  >
-                    @if (trabajando() === 'RUTAS') {
-                      <span class="ui-spinner config-spinner"></span>
-                    }
-                    Balancear rutas
-                  </button>
-                }
-              </li>
-
-              <li
-                class="cluster-pasos__item"
-                [class.cluster-pasos__item--hecho]="cluster.conOperarios"
-                [class.cluster-pasos__item--espera]="!cluster.balanceado"
-              >
-                <span class="cluster-pasos__titulo">2 · Operarios</span>
-                <div class="cluster-pasos__limite">
-                  <label class="ui-label" [attr.for]="'limite-' + cluster.id">Límite (h)</label>
-                  <input
-                    [id]="'limite-' + cluster.id"
-                    type="number"
-                    class="ui-input"
-                    min="0"
-                    [max]="limitesValidos.horas"
-                    step="0.1"
-                    inputmode="decimal"
-                    [value]="cluster.limite"
-                    [disabled]="!puedeModificar() || !cluster.balanceado || ocupado()"
-                    (change)="setLimite(cluster.id, $event)"
-                  />
-                </div>
-                @if (cluster.conOperarios) {
-                  <span class="cluster-pasos__dato">
-                    {{ formatearNumero(cluster.operarios) }} operario(s) de
-                    {{ formatearNumero(equipo()) }} · cierra en
-                    <strong>{{ formatearHoras(cluster.tiempo) }}</strong>
-                    <span
-                      class="ui-badge"
-                      [class.ui-badge--success]="cluster.cumple"
-                      [class.ui-badge--danger]="!cluster.cumple"
-                    >
-                      {{ cluster.cumple ? 'Cumple' : 'Excede' }}
-                    </span>
-                  </span>
-                  @if (cluster.previo) {
-                    <span class="cluster-pasos__dato">
-                      {{ formatearNumero(cluster.siguen) }} siguen en su chute desde
-                      {{ cluster.previo }}.
-                    </span>
-                  }
-                } @else if (cluster.previo) {
-                  <span class="cluster-pasos__dato">
-                    Parte de donde quedó el equipo al cerrar {{ cluster.previo }}.
-                  </span>
-                }
-                @if (cluster.balanceado) {
-                  <button
-                    *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
-                    type="button"
-                    class="ui-btn ui-btn--sm"
-                    [class.ui-btn--primary]="!cluster.conOperarios"
-                    [class.ui-btn--secondary]="cluster.conOperarios"
-                    (click)="asignarOperarios(cluster)"
-                    [disabled]="ocupado()"
-                  >
-                    @if (trabajando() === 'OPERARIOS') {
-                      <span class="ui-spinner config-spinner"></span>
-                    }
-                    {{ cluster.conOperarios ? 'Recalcular operarios' : 'Asignar operarios' }}
-                  </button>
-                }
-              </li>
-
-              <li
-                class="cluster-pasos__item"
-                [class.cluster-pasos__item--espera]="!cluster.conOperarios"
-              >
-                <span class="cluster-pasos__titulo">3 · Cerrar</span>
-                <span class="cluster-pasos__dato">
-                  {{
-                    cluster.siguiente
-                      ? 'El equipo pasa a ' + cluster.siguiente + ' con esta dotación.'
-                      : 'Es el último cluster: al cerrarlo termina la simulación.'
-                  }}
-                </span>
-                @if (cluster.conOperarios) {
-                  <button
-                    *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
-                    type="button"
-                    class="ui-btn ui-btn--success ui-btn--sm"
-                    (click)="cerrar(cluster)"
-                    [disabled]="ocupado()"
-                  >
-                    @if (trabajando() === 'CERRAR') {
-                      <span class="ui-spinner config-spinner"></span>
-                    }
-                    {{
-                      cluster.siguiente
-                        ? 'Cerrar y pasar a ' + cluster.siguiente
-                        : 'Cerrar y terminar'
-                    }}
-                  </button>
-                }
-              </li>
-            </ol>
-            @if (cluster.balanceado) {
-              <footer
-                *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
-                class="cluster-card__acciones"
-              >
-                <button
-                  type="button"
-                  class="ui-btn ui-btn--ghost ui-btn--sm"
-                  (click)="confirmarRestablecerCluster(cluster)"
-                  [disabled]="ocupado()"
-                  [attr.aria-label]="'Restablecer ' + cluster.nombre"
-                  title="Devuelve sus rutas a su chute original y quita los operarios de su ola"
-                >
-                  <ui-icon name="refresh" [size]="14" />
-                  Restablecer
-                </button>
-              </footer>
-            }
-          } @else if (cluster.cerrado) {
-            <p class="cluster-card__resumen">
-              {{ formatearNumero(cluster.operarios) }} operario(s) · cierra en
-              <strong>{{ formatearHoras(cluster.tiempo) }}</strong>
-              @if (cluster.limite > 0) {
-                de {{ formatearHoras(cluster.limite) }}
-              }
-            </p>
-            <footer
-              *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
-              class="cluster-card__acciones"
-            >
-              <button
-                type="button"
-                class="ui-btn ui-btn--ghost ui-btn--sm"
-                (click)="confirmarReabrir(cluster)"
-                [disabled]="ocupado()"
-                [attr.aria-label]="'Reabrir ' + cluster.nombre"
-                title="Vuelve a permitir cambios; los clusters siguientes vuelven a la proyección"
-              >
-                <ui-icon name="lock" [size]="14" />
-                Reabrir
-              </button>
-            </footer>
-          } @else {
-            <p class="cluster-card__resumen">Se habilita al cerrar {{ enCurso()?.nombre }}.</p>
-          }
-        </article>
+        <app-simulacion-cluster-card
+          [cluster]="cluster"
+          [equipo]="equipo()"
+          [enCurso]="enCurso()?.nombre ?? null"
+          [puedeModificar]="puedeModificar()"
+          [ocupado]="ocupado()"
+          [trabajando]="trabajando()"
+          (balancear)="balancear(cluster)"
+          (asignar)="asignarOperarios(cluster)"
+          (cerrar)="cerrar(cluster)"
+          (restablecer)="confirmarRestablecerCluster(cluster)"
+          (reabrir)="confirmarReabrir(cluster)"
+          (limiteCambia)="setLimite(cluster.id, $event)"
+        />
       }
     </section>
 
@@ -608,7 +394,6 @@
                 <th class="num">Unidades</th>
                 <th class="num">Líneas</th>
                 <th class="num">COD</th>
-                <th class="col-actions">Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -638,21 +423,10 @@
                   <td class="num">{{ formatearNumero(ruta.totalUnidades, 2) }}</td>
                   <td class="num">{{ formatearNumero(ruta.totalLineas, 2) }}</td>
                   <td class="num">{{ formatearNumero(ruta.conteoCod) }}</td>
-                  <td>
-                    <button
-                      *hasPermiso="permisos.MODIFICAR_CONFIGURACION_SIMULACION"
-                      type="button"
-                      class="ui-btn ui-btn--ghost ui-btn--sm"
-                      [disabled]="ocupado() || clusterCerrado(ruta.clusterId)"
-                      (click)="abrirMover(ruta)"
-                    >
-                      Mover
-                    </button>
-                  </td>
                 </tr>
               } @empty {
                 <tr>
-                  <td colspan="9" class="u-muted">Ninguna ruta coincide con los filtros.</td>
+                  <td colspan="8" class="u-muted">Ninguna ruta coincide con los filtros.</td>
                 </tr>
               }
             </tbody>
@@ -670,157 +444,12 @@
   }
 }
 
-<ui-modal
+<app-simulacion-historial-cambios
   [abierto]="historialAbierto()"
-  ancho="xl"
-  titulo="Cambios del registro"
-  subtitulo="Cada balanceo de un cluster y cada movimiento manual, del más reciente al más antiguo."
+  [cargando]="historialCargando()"
+  [grupos]="historialAgrupado()"
   (cerrar)="historialAbierto.set(false)"
->
-  @if (historialCargando()) {
-    <div class="loading"><span class="ui-spinner"></span> Cargando historial…</div>
-  } @else if (historialAgrupado().length === 0) {
-    <ui-empty
-      icono="info"
-      titulo="Sin cambios registrados"
-      mensaje="Todavía no se han movido rutas."
-    />
-  } @else {
-    @for (grupo of historialAgrupado(); track grupo.clave) {
-      <section class="historial-grupo">
-        <header class="historial-grupo__head">
-          <div>
-            <h3 class="historial-grupo__titulo">{{ grupo.titulo }}</h3>
-            <p class="historial-grupo__meta">
-              {{ grupo.fecha | date: 'dd/MM/yyyy HH:mm' }} ·
-              {{ grupo.creadoPor | actorLabel }}
-            </p>
-            @if (grupo.mensaje) {
-              <p class="historial-grupo__mensaje">{{ grupo.mensaje }}</p>
-            }
-          </div>
-          <ul class="historial-grupo__resumen">
-            @if (grupo.rutas > 0) {
-              <li>{{ formatearNumero(grupo.rutas) }} ruta(s) movida(s)</li>
-            }
-            @if (grupo.separaciones > 0) {
-              <li>{{ formatearNumero(grupo.separaciones) }} por separar CL1/CL2</li>
-            }
-            @if (grupo.chutesOperarios > 0) {
-              <li>{{ formatearNumero(grupo.chutesOperarios) }} chute(s) con otra dotación</li>
-            }
-          </ul>
-        </header>
-        @if (grupo.cambios.length > 0) {
-          <div class="ui-table-wrap">
-            <table class="ui-table">
-              <thead>
-                <tr>
-                  <th>Acción</th>
-                  <th>Ruta</th>
-                  <th>Cluster · tipo</th>
-                  <th class="num">Bultos</th>
-                  <th>Detalle</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (cambio of grupo.cambios; track cambio.id) {
-                  <tr>
-                    @if (cambio.tipoAccion === 'ASIGNAR_OPERARIOS') {
-                      <td><span class="ui-badge ui-badge--info">Operarios</span></td>
-                      <td class="u-muted">—</td>
-                      <td class="u-muted">—</td>
-                      <td class="num u-muted">—</td>
-                      <td>
-                        <strong>{{ cambio.chuteModificado }}</strong
-                        >: {{ cambio.operariosOrigen ?? 0 }} → {{ cambio.operariosDestino ?? 0 }}
-                        operario(s)
-                      </td>
-                    } @else {
-                      <td>
-                        <span
-                          class="ui-badge"
-                          [class.ui-badge--success]="cambio.motivo === 'SEPARACION'"
-                          [class.ui-badge--warning]="cambio.motivo !== 'SEPARACION'"
-                        >
-                          {{ cambio.motivo === 'SEPARACION' ? 'Separa CL1/CL2' : 'Ruta movida' }}
-                        </span>
-                      </td>
-                      <td class="u-mono">{{ cambio.ruta ?? '—' }}</td>
-                      <td>
-                        {{ cambio.cluster ?? '—' }}
-                        @if (cambio.tipo) {
-                          · {{ cambio.tipo }}
-                        }
-                      </td>
-                      <td class="num">
-                        {{ cambio.bultos === null ? '—' : formatearNumero(cambio.bultos, 2) }}
-                      </td>
-                      <td>
-                        De <strong>{{ cambio.chuteOrigen }}</strong> a
-                        <strong>{{ cambio.chuteDestino }}</strong>
-                      </td>
-                    }
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        }
-      </section>
-    }
-  }
-  <div modal-footer class="modal-foot">
-    <button type="button" class="ui-btn ui-btn--secondary" (click)="historialAbierto.set(false)">
-      Cerrar
-    </button>
-  </div>
-</ui-modal>
-
-<ui-modal
-  [abierto]="moverAbierto()"
-  ancho="sm"
-  titulo="Mover ruta"
-  subtitulo="La ruta cambiará de chute sin modificar su cluster."
-  (cerrar)="cerrarMover()"
->
-  @if (rutaAMover(); as ruta) {
-    <p class="mover-texto">
-      Ruta <strong class="u-mono">{{ ruta.codigoRuta }}</strong> · chute actual
-      <strong>{{ ruta.chute }}</strong>
-    </p>
-    <div class="ui-field">
-      <label class="ui-label" for="mover-destino">Chute destino</label>
-      <ui-select-buscable
-        campoId="mover-destino"
-        [opciones]="destinosMover().opciones"
-        [valor]="chuteDestino()"
-        placeholder="Elegir chute…"
-        (valorCambia)="chuteDestino.set($event)"
-      />
-      @if (destinosMover().excluidos.length > 0) {
-        <span class="hint">
-          No se ofrecen {{ destinosMover().excluidos.join(', ') }}: ya tienen rutas de un cluster
-          que no puede compartir chute con {{ ruta.cluster }}.
-        </span>
-      }
-    </div>
-  }
-  <div modal-footer class="modal-foot">
-    <button type="button" class="ui-btn ui-btn--ghost" (click)="cerrarMover()">Cancelar</button>
-    <button
-      type="button"
-      class="ui-btn ui-btn--primary"
-      [disabled]="chuteDestino() === null || ocupado()"
-      (click)="confirmarMover()"
-    >
-      @if (moviendo()) {
-        <span class="ui-spinner config-spinner"></span>
-      }
-      Mover ruta
-    </button>
-  </div>
-</ui-modal>
+/>
 
 <ui-modal
   [abierto]="restablecerAbierto()"
@@ -1023,109 +652,7 @@
   </div>
 </ui-modal>
 
-<ui-modal
+<app-simulacion-guia-balanceo
   [abierto]="explicacionAbierta()"
-  ancho="lg"
-  titulo="¿Cómo balancea el sistema?"
-  subtitulo="Un cluster a la vez, en el orden de las olas: rutas, operarios y cierre. El mismo equipo pasa de un cluster al siguiente."
   (cerrar)="explicacionAbierta.set(false)"
->
-  <div class="guia">
-    <section class="guia__bloque">
-      <h3 class="guia__titulo"><ui-icon name="flecha" [size]="16" /> 1. Un cluster a la vez</h3>
-      <p class="guia__texto">
-        Los clusters son olas que se trabajan en secuencia: CL1, luego CL2, luego CL3. Solo se
-        trabaja el cluster en curso; el siguiente se habilita al cerrarlo, y cada uno sigue la misma
-        lógica: primero sus rutas y después sus operarios.
-      </p>
-      <ul class="guia__lista">
-        <li>
-          <strong>Parámetros globales</strong> (arriba, iguales para todas las olas): operarios del
-          equipo, velocidad (bultos por hora de cada operario) y máximo de operarios por chute
-          (vacío: hasta todo el equipo).
-        </li>
-        <li>
-          <strong>Parámetro de cada cluster:</strong> su límite de horas, es decir, en cuánto tiempo
-          debe terminar su ola.
-        </li>
-      </ul>
-    </section>
-
-    <section class="guia__bloque">
-      <h3 class="guia__titulo"><ui-icon name="paquete" [size]="16" /> 2. Paso 1 · Rutas</h3>
-      <p class="guia__texto">
-        Iguala la carga en <strong>bultos</strong> de los chutes del cluster, sin usar operarios:
-      </p>
-      <p class="guia__formula">
-        <code>diferencia = (chute con más bultos − chute con menos) / promedio</code>
-      </p>
-      <ul class="guia__lista">
-        <li>
-          Si comparte un chute con su incompatible (<strong>CL1 con CL2</strong>), sale de allí el
-          que tenga menos rutas en ese chute (si aún no empezó; un cluster cerrado no se toca): a
-          otro chute suyo o, si no hay, al chute compatible menos cargado.
-        </li>
-        <li>
-          Luego mueve rutas del chute con más bultos al de menos hasta que la diferencia sea como
-          mucho el 10 % del promedio o ninguna ruta la reduzca más. Sus rutas solo van a chutes que
-          ya atienden ese cluster.
-        </li>
-      </ul>
-    </section>
-
-    <section class="guia__bloque">
-      <h3 class="guia__titulo"><ui-icon name="usuarios" [size]="16" /> 3. Paso 2 · Operarios</h3>
-      <p class="guia__texto">
-        Cada chute tarda <code>sus bultos / (velocidad × operarios)</code> y la ola termina con su
-        chute más lento. Con el límite de horas del cluster:
-      </p>
-      <ul class="guia__lista">
-        <li>
-          El equipo llega de la ola anterior: quien está en un chute que sigue trabajando se queda
-          ahí. El primer cluster empieza sin nadie asignado.
-        </li>
-        <li>Cada chute con carga recibe al menos un operario si queda gente libre.</li>
-        <li>
-          Mientras la ola no cumpla su límite, su chute más lento recibe a alguien libre o, si el
-          equipo está completo, a alguien de un chute que sigue cumpliendo sin él. Ningún chute pasa
-          del máximo por chute.
-        </li>
-      </ul>
-    </section>
-
-    <section class="guia__bloque">
-      <h3 class="guia__titulo"><ui-icon name="check" [size]="16" /> 4. Paso 3 · Cerrar</h3>
-      <p class="guia__texto">
-        Cerrar el cluster pasa el equipo al siguiente con la dotación con la que terminó. Al cerrar
-        el último, la simulación termina y el dashboard muestra el resumen. «Reabrir» un cluster
-        cerrado lo deja cambiar, y los que se trabajaron después vuelven a la proyección, porque
-        partían de su dotación.
-      </p>
-    </section>
-
-    <section class="guia__bloque">
-      <h3 class="guia__titulo"><ui-icon name="info" [size]="16" /> 5. Qué cambia y qué no</h3>
-      <ul class="guia__lista">
-        <li>Mover una ruta cambia su chute, nunca su cluster ni su tipo (B2C/B2B).</li>
-        <li>
-          El chute original queda congelado al cargar el Excel: por eso el dashboard puede comparar
-          <strong>antes vs. después</strong>.
-        </li>
-        <li>
-          No se mueven rutas de un cluster cerrado ni se llevan a un chute donde juntarían CL1 con
-          CL2.
-        </li>
-        <li>
-          Los parámetros globales no cambian mientras haya clusters cerrados: reabre el primero para
-          cambiarlos.
-        </li>
-      </ul>
-    </section>
-  </div>
-
-  <div modal-footer class="modal-foot">
-    <button type="button" class="ui-btn ui-btn--primary" (click)="explicacionAbierta.set(false)">
-      Entendido
-    </button>
-  </div>
-</ui-modal>
+/>

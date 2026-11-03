@@ -16,5 +16,10 @@ public record DashboardSimulacionResponse(
     List<MovimientoChuteResponse> movimientos,
     /** Clusters en el orden de las olas con su avance: arman el selector de vistas. */
     List<OlaSimulacionResponse> olas,
-    /** Paso de operarios entre olas seguidas con operarios asignados (solo en la vista final). */
-    List<FlujoOperariosResponse> flujoOperarios) {}
+    /** Paso de operarios entre olas: en la vista de un cluster, solo el que llega a él. */
+    List<FlujoOperariosResponse> flujoOperarios,
+    /** Operarios del equipo y máximo por chute (null = sin tope propio). */
+    int equipo,
+    Integer maximoPorChute,
+    /** Operarios de cada chute en cada ola (solo en el resumen). */
+    List<DotacionChuteResponse> dotacion) {}

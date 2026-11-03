@@ -1,0 +1,61 @@
+/* Historial: un bloque por ejecución del balanceo o movimiento manual. */
+.historial-grupo {
+  & + & {
+    margin-top: var(--space-5);
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--border);
+  }
+
+  &__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-4);
+    margin-bottom: var(--space-3);
+  }
+
+  &__titulo {
+    margin: 0;
+    font-size: var(--fs-base);
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  &__mensaje {
+    margin: var(--space-1) 0 0;
+    font-size: var(--fs-xs);
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+
+  &__meta {
+    margin: 2px 0 0;
+    font-size: var(--fs-xs);
+    color: var(--text-3);
+  }
+
+  &__resumen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    li {
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: var(--fs-xs);
+      font-weight: 700;
+      color: var(--text-2);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+    }
+  }
+}
+
+.ui-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

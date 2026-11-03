@@ -80,6 +80,7 @@ import oracle.simulacion.response.ClusterComparativoResponse;
 import oracle.simulacion.response.ClusterParametroResponse;
 import oracle.simulacion.response.ConfiguracionSimulacionResponse;
 import oracle.simulacion.response.DashboardSimulacionResponse;
+import oracle.simulacion.response.DotacionChuteResponse;
 import oracle.simulacion.response.FlujoChuteResponse;
 import oracle.simulacion.response.FlujoOperariosResponse;
 import oracle.simulacion.response.HistorialRegistroResponse;
@@ -887,21 +888,7 @@ public class SimulacionConfiguracionService {
      * promedio, en %. Null si la ola tiene menos de dos chutes con carga.
      */
     Integer dispersion(Long cluster) {
-      List<BigDecimal> valores =
-          carga.getOrDefault(cluster, Map.of()).values().stream()
-              .filter((v) -> v.signum() > 0)
-              .toList();
-      if (valores.size() < 2) {
-        return null;
-      }
-      BigDecimal total = valores.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-      BigDecimal promedio =
-          total.divide(BigDecimal.valueOf(valores.size()), ESCALA, RoundingMode.HALF_UP);
-      BigDecimal rango = Collections.max(valores).subtract(Collections.min(valores));
-      return rango
-          .multiply(BigDecimal.valueOf(100))
-          .divide(promedio, 0, RoundingMode.HALF_UP)
-          .intValue();
+      return diferenciaBultos(carga.getOrDefault(cluster, Map.of()).values());
     }
 
     /**
@@ -1040,12 +1027,11 @@ public class SimulacionConfiguracionService {
   // ---------------- Paso 2: operarios ----------------
 
   /**
-   * Paso 2 del cluster en curso. El equipo llega de la ola anterior: cada
-   * chute que sigue trabajando conserva a su gente y solo se mueve a quien
-   * hace falta. Luego, mientras la ola supere su límite, el chute más lento
-   * recibe un operario libre del equipo o, si no queda ninguno, de un chute que
-   * sigue cumpliendo sin él. Respeta el tamaño del equipo y el máximo por
-   * chute. Puede repetirse para recalcular.
+   * Paso 2 del cluster en curso. Todo el equipo trabaja y se reparte para que
+   * la ola cierre lo antes posible; el límite de horas solo dice si cumple.
+   * Entre repartos con el mismo cierre, se queda el que deja a más gente en el
+   * chute donde terminó la ola anterior. Solo sobra gente si cada chute con
+   * carga llega al máximo por chute. Puede repetirse para recalcular.
    */
   private BalanceoResponse asignarOperarios(Long archivoId, Long clusterId, Long actor) {
     Contexto ctx = contexto(archivoId, true);
@@ -1092,6 +1078,14 @@ public class SimulacionConfiguracionService {
             .append(" chute(s), de un equipo de ")
             .append(equipo)
             .append(".");
+    if (asignacion.sinChute() > 0) {
+      mensaje
+          .append(" ")
+          .append(asignacion.sinChute())
+          .append(" sin chute: cada chute con carga ya tiene el máximo de ")
+          .append(topeChute)
+          .append(".");
+    }
     if (previo != null) {
       mensaje
           .append(" Desde ")
@@ -1227,60 +1221,49 @@ public class SimulacionConfiguracionService {
           .sum();
     }
 
+    /**
+     * Todo el equipo trabaja (salvo que cada chute con carga llegue al tope) y
+     * se reparte para que la ola cierre lo antes posible: cada operario va al
+     * chute que más tarda en ese momento. Con ese cierre fijo, se mueve lo
+     * mínimo: cada chute queda con lo justo para lograrlo y el resto se reparte
+     * primero dejando a la gente donde ya estaba y luego en el chute más lento.
+     */
     void asignar() {
-      // Quien ya está en un chute que sigue trabajando se queda (hasta el tope).
-      carga.keySet()
-          .forEach(
-              (chute) ->
-                  operarios.put(chute, Math.min(heredados.getOrDefault(chute, 0), topeChute)));
-      // Al menos un operario por chute con carga, de mayor a menor carga.
-      List<Long> porCarga =
-          carga.entrySet().stream()
-              .sorted(Map.Entry.<Long, BigDecimal>comparingByValue().reversed())
-              .map(Map.Entry::getKey)
-              .toList();
-      for (Long chute : porCarga) {
-        if (operarios(chute) == 0 && totalAsignados() < equipo) {
-          operarios.put(chute, 1);
+      carga.keySet().forEach((chute) -> operarios.put(chute, 0));
+      int disponibles = Math.min(equipo, carga.size() * topeChute);
+      for (int i = 0; i < disponibles; i++) {
+        operarios.merge(chuteMasLento(), 1, Integer::sum);
+      }
+      BigDecimal cierre = tiempoOla();
+      if (sinOperarios(cierre)) {
+        return;
+      }
+      int sobrantes = 0;
+      for (Long chute : carga.keySet()) {
+        int justos = operarios(chute);
+        while (justos > 0
+            && horas(carga.get(chute), velocidad, justos - 1).compareTo(cierre) <= 0) {
+          justos--;
+        }
+        sobrantes += operarios(chute) - justos;
+        operarios.put(chute, justos);
+      }
+      for (Long chute : carga.keySet()) {
+        int vuelven = Math.min(heredados.getOrDefault(chute, 0), topeChute) - operarios(chute);
+        int quedan = Math.min(sobrantes, vuelven);
+        if (quedan > 0) {
+          operarios.merge(chute, quedan, Integer::sum);
+          sobrantes -= quedan;
         }
       }
-      // Mientras la ola no cumpla, el chute más lento recibe a alguien: libre
-      // del equipo o de un chute que sigue cumpliendo con uno menos.
-      int vueltas = 0;
-      while (vueltas++ < MAX_ITERACIONES && tiempoOla().compareTo(limite.add(TOLERANCIA)) > 0) {
-        Long lento = chuteMasLento();
-        if (lento == null || operarios(lento) >= topeChute) {
-          break;
-        }
-        if (totalAsignados() < equipo) {
-          operarios.merge(lento, 1, Integer::sum);
-          continue;
-        }
-        Long donante = donante(lento);
-        if (donante == null) {
-          break;
-        }
-        operarios.merge(donante, -1, Integer::sum);
-        operarios.merge(lento, 1, Integer::sum);
+      for (; sobrantes > 0; sobrantes--) {
+        operarios.merge(chuteMasLento(), 1, Integer::sum);
       }
     }
 
-    /**
-     * Chute que puede ceder un operario sin pasarse del límite (y sin quedarse
-     * vacío): el que más margen conserva tras cederlo.
-     */
-    private Long donante(Long lento) {
-      return carga.keySet().stream()
-          .filter((chute) -> !chute.equals(lento) && operarios(chute) > 1)
-          .filter(
-              (chute) ->
-                  horas(carga.get(chute), velocidad, operarios(chute) - 1)
-                          .compareTo(limite.add(TOLERANCIA))
-                      <= 0)
-          .min(
-              Comparator.comparing(
-                  (Long chute) -> horas(carga.get(chute), velocidad, operarios(chute) - 1)))
-          .orElse(null);
+    /** Operarios del equipo que no caben: cada chute con carga ya tiene el tope. */
+    int sinChute() {
+      return equipo - totalAsignados();
     }
 
     private BigDecimal tiempoEn(Long chute) {
@@ -1295,13 +1278,19 @@ public class SimulacionConfiguracionService {
       return maximo;
     }
 
-    /** El más lento; a igual tiempo, el que ya tenía gente de la ola anterior. */
+    /**
+     * El chute con cupo que más tarda; a igual tiempo, el que aún tiene por
+     * volver a alguien de la ola anterior y luego el de más bultos.
+     */
     private Long chuteMasLento() {
       return carga.keySet().stream()
+          .filter((chute) -> operarios(chute) < topeChute)
           .max(
               Comparator.comparing(this::tiempoEn)
-                  .thenComparing((Long chute) -> heredados.getOrDefault(chute, 0)))
-          .orElse(null);
+                  .thenComparing(
+                      (Long chute) -> heredados.getOrDefault(chute, 0) > operarios(chute))
+                  .thenComparing(carga::get))
+          .orElseThrow();
     }
 
     /** Operarios que necesitaría la ola para cumplir su límite (cada chute por su cuenta). */
@@ -1371,6 +1360,40 @@ public class SimulacionConfiguracionService {
       ctx.parametrosCluster().get(clusterId).setEstado(ParametroCluster.ESTADO_PENDIENTE);
     }
     borrarOlas(ctx, clusterIds);
+  }
+
+  /**
+   * Diferencia de bultos entre chutes: (más cargado − menos cargado) /
+   * promedio, en %. Null con menos de dos chutes con carga.
+   */
+  private static Integer diferenciaBultos(Collection<BigDecimal> bultos) {
+    List<BigDecimal> valores = bultos.stream().filter((v) -> v.signum() > 0).toList();
+    if (valores.size() < 2) {
+      return null;
+    }
+    BigDecimal total = valores.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+    BigDecimal promedio =
+        total.divide(BigDecimal.valueOf(valores.size()), ESCALA, RoundingMode.HALF_UP);
+    BigDecimal rango = Collections.max(valores).subtract(Collections.min(valores));
+    return rango
+        .multiply(BigDecimal.valueOf(100))
+        .divide(promedio, 0, RoundingMode.HALF_UP)
+        .intValue();
+  }
+
+  /** Diferencia de bultos entre los chutes de cada cluster para una distribución de carga. */
+  private static Map<Long, Integer> diferenciasPorCluster(Collection<CargaRutas> filas) {
+    Map<Long, Map<Long, BigDecimal>> porCluster = new HashMap<>();
+    for (CargaRutas fila : filas) {
+      if (fila.getChuteId() != null && fila.getRutas() > 0) {
+        porCluster
+            .computeIfAbsent(fila.getClusterId(), (id) -> new HashMap<>())
+            .merge(fila.getChuteId(), fila.getBultos(), BigDecimal::add);
+      }
+    }
+    Map<Long, Integer> resultado = new HashMap<>();
+    porCluster.forEach((id, chutes) -> resultado.put(id, diferenciaBultos(chutes.values())));
+    return resultado;
   }
 
   /** Registra un lanzamiento con su resultado y devuelve su id para enlazar el historial. */
@@ -1532,8 +1555,9 @@ public class SimulacionConfiguracionService {
         cargaActual.put(new Par(fila.getClusterId(), fila.getChuteId()), estadistica(fila));
       }
     }
+    List<CargaRutas> filasOriginales = rutaRepo.cargaOriginalPorArchivo(archivoId);
     Map<Par, Estadistica> cargaOriginal = new HashMap<>();
-    for (CargaRutas fila : rutaRepo.cargaOriginalPorArchivo(archivoId)) {
+    for (CargaRutas fila : filasOriginales) {
       if (fila.getChuteId() != null
           && (clusterId == null || clusterId.equals(fila.getClusterId()))) {
         cargaOriginal.put(new Par(fila.getClusterId(), fila.getChuteId()), estadistica(fila));
@@ -1678,47 +1702,43 @@ public class SimulacionConfiguracionService {
                 })
             .toList();
 
-    // Lo cedido por un chute se cuenta como reasignado, no como añadido.
-    int operariosAgregados =
-        Math.max(
-            0,
-            chutes.stream()
-                .mapToInt((c) -> c.operariosBalanceado() - c.operariosOriginal())
-                .sum());
-    int operariosMovidos =
-        chutes.stream()
-            .mapToInt((c) -> Math.max(0, c.operariosOriginal() - c.operariosBalanceado()))
-            .sum();
-    Estadistica total =
-        actual.porCluster().values().stream().reduce(Estadistica.VACIA, Estadistica::sumar);
-    BigDecimal ahorrado =
-        sinOperarios(tiempoOriginal) || sinOperarios(tiempoBalanceado)
-            ? null
-            : tiempoOriginal.subtract(tiempoBalanceado).max(BigDecimal.ZERO);
     SimulacionKpisResponse kpis =
-        new SimulacionKpisResponse(
-            anulable(tiempoOriginal),
-            anulable(tiempoBalanceado),
-            ahorrado,
-            rutasMovidas,
-            operariosAgregados,
-            operariosMovidos,
-            total.bultos(),
-            total.unidades(),
-            total.lineas(),
-            total.codEntero());
+        new SimulacionKpisResponse(anulable(tiempoOriginal), anulable(tiempoBalanceado), rutasMovidas);
     List<Par> ocupados =
         cargaActual.entrySet().stream()
             .filter((entrada) -> entrada.getValue().rutas() > 0)
             .map(Map.Entry::getKey)
             .toList();
     List<Long> orden = orden(ctx);
+    Map<Long, Integer> rutasMovidasPorCluster = new HashMap<>();
+    rutaRepo
+        .rutasMovidasPorCluster(archivoId)
+        .forEach(
+            (fila) ->
+                rutasMovidasPorCluster.put(fila.getClusterId(), Math.toIntExact(fila.getRutas())));
+    // Cuadro de cada ola sobre todos los clusters, aunque la vista sea de uno.
+    Map<Par, Estadistica> todoActual = new HashMap<>();
+    filasActuales.forEach(
+        (fila) ->
+            todoActual.put(new Par(fila.getClusterId(), fila.getChuteId()), estadistica(fila)));
+    Metricas cuadro = Metricas.de(todoActual, operariosActuales, velocidad);
     List<OlaSimulacionResponse> olas =
         orden.stream()
             .map(
-                (id) ->
-                    new OlaSimulacionResponse(
-                        id, ctx.nombreCluster(id), ctx.parametrosCluster().get(id).getEstado()))
+                (id) -> {
+                  Estadistica carga = cuadro.porCluster().getOrDefault(id, Estadistica.VACIA);
+                  return new OlaSimulacionResponse(
+                      id,
+                      ctx.nombreCluster(id),
+                      ctx.parametrosCluster().get(id).getEstado(),
+                      rutasMovidasPorCluster.getOrDefault(id, 0),
+                      limites.getOrDefault(id, BigDecimal.ZERO),
+                      anulable(cuadro.tiempoCluster(id)),
+                      carga.bultos(),
+                      carga.unidades(),
+                      carga.lineas(),
+                      carga.codEntero());
+                })
             .toList();
     return new DashboardSimulacionResponse(
         kpis,
@@ -1729,7 +1749,35 @@ public class SimulacionConfiguracionService {
         olas,
         flujoOperarios(ctx, filasActuales, orden).stream()
             .filter((paso) -> clusterId == null || paso.destinoId().equals(clusterId))
-            .toList());
+            .toList(),
+        operariosMaximos(ctx, operariosBase(ctx)),
+        ctx.config().getOperariosPorChute(),
+        clusterId == null ? dotacion(ctx, orden) : List.of());
+  }
+
+  /**
+   * Operarios de cada chute en cada ola, en el orden de las olas: dónde
+   * estuvo el equipo a lo largo de la operación. Solo chutes con gente en
+   * alguna ola.
+   */
+  private static List<DotacionChuteResponse> dotacion(Contexto ctx, List<Long> orden) {
+    Set<Long> chutes = new HashSet<>();
+    ctx.operariosOla()
+        .forEach(
+            (par, ola) -> {
+              if (ola.getOperarios() > 0) {
+                chutes.add(par.chuteId());
+              }
+            });
+    return chutes.stream()
+        .sorted(Comparator.comparing(ctx::nombreChute, ORDEN_NATURAL))
+        .map(
+            (chute) ->
+                new DotacionChuteResponse(
+                    chute,
+                    ctx.nombreChute(chute),
+                    orden.stream().map((ola) -> operariosOla(ctx, ola, chute)).toList()))
+        .toList();
   }
 
   /**
@@ -2101,6 +2149,8 @@ public class SimulacionConfiguracionService {
     Map<Long, BigDecimal> limites = limites(ctx);
     Map<Long, Integer> operarios = operariosBase(ctx);
     Map<Long, Integer> numeros = numerosCluster(ctx.clusters());
+    Map<Long, Integer> diferenciasOriginales =
+        diferenciasPorCluster(rutaRepo.cargaOriginalPorArchivo(ctx.archivo().getId()));
     List<ClusterParametroResponse> clusters =
         ctx.parametrosCluster().keySet().stream()
             .map(
@@ -2114,7 +2164,8 @@ public class SimulacionConfiguracionService {
                                 (otro) ->
                                     clusterEnConflicto(List.of(otro), id, numeros) != null)
                             .toList(),
-                        ctx.parametrosCluster().get(id).getEstado()))
+                        ctx.parametrosCluster().get(id).getEstado(),
+                        diferenciasOriginales.get(id)))
             .sorted(Comparator.comparing(ClusterParametroResponse::nombre, ORDEN_NATURAL))
             .toList();
     Map<Long, List<Long>> clustersEnChute = new HashMap<>();

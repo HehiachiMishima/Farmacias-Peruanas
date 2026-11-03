@@ -80,13 +80,6 @@ export class SimulacionApi {
     );
   }
 
-  moverRuta(id: number, rutaId: number, chuteId: number): Observable<ConfiguracionSimulacion> {
-    return this.api.put<ConfiguracionSimulacion>(
-      `/simulacion/registros/${id}/rutas/${rutaId}/mover`,
-      { chuteId },
-    );
-  }
-
   /** Trabaja el cluster en curso: paso 1 (RUTAS) o paso 2 (OPERARIOS) de su ola. */
   balancear(id: number, clusterId: number, fase: FaseBalanceo): Observable<BalanceoSimulacion> {
     return this.api.post<BalanceoSimulacion>(

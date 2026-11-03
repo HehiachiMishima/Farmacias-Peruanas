@@ -15,7 +15,6 @@ import {
   ArchivoSimulacion,
   ChuteComparativoSimulacion,
   DashboardSimulacion,
-  FlujoOperariosSimulacion,
 } from '../../data/simulacion.model';
 import { SimulacionApi } from '../../data/simulacion.api';
 import { HasPermiso } from '../../../../../shared/directives/has-permiso.directive';
@@ -33,6 +32,7 @@ import { PanelFiltros } from '../../../../../shared/ui/panel-filtros/panel-filtr
 import { SelectBuscable } from '../../../../../shared/ui/select-buscable/select-buscable';
 import { SelectMultiple } from '../../../../../shared/ui/select-multiple/select-multiple';
 import {
+  colorCluster,
   etiquetaEstadoCluster,
   etiquetaRegistro,
   formatearHoras,
@@ -229,14 +229,6 @@ export class SimulacionDashboard {
     return `Ver las rutas de ${chute.chute} antes y después del balanceo`;
   }
 
-  readonly clustersVisibles = computed(() => {
-    const filtro = this.filtroClusters();
-    const clusters = this.dashboard()?.clusters ?? [];
-    return filtro.length === 0
-      ? clusters
-      : clusters.filter((cluster) => filtro.includes(cluster.cluster));
-  });
-
   readonly chips = computed<ChipFiltro[]>(() => [
     ...this.filtroChutes().map((chute) => ({
       clave: `chute:${chute}`,
@@ -325,9 +317,8 @@ export class SimulacionDashboard {
   );
 
   /**
-   * Indicadores de arriba. En la vista de un cluster, los de sus rutas: qué tan
-   * parejos quedaron sus chutes, su chute más cargado y las rutas que movió.
-   * En el resumen, el cierre total, las rutas movidas y el paso de gente.
+   * Indicadores de las rutas del cluster que se ve: qué tan parejos quedaron
+   * sus chutes, su chute más cargado y las rutas que movió.
    */
   readonly tarjetas = computed(() => {
     const datos = this.dashboard();
@@ -335,31 +326,8 @@ export class SimulacionDashboard {
       return [];
     }
     const kpis = datos.kpis;
-    const ola = this.olaActual();
-    if (!ola) {
-      return [
-        {
-          etiqueta: 'Cierre de la operación',
-          valor: formatearHoras(kpis.tiempoBalanceado),
-          icono: 'reloj',
-          color: 'var(--accent)',
-          detalle: `Suma de ${formatearNumero(this.olas().length)} ola(s), una tras otra`,
-        },
-        {
-          etiqueta: 'Rutas movidas',
-          valor: `${formatearNumero(kpis.rutasMovidas)} rutas`,
-          icono: 'flecha',
-          color: 'var(--violet)',
-          detalle: 'en otro chute para igualar los bultos de cada ola',
-        },
-        {
-          etiqueta: 'Cambios de chute',
-          valor: `${formatearNumero(this.operariosEntreOlas())} operario(s)`,
-          icono: 'usuarios',
-          color: 'var(--success)',
-          detalle: 'se movieron de chute al pasar de una ola a la siguiente',
-        },
-      ];
+    if (!this.olaActual()) {
+      return [];
     }
     const chutes = datos.chutes;
     const antes = chutes.map((chute) => Number(chute.bultosOriginal));
@@ -456,6 +424,138 @@ export class SimulacionDashboard {
     ];
   });
 
+  /**
+   * Cuadro ejecutivo del resumen: carga, rutas movidas y cierre establecido
+   * frente al conseguido de cada cluster. El total suma los cierres porque
+   * las olas van una tras otra.
+   */
+  readonly cuadro = computed(() => {
+    const olas = this.olas();
+    const filas = olas.map((ola, indice) => {
+      const limite = Number(ola.limiteHoras) > 0 ? Number(ola.limiteHoras) : null;
+      const cierre = ola.tiempoCierre === null ? null : Number(ola.tiempoCierre);
+      return {
+        ola,
+        color: colorCluster(indice),
+        limite,
+        cierre,
+        excede: limite !== null && (cierre === null || cierre > limite + 0.01),
+      };
+    });
+    const sumar = (valores: (number | null)[]) =>
+      valores.includes(null) ? null : valores.reduce<number>((t, v) => t + Number(v), 0);
+    const limite = sumar(filas.map((fila) => fila.limite));
+    const cierre = sumar(filas.map((fila) => fila.cierre));
+    return {
+      filas,
+      total: {
+        bultos: olas.reduce((t, ola) => t + Number(ola.bultos), 0),
+        lineas: olas.reduce((t, ola) => t + Number(ola.lineas), 0),
+        unidades: olas.reduce((t, ola) => t + Number(ola.unidades), 0),
+        cod: olas.reduce((t, ola) => t + ola.cod, 0),
+        rutasMovidas: olas.reduce((t, ola) => t + ola.rutasMovidas, 0),
+        limite,
+        cierre,
+      },
+    };
+  });
+
+  /**
+   * Dotación del equipo: operarios de cada chute en cada ola, con la
+   * intensidad de cada celda respecto del chute con más gente.
+   */
+  readonly dotacion = computed(() => {
+    const datos = this.dashboard();
+    if (!datos) {
+      return { filas: [], totales: [], cambios: [] };
+    }
+    const maximo = Math.max(1, ...datos.dotacion.flatMap((fila) => fila.operarios));
+    const filas = datos.dotacion.map((fila) => ({
+      chute: fila.chute,
+      celdas: fila.operarios.map((operarios) => ({
+        operarios,
+        intensidad: Math.round((operarios / maximo) * 100),
+      })),
+    }));
+    const totales = datos.olas.map((_, indice) =>
+      datos.dotacion.reduce((total, fila) => total + (fila.operarios[indice] ?? 0), 0),
+    );
+    // Cambios de chute al llegar a cada ola desde la anterior (la primera no tiene).
+    const cambios = datos.olas.map((ola) => {
+      const paso = datos.flujoOperarios.find((p) => p.destinoId === ola.clusterId);
+      return paso ? { cambian: Math.min(paso.salen, paso.llegan), quedan: paso.quedan } : null;
+    });
+    return { filas, totales, cambios };
+  });
+
+  /**
+   * Dotación de la ola por chute: lo que recibe de la ola anterior frente a lo
+   * asignado, y su tiempo frente al límite. Incluye los chutes que solo ceden
+   * gente (sin carga en esta ola). La escala de las barras alcanza para el
+   * límite y para el chute más lento.
+   */
+  readonly dotacionOla = computed(() => {
+    const datos = this.dashboard();
+    const paso = datos?.flujoOperarios[0] ?? null;
+    if (!datos || !this.olaActual()) {
+      return { filas: [], limite: 0, posLimite: 0, asignados: 0, paso };
+    }
+    const limite = Number(datos.clusters[0]?.limiteHoras ?? 0);
+    const chutes = this.chutesVisibles();
+    const tiempos = chutes.flatMap((chute) =>
+      [chute.tiempoBalanceado, chute.tiempoOriginal].filter(
+        (tiempo): tiempo is number => tiempo !== null,
+      ),
+    );
+    const escala = Math.max(limite * 1.15, ...tiempos.map(Number), 0.0001);
+    const conCarga = chutes.map((chute) => {
+      const tiempo = chute.tiempoBalanceado === null ? null : Number(chute.tiempoBalanceado);
+      const sinMover = chute.tiempoOriginal === null ? null : Number(chute.tiempoOriginal);
+      return {
+        id: chute.id,
+        nombre: chute.chute,
+        bultos: Number(chute.bultosBalanceado),
+        recibidos: chute.operariosOriginal,
+        asignados: chute.operariosBalanceado,
+        tiempo,
+        sinMover,
+        barra: tiempo === null ? 0 : (tiempo / escala) * 100,
+        barraSinMover: sinMover === null ? 0 : (sinMover / escala) * 100,
+        excede: tiempo !== null && limite > 0 && tiempo > limite + 0.01,
+      };
+    });
+    const filtro = this.filtroChutes();
+    const ceden = (paso?.chutes ?? [])
+      .filter(
+        (chute) =>
+          !chutes.some((visible) => visible.id === chute.chuteId) &&
+          (filtro.length === 0 || filtro.includes(chute.chute)),
+      )
+      .map((chute) => ({
+        id: chute.chuteId,
+        nombre: chute.chute,
+        bultos: 0,
+        recibidos: chute.antes,
+        asignados: chute.despues,
+        tiempo: null,
+        sinMover: null,
+        barra: 0,
+        barraSinMover: 0,
+        excede: false,
+      }));
+    // Primero los chutes con carga en la ola; al final, los que solo ceden gente.
+    const filas = [...conCarga, ...ceden]
+      .sort((a, b) => Number(a.bultos === 0) - Number(b.bultos === 0))
+      .map((fila) => ({ ...fila, movimiento: fila.asignados - fila.recibidos }));
+    return {
+      limite,
+      posLimite: (limite / escala) * 100,
+      asignados: filas.reduce((total, fila) => total + fila.asignados, 0),
+      paso,
+      filas,
+    };
+  });
+
   /** Carga por chute (métrica elegida): antes vs. después. */
   readonly gruposChute = computed<GrupoComparativo[]>(() => {
     const metrica = this.metricaActual();
@@ -464,23 +564,6 @@ export class SimulacionDashboard {
       antes: Number(metrica.antes(chute)),
       despues: Number(metrica.despues(chute)),
     }));
-  });
-
-  /** Operarios por chute: lo que recibe de la ola anterior vs. lo asignado. */
-  readonly gruposOperarios = computed<GrupoComparativo[]>(() =>
-    this.chutesVisibles().map((chute) => ({
-      etiqueta: chute.chute,
-      antes: chute.operariosOriginal,
-      despues: chute.operariosBalanceado,
-    })),
-  );
-
-  readonly totalOperarios = computed(() => {
-    const chutes = this.chutesVisibles();
-    return {
-      antes: chutes.reduce((total, chute) => total + chute.operariosOriginal, 0),
-      despues: chutes.reduce((total, chute) => total + chute.operariosBalanceado, 0),
-    };
   });
 
   /** Totales de las cinco métricas (fila final del cuadro por chute). */
@@ -621,26 +704,6 @@ export class SimulacionDashboard {
     this.vista.set(clusterId);
     this.filtroClusters.set([]);
     this.cargar();
-  }
-
-  /** Texto del movimiento de un chute entre dos olas. */
-  movimientoOperarios(chute: FlujoOperariosSimulacion['chutes'][number]): string {
-    const resta = chute.despues - chute.antes;
-    return resta > 0
-      ? `Llegan ${formatearNumero(resta)}`
-      : resta < 0
-        ? `Salen ${formatearNumero(-resta)}`
-        : 'Se quedan';
-  }
-
-  /** Diferencia absoluta «+2» / «−1» / «0»: en operarios importa cuántos, no el porcentaje. */
-  diferencia(antes: number, despues: number): string {
-    const resta = despues - antes;
-    return resta > 0
-      ? `+${formatearNumero(resta)}`
-      : resta < 0
-        ? `−${formatearNumero(-resta)}`
-        : '0';
   }
 
   /**

@@ -185,193 +185,6 @@
   }
 }
 
-.cluster-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--cluster-color, var(--accent));
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
-
-  &__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-  }
-
-  &__nombre {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--fs-sm);
-    font-weight: 800;
-    color: var(--text);
-
-    &::before {
-      content: '';
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: var(--cluster-color, var(--accent));
-    }
-  }
-
-  &__stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--space-2) var(--space-2);
-    margin: 0;
-    padding-top: var(--space-3);
-    border-top: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
-
-    div {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 1px;
-      min-width: 0;
-    }
-
-    dt {
-      font-size: 0.64rem;
-      line-height: 1.2;
-      color: var(--text-3);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    dd {
-      margin: 0;
-      font-size: var(--fs-sm);
-      font-weight: 700;
-      color: var(--text-2);
-      font-variant-numeric: tabular-nums;
-      overflow-wrap: anywhere;
-    }
-  }
-
-  /* Cerrado: su resultado; en espera: cuándo se habilita. */
-  &__resumen {
-    margin: 0;
-    font-size: var(--fs-sm);
-    color: var(--text-2);
-
-    strong {
-      color: var(--text);
-    }
-  }
-
-  /* Restablecer el cluster en curso o reabrir uno cerrado. */
-  &__acciones {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-top: auto;
-  }
-
-  /* El único cluster que se trabaja: resalta sobre los demás. */
-  &--en-curso {
-    grid-column: 1 / -1;
-    border-color: color-mix(in srgb, var(--cluster-color, var(--accent)) 45%, var(--border));
-    box-shadow: var(--shadow-sm);
-  }
-
-  /* Esperando a que se cierre el anterior. */
-  &--bloqueado {
-    opacity: 0.7;
-  }
-}
-
-/* Los tres pasos del cluster en curso: rutas, operarios y cierre. */
-.cluster-pasos {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-
-  @include bp.down(md) {
-    grid-template-columns: 1fr;
-  }
-
-  &__item {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-    min-width: 0;
-    padding: var(--space-3);
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-
-    .ui-btn {
-      margin-top: auto;
-    }
-
-    &--hecho {
-      background: var(--success-soft);
-      border-color: color-mix(in srgb, var(--success) 30%, var(--border));
-
-      .cluster-pasos__titulo::after {
-        content: ' ✓';
-        color: var(--success);
-      }
-    }
-
-    &--espera {
-      opacity: 0.6;
-    }
-  }
-
-  &__titulo {
-    font-size: var(--fs-sm);
-    font-weight: 800;
-    color: var(--text);
-  }
-
-  &__dato {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px;
-    font-size: var(--fs-xs);
-    line-height: 1.45;
-    color: var(--text-2);
-  }
-
-  &__aviso {
-    font-size: var(--fs-xs);
-    line-height: 1.4;
-    color: var(--warning);
-  }
-
-  &__limite {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-
-    .ui-label {
-      flex: none;
-      margin: 0;
-      font-size: var(--fs-xs);
-    }
-
-    .ui-input {
-      width: 90px;
-      height: 32px;
-      padding: 0 var(--space-2);
-      text-align: center;
-      font-weight: 700;
-    }
-  }
-}
-
 .toolbar__acciones {
   display: flex;
   flex-wrap: wrap;
@@ -391,41 +204,6 @@
   }
 }
 
-/* Avance del cluster junto a su nombre: cerrado, en curso o en espera. */
-.cluster-paso {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  margin-right: auto;
-  padding: 1px 8px;
-  font-size: 0.66rem;
-  font-weight: 700;
-  color: var(--text-3);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  white-space: nowrap;
-
-  &--listo {
-    color: var(--success);
-    background: var(--success-soft);
-    border-color: color-mix(in srgb, var(--success) 30%, transparent);
-  }
-
-  &--en-curso {
-    color: var(--info);
-    background: var(--info-soft);
-    border-color: color-mix(in srgb, var(--info) 30%, transparent);
-  }
-}
-
-.historial-grupo__mensaje {
-  margin: var(--space-1) 0 0;
-  font-size: var(--fs-xs);
-  line-height: 1.45;
-  color: var(--text-2);
-}
-
 .cluster-chip {
   display: inline-flex;
   align-items: center;
@@ -443,56 +221,6 @@
   border: 1px solid color-mix(in srgb, var(--cluster-color, var(--accent)) 30%, var(--border));
 }
 
-/* Historial: un bloque por ejecución del balanceo o movimiento manual. */
-.historial-grupo {
-  & + & {
-    margin-top: var(--space-5);
-    padding-top: var(--space-5);
-    border-top: 1px solid var(--border);
-  }
-
-  &__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-2) var(--space-4);
-    margin-bottom: var(--space-3);
-  }
-
-  &__titulo {
-    margin: 0;
-    font-size: var(--fs-base);
-    font-weight: 800;
-    color: var(--text);
-  }
-
-  &__meta {
-    margin: 2px 0 0;
-    font-size: var(--fs-xs);
-    color: var(--text-3);
-  }
-
-  &__resumen {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-
-    li {
-      padding: 2px 10px;
-      border-radius: 999px;
-      font-size: var(--fs-xs);
-      font-weight: 700;
-      color: var(--text-2);
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-    }
-  }
-}
-
 /* Texto de ayuda bajo un campo o en un modal (destinos excluidos, columnas del Excel). */
 .hint {
   display: block;
@@ -500,12 +228,6 @@
   font-size: var(--fs-xs);
   line-height: 1.45;
   color: var(--text-3);
-}
-
-.mover-texto {
-  margin: 0 0 var(--space-3);
-  font-size: var(--fs-sm);
-  color: var(--text-2);
 }
 
 .config-spinner {
@@ -590,63 +312,19 @@
   }
 }
 
-.guia {
+/* Acciones de la cabecera: ayuda y salto al dashboard, a la derecha. */
+.page-head__acciones {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
+  flex-wrap: wrap;
+  gap: var(--space-2);
 
-  &__bloque {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
+  @include bp.down(sm) {
+    flex-wrap: nowrap;
+    width: 100%;
 
-  &__titulo {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    font-size: var(--fs-sm);
-    font-weight: 800;
-    color: var(--text);
-  }
-
-  &__texto {
-    margin: 0;
-    font-size: var(--fs-sm);
-    line-height: 1.55;
-    color: var(--text-2);
-  }
-
-  &__formula {
-    margin: 0;
-    padding: var(--space-3);
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
-    border-radius: var(--radius);
-    overflow-x: auto;
-
-    code {
-      font-family: var(--font-mono, monospace);
-      font-size: var(--fs-xs);
-      color: var(--text);
-      white-space: nowrap;
-    }
-  }
-
-  &__lista {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0;
-    padding-left: var(--space-5);
-    font-size: var(--fs-sm);
-    line-height: 1.55;
-    color: var(--text-2);
-
-    strong {
-      color: var(--text);
+    > .ui-btn {
+      flex: 1 1 0;
+      min-width: 0;
     }
   }
 }

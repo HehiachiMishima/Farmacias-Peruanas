@@ -36,6 +36,8 @@ export interface ClusterParametroSimulacion {
   /** Clusters con los que no puede compartir chute (CL1 con CL2). */
   incompatibles: number[];
   estado: EstadoCluster;
+  /** Diferencia de bultos entre sus chutes al cargar el Excel (%); null con un solo chute. */
+  diferenciaOriginal: number | null;
 }
 
 export interface ChuteParametroSimulacion {
@@ -177,20 +179,11 @@ export interface BalanceoSimulacion {
 }
 
 export interface SimulacionKpis {
-  /** Cierre de la operación: suma de las olas (h) antes y después. null = sin operarios. */
+  /** Cierre (h, suma de las olas) antes y después de los ajustes. null = sin operarios. */
   tiempoOriginal: number | null;
   tiempoBalanceado: number | null;
-  tiempoAhorrado: number | null;
   /** Rutas que hoy están en un chute distinto al original. */
   rutasMovidas: number;
-  /** Operarios por encima de los que fijó el usuario. */
-  operariosAgregados: number;
-  /** Operarios que un chute cedió a otro. */
-  operariosMovidos: number;
-  bultos: number;
-  unidades: number;
-  lineas: number;
-  cod: number;
 }
 
 export interface ClusterComparativoSimulacion {
@@ -263,14 +256,28 @@ export interface DashboardSimulacion {
   movimientos: MovimientoChuteSimulacion[];
   /** Clusters en el orden de las olas con su avance: arman el selector de vistas. */
   olas: OlaSimulacion[];
-  /** Paso de operarios entre olas seguidas con operarios asignados (solo en la vista final). */
+  /** Paso de operarios entre olas: en la vista de un cluster, solo el que llega a él. */
   flujoOperarios: FlujoOperariosSimulacion[];
+  /** Operarios del equipo y máximo por chute (null = sin tope propio). */
+  equipo: number;
+  maximoPorChute: number | null;
+  /** Operarios de cada chute en cada ola, en el orden de `olas` (solo en el resumen). */
+  dotacion: { chuteId: number; chute: string; operarios: number[] }[];
 }
 
 export interface OlaSimulacion {
   clusterId: number;
   cluster: string;
   estado: EstadoCluster;
+  rutasMovidas: number;
+  /** Cierre establecido: el límite de horas del cluster (0 si no tiene). */
+  limiteHoras: number;
+  /** Cierre conseguido con los operarios de su ola (null si le falta gente). */
+  tiempoCierre: number | null;
+  bultos: number;
+  unidades: number;
+  lineas: number;
+  cod: number;
 }
 
 /** Operarios que siguen en su chute, salen de uno o llegan a otro al pasar de una ola a la siguiente. */
