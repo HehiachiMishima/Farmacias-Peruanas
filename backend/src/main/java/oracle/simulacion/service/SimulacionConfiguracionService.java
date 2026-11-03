@@ -4,6 +4,7 @@ import jakarta.persistence.criteria.Predicate;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -27,6 +29,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
+import oracle.common.config.CacheRespuestas;
 import oracle.common.config.Transacciones;
 import oracle.common.exception.ConflictoException;
 import oracle.common.exception.RecursoNoEncontradoException;
@@ -148,6 +151,7 @@ public class SimulacionConfiguracionService {
   private final LanzamientoBalanceoRepository lanzamientoRepo;
   private final SimulacionLotesRepository lotes;
   private final Transacciones transacciones;
+  private final CacheRespuestas cache;
 
   public SimulacionConfiguracionService(
       ArchivoExcelRepository archivoRepo,
@@ -161,7 +165,8 @@ public class SimulacionConfiguracionService {
       OperarioOlaRepository operarioOlaRepo,
       LanzamientoBalanceoRepository lanzamientoRepo,
       SimulacionLotesRepository lotes,
-      Transacciones transacciones) {
+      Transacciones transacciones,
+      CacheRespuestas cache) {
     this.archivoRepo = archivoRepo;
     this.configRepo = configRepo;
     this.clusterRepo = clusterRepo;
@@ -174,12 +179,16 @@ public class SimulacionConfiguracionService {
     this.lanzamientoRepo = lanzamientoRepo;
     this.lotes = lotes;
     this.transacciones = transacciones;
+    this.cache = cache;
   }
 
   public Mono<ApiResponse<ConfiguracionSimulacionResponse>> obtener(Long archivoId) {
     return leer(
         "obtener id=" + archivoId,
-        () -> aConfiguracion(contexto(archivoId, false)),
+        () -> {
+          Contexto ctx = contexto(archivoId, false);
+          return cache.obtener(claveCache(ctx, "configuracion"), () -> aConfiguracion(ctx));
+        },
         "Configuración de simulación.");
   }
 
@@ -193,10 +202,11 @@ public class SimulacionConfiguracionService {
     int p = Math.max(pagina, 1) - 1;
     int t = Math.min(Math.max(tamano, 1), MAX_TAMANO_PAGINA);
     PageRequest pageable =
-        PageRequest.of(p, t, Sort.by("codigoRuta").ascending().and(Sort.by("id").ascending()));
+        PageRequest.of(p, t, Sort.by("codigoRuta", "tipo", "id").ascending());
     String termino = Filtros.normalizar(texto);
-    // Prefijo (no "contiene"): usa uq_rutas_archivo_ruta_tipo en lugar de recorrer
-    // todas las rutas del archivo. La colación ignora mayúsculas y tildes.
+    // El orden sigue uq_rutas_archivo_ruta_tipo (archivo, código, tipo, id): la
+    // página sale del índice sin ordenar todo el registro. La búsqueda es por
+    // prefijo (no "contiene") por la misma razón; la colación ignora mayúsculas y tildes.
     Specification<RutaProyeccion> spec =
         (root, query, cb) -> {
           List<Predicate> condiciones = new ArrayList<>();
@@ -262,7 +272,7 @@ public class SimulacionConfiguracionService {
             condiciones.add(cb.equal(root.get("clusterId"), clusterId));
           }
           if (soloCambios) {
-            condiciones.add(cb.notEqual(root.get("chuteId"), root.get("chuteOriginalId")));
+            condiciones.add(cb.isTrue(root.get("movida")));
           }
           return cb.and(condiciones.toArray(Predicate[]::new));
         };
@@ -496,7 +506,7 @@ public class SimulacionConfiguracionService {
               movimiento(
                   archivoId,
                   null,
-                  new Traslado(ruta, origen),
+                  new Traslado(ruta, origen, req.chuteId()),
                   HistorialBalanceo.MOTIVO_MANUAL,
                   actor,
                   Instant.now()));
@@ -668,11 +678,39 @@ public class SimulacionConfiguracionService {
                               lanzamiento.getFase(),
                               lanzamiento.getMensaje(),
                               lanzamiento.getCreadoEn(),
-                              lanzamiento.getCreadoPor()))
+                              lanzamiento.getCreadoPor(),
+                              lanzamiento.getRutas(),
+                              lanzamiento.getSeparaciones(),
+                              lanzamiento.getChutesOperarios()))
                   .toList();
-          List<HistorialBalanceo> logs = historialRepo.findTop500ByArchivoIdOrderByIdDesc(archivoId);
+          return new HistorialRegistroResponse(
+              lanzamientos, historialRepo.countByArchivoIdAndLanzamientoIdIsNull(archivoId));
+        },
+        "Historial de balanceo.");
+  }
+
+  /**
+   * Cambios de un lanzamiento (o, con lanzamientoId nulo, los que no tienen
+   * lanzamiento), del más reciente al más antiguo y paginados: un balanceo
+   * grande mueve miles de rutas.
+   */
+  public Mono<ApiResponse<PaginaResponse<HistorialSimulacionResponse>>> historialCambios(
+      Long archivoId, Long lanzamientoId, int pagina, int tamano) {
+    PageRequest pageable =
+        PageRequest.of(
+            Math.max(pagina, 1) - 1,
+            Math.min(Math.max(tamano, 1), MAX_TAMANO_PAGINA),
+            Sort.by("id").descending());
+    return leer(
+        "historial cambios id=" + archivoId + " lanzamiento=" + lanzamientoId,
+        () -> {
+          Contexto ctx = contexto(archivoId, false);
+          Page<HistorialBalanceo> page =
+              lanzamientoId == null
+                  ? historialRepo.findByArchivoIdAndLanzamientoIdIsNull(archivoId, pageable)
+                  : historialRepo.findByArchivoIdAndLanzamientoId(archivoId, lanzamientoId, pageable);
           Set<Long> rutaIds = new HashSet<>();
-          logs.forEach(
+          page.forEach(
               (log) -> {
                 if (log.getRutaId() != null) {
                   rutaIds.add(log.getRutaId());
@@ -682,7 +720,7 @@ public class SimulacionConfiguracionService {
               rutaRepo.findAllById(rutaIds).stream()
                   .collect(Collectors.toMap(RutaProyeccion::getId, Function.identity()));
           List<HistorialSimulacionResponse> cambios =
-              logs.stream()
+              page.getContent().stream()
                   .map(
                       (log) -> {
                         RutaProyeccion ruta =
@@ -706,9 +744,9 @@ public class SimulacionConfiguracionService {
                             log.getCreadoPor());
                       })
                   .toList();
-          return new HistorialRegistroResponse(lanzamientos, cambios);
+          return PaginaResponse.de(page, cambios);
         },
-        "Historial de balanceo.");
+        "Cambios del historial.");
   }
 
   /** Vista final (clusterId nulo) o la vista del lanzamiento de un cluster. */
@@ -720,7 +758,8 @@ public class SimulacionConfiguracionService {
           if (clusterId != null) {
             parametroCluster(ctx, clusterId);
           }
-          return calcularDashboard(ctx, clusterId);
+          return cache.obtener(
+              claveCache(ctx, "dashboard:" + clusterId), () -> calcularDashboard(ctx, clusterId));
         },
         "Dashboard de simulación.");
   }
@@ -767,9 +806,11 @@ public class SimulacionConfiguracionService {
     while ((traslado = reparto.separar(clusterId, movibles)) != null) {
       separaciones.add(traslado);
     }
+    // Cada movimiento baja la suma de cuadrados de la carga, así que el
+    // proceso termina solo; el tope es una red de seguridad.
+    int tope = Math.max(MAX_ITERACIONES, 4 * reparto.rutasDe(clusterId));
     List<Traslado> nivelaciones = new ArrayList<>();
-    while (nivelaciones.size() < MAX_ITERACIONES
-        && (traslado = reparto.nivelar(clusterId)) != null) {
+    while (nivelaciones.size() < tope && (traslado = reparto.nivelar(clusterId)) != null) {
       nivelaciones.add(traslado);
     }
 
@@ -794,7 +835,7 @@ public class SimulacionConfiguracionService {
           .append(dispersionDespues == null ? 0 : dispersionDespues)
           .append(" %.");
     }
-    if (nivelaciones.size() >= MAX_ITERACIONES) {
+    if (nivelaciones.size() >= tope) {
       mensaje.append(" Se alcanzó el máximo de movimientos por ejecución.");
     }
     if (!reparto.mezclasSinSalida().isEmpty()) {
@@ -808,9 +849,14 @@ public class SimulacionConfiguracionService {
           .append(": no hay otro chute libre de esos clusters.");
     }
 
+    // Las rutas se leyeron en solo lectura: los chutes nuevos se guardan en lote.
+    lotes.moverRutas(reparto.chutesNuevos());
     Instant momento = Instant.now();
-    Long lanzamientoId =
+    LanzamientoBalanceo lanzamiento =
         lanzar(archivoId, clusterId, FaseBalanceo.RUTAS, mensaje.toString(), actor, momento);
+    lanzamiento.setRutas(separaciones.size() + nivelaciones.size());
+    lanzamiento.setSeparaciones(separaciones.size());
+    Long lanzamientoId = lanzamiento.getId();
     List<HistorialBalanceo> logs = new ArrayList<>();
     separaciones.forEach(
         (t) ->
@@ -843,7 +889,8 @@ public class SimulacionConfiguracionService {
         parametro.getEstado(),
         movidas,
         0,
-        mensaje.toString());
+        mensaje.toString(),
+        aConfiguracion(ctx));
   }
 
   /**
@@ -851,7 +898,9 @@ public class SimulacionConfiguracionService {
    * corre sola, así que lo que se iguala es la carga de ese cluster en cada
    * chute que lo atiende (no la carga total del chute). Conoce todas las rutas
    * para saber qué clusters hay en cada chute, pero solo mueve las del cluster
-   * lanzado.
+   * lanzado (y, al separar CL1/CL2, las de su incompatible si aún no empezó).
+   * Las rutas de cada (cluster, chute) van ordenadas por bultos: elegir la
+   * ruta a mover cuesta log(n), no recorrer todas.
    */
   private static final class Reparto {
     /** La ola se da por pareja si la diferencia entre chutes es ≤ 10 % de su promedio. */
@@ -859,28 +908,41 @@ public class SimulacionConfiguracionService {
 
     /** Bultos de cada cluster por chute. */
     private final Map<Long, Map<Long, BigDecimal>> carga = new HashMap<>();
-    private final Map<Long, List<RutaProyeccion>> rutasCluster = new HashMap<>();
+    /** Rutas de cada (cluster, chute) agrupadas por bultos. */
+    private final Map<Par, TreeMap<BigDecimal, ArrayDeque<RutaProyeccion>>> rutas = new HashMap<>();
+    private final Map<Par, Integer> cuenta = new HashMap<>();
+    private final Map<Long, Integer> rutasPorCluster = new HashMap<>();
     /** Clusters con rutas en cada chute, para validar la mezcla CL1/CL2. */
     private final Map<Long, Set<Long>> clustersPorChute = new HashMap<>();
     private final Map<Long, BigDecimal> bultosChute = new HashMap<>();
     private final Set<Long> chutes = new HashSet<>();
     private final Map<Long, Integer> numerosCluster;
     private final Set<Long> mezclasSinSalida = new TreeSet<>();
+    /** Chute final de cada ruta movida, para guardarlo en lote. */
+    private final Map<Long, Long> chutesNuevos = new LinkedHashMap<>();
 
     /** Los chutes del registro, incluso vacíos: son destino válido al separar CL1/CL2. */
     Reparto(
-        List<RutaProyeccion> rutas, Set<Long> chutesRegistro, Map<Long, Integer> numerosCluster) {
+        List<RutaProyeccion> todas, Set<Long> chutesRegistro, Map<Long, Integer> numerosCluster) {
       this.numerosCluster = numerosCluster;
       chutes.addAll(chutesRegistro);
-      for (RutaProyeccion ruta : rutas) {
-        sumar(ruta.getClusterId(), ruta.getChuteId(), ruta.getTotalBultos());
-        rutasCluster.computeIfAbsent(ruta.getClusterId(), (id) -> new ArrayList<>()).add(ruta);
+      for (RutaProyeccion ruta : todas) {
+        poner(ruta, ruta.getClusterId(), ruta.getChuteId());
+        rutasPorCluster.merge(ruta.getClusterId(), 1, Integer::sum);
         chutes.add(ruta.getChuteId());
       }
     }
 
     Set<Long> mezclasSinSalida() {
       return mezclasSinSalida;
+    }
+
+    Map<Long, Long> chutesNuevos() {
+      return chutesNuevos;
+    }
+
+    int rutasDe(Long cluster) {
+      return rutasPorCluster.getOrDefault(cluster, 0);
     }
 
     /**
@@ -914,19 +976,16 @@ public class SimulacionConfiguracionService {
                         otro.equals(cluster)
                             || clusterEnConflicto(List.of(otro), cluster, numerosCluster) != null)
                 .sorted(
-                    Comparator.comparingLong((Long otro) -> rutasEn(otro, chute))
+                    Comparator.comparingInt((Long otro) -> rutasEn(otro, chute))
                         .thenComparing(Comparator.naturalOrder()))
                 .toList();
         for (Long saliente : salientes) {
           Long destino = destinoSeparacion(saliente, chute);
           if (destino != null) {
             RutaProyeccion ruta =
-                rutasCluster.get(saliente).stream()
-                    .filter((r) -> r.getChuteId().equals(chute))
-                    .max(Comparator.comparing(RutaProyeccion::getTotalBultos))
-                    .orElseThrow();
+                rutas.get(new Par(saliente, chute)).lastEntry().getValue().peekFirst();
             trasladar(ruta, saliente, chute, destino);
-            return new Traslado(ruta, chute);
+            return new Traslado(ruta, chute, destino);
           }
         }
         mezclasSinSalida.add(chute);
@@ -982,29 +1041,68 @@ public class SimulacionConfiguracionService {
         return null;
       }
       BigDecimal mitad = diferencia.divide(BigDecimal.valueOf(2), ESCALA, RoundingMode.HALF_UP);
-      Long origen = cargado;
-      RutaProyeccion mejor =
-          rutasCluster.get(cluster).stream()
-              .filter((r) -> r.getChuteId().equals(origen))
-              .filter((r) -> r.getTotalBultos().signum() > 0)
-              .filter((r) -> r.getTotalBultos().compareTo(diferencia) < 0)
-              .min(Comparator.comparing((RutaProyeccion r) -> r.getTotalBultos().subtract(mitad).abs()))
-              .orElse(null);
-      if (mejor == null) {
+      TreeMap<BigDecimal, ArrayDeque<RutaProyeccion>> candidatas =
+          rutas.get(new Par(cluster, cargado));
+      // Solo sirven rutas con 0 < bultos < diferencia; la mejor es la más cercana a la mitad.
+      Map.Entry<BigDecimal, ArrayDeque<RutaProyeccion>> abajo = candidatas.floorEntry(mitad);
+      Map.Entry<BigDecimal, ArrayDeque<RutaProyeccion>> arriba = candidatas.higherEntry(mitad);
+      if (abajo != null && abajo.getKey().signum() <= 0) {
+        abajo = null;
+      }
+      if (arriba != null && arriba.getKey().compareTo(diferencia) >= 0) {
+        arriba = null;
+      }
+      Map.Entry<BigDecimal, ArrayDeque<RutaProyeccion>> elegida =
+          abajo == null
+              ? arriba
+              : arriba == null
+                  ? abajo
+                  : mitad.subtract(abajo.getKey()).compareTo(arriba.getKey().subtract(mitad)) <= 0
+                      ? abajo
+                      : arriba;
+      if (elegida == null) {
         return null;
       }
+      RutaProyeccion mejor = elegida.getValue().peekFirst();
       trasladar(mejor, cluster, cargado, liviano);
-      return new Traslado(mejor, cargado);
+      return new Traslado(mejor, cargado, liviano);
     }
 
-    private long rutasEn(Long cluster, Long chute) {
-      return rutasCluster.get(cluster).stream().filter((r) -> r.getChuteId().equals(chute)).count();
+    private int rutasEn(Long cluster, Long chute) {
+      return cuenta.getOrDefault(new Par(cluster, chute), 0);
     }
 
     /** CL1 y CL2 no pueden quedar juntos: el chute admite al cluster si no crea esa mezcla. */
     private boolean admite(Long chute, Long cluster) {
       return !mezclaRestringida(
           clustersPorChute.getOrDefault(chute, Set.of()), cluster, numerosCluster);
+    }
+
+    private void poner(RutaProyeccion ruta, Long cluster, Long chute) {
+      Par par = new Par(cluster, chute);
+      rutas
+          .computeIfAbsent(par, (p) -> new TreeMap<>())
+          .computeIfAbsent(ruta.getTotalBultos(), (b) -> new ArrayDeque<>())
+          .addLast(ruta);
+      cuenta.merge(par, 1, Integer::sum);
+      sumar(cluster, chute, ruta.getTotalBultos());
+    }
+
+    private void quitar(RutaProyeccion ruta, Long cluster, Long chute) {
+      Par par = new Par(cluster, chute);
+      TreeMap<BigDecimal, ArrayDeque<RutaProyeccion>> porBultos = rutas.get(par);
+      ArrayDeque<RutaProyeccion> iguales = porBultos.get(ruta.getTotalBultos());
+      iguales.remove(ruta);
+      if (iguales.isEmpty()) {
+        porBultos.remove(ruta.getTotalBultos());
+      }
+      sumar(cluster, chute, ruta.getTotalBultos().negate());
+      if (cuenta.merge(par, -1, Integer::sum) == 0) {
+        cuenta.remove(par);
+        rutas.remove(par);
+        carga.get(cluster).remove(chute);
+        clustersPorChute.get(chute).remove(cluster);
+      }
     }
 
     private void sumar(Long cluster, Long chute, BigDecimal bultos) {
@@ -1014,13 +1112,10 @@ public class SimulacionConfiguracionService {
     }
 
     private void trasladar(RutaProyeccion ruta, Long cluster, Long origen, Long destino) {
-      sumar(cluster, origen, ruta.getTotalBultos().negate());
-      sumar(cluster, destino, ruta.getTotalBultos());
+      quitar(ruta, cluster, origen);
+      poner(ruta, cluster, destino);
       ruta.setChuteId(destino);
-      if (rutasEn(cluster, origen) == 0) {
-        carga.get(cluster).remove(origen);
-        clustersPorChute.get(origen).remove(cluster);
-      }
+      chutesNuevos.put(ruta.getId(), destino);
     }
   }
 
@@ -1125,8 +1220,9 @@ public class SimulacionConfiguracionService {
     }
 
     Instant momento = Instant.now();
-    Long lanzamientoId =
+    LanzamientoBalanceo lanzamiento =
         lanzar(archivoId, clusterId, FaseBalanceo.OPERARIOS, mensaje.toString(), actor, momento);
+    Long lanzamientoId = lanzamiento.getId();
     List<HistorialBalanceo> logs = new ArrayList<>();
     List<OperarioOla> nuevas = new ArrayList<>();
     for (Long chute : carga.keySet()) {
@@ -1147,6 +1243,7 @@ public class SimulacionConfiguracionService {
         logs.add(asignados(archivoId, lanzamientoId, chute, antes, despues, actor, momento));
       }
     }
+    lanzamiento.setChutesOperarios(logs.size());
     operarioOlaRepo.saveAll(nuevas);
     lotes.insertarHistorial(logs);
     parametro.setEstado(ParametroCluster.ESTADO_LISTO);
@@ -1159,7 +1256,8 @@ public class SimulacionConfiguracionService {
         parametro.getEstado(),
         0,
         total,
-        mensaje.toString());
+        mensaje.toString(),
+        aConfiguracion(ctx));
   }
 
   /** Operarios de cada chute en la ola de un cluster (vacío si la ola no los tiene). */
@@ -1342,19 +1440,18 @@ public class SimulacionConfiguracionService {
   private void reiniciarClusters(Contexto ctx, Collection<Long> clusterIds) {
     Long archivoId = ctx.archivo().getId();
     for (Long clusterId : clusterIds) {
+      // Los movimientos vienen del último al primero: el origen del más antiguo
+      // de cada ruta es donde estaba antes de trabajar el cluster. Se guarda
+      // en lote, sin cargar las rutas.
+      Map<Long, Long> chutes = new LinkedHashMap<>();
       List<HistorialBalanceo> movimientos =
           historialRepo.movimientosParaDeshacer(archivoId, clusterId);
-      Map<Long, RutaProyeccion> rutas =
-          rutaRepo
-              .findAllById(movimientos.stream().map(HistorialBalanceo::getRutaId).toList())
-              .stream()
-              .collect(Collectors.toMap(RutaProyeccion::getId, Function.identity()));
       for (HistorialBalanceo movimiento : movimientos) {
-        RutaProyeccion ruta = rutas.get(movimiento.getRutaId());
-        if (ruta != null && movimiento.getChuteOrigenId() != null) {
-          ruta.setChuteId(movimiento.getChuteOrigenId());
+        if (movimiento.getRutaId() != null && movimiento.getChuteOrigenId() != null) {
+          chutes.put(movimiento.getRutaId(), movimiento.getChuteOrigenId());
         }
       }
+      lotes.moverRutas(chutes);
       lanzamientoRepo.borrarPorCluster(archivoId, clusterId);
       historialRepo.borrarSinLanzamientoDeCluster(archivoId, clusterId);
       ctx.parametrosCluster().get(clusterId).setEstado(ParametroCluster.ESTADO_PENDIENTE);
@@ -1397,7 +1494,7 @@ public class SimulacionConfiguracionService {
   }
 
   /** Registra un lanzamiento con su resultado y devuelve su id para enlazar el historial. */
-  private Long lanzar(
+  private LanzamientoBalanceo lanzar(
       Long archivoId,
       Long clusterId,
       FaseBalanceo fase,
@@ -1411,7 +1508,7 @@ public class SimulacionConfiguracionService {
     lanzamiento.setMensaje(mensaje.length() > 1000 ? mensaje.substring(0, 1000) : mensaje);
     lanzamiento.setCreadoPor(actor);
     lanzamiento.setCreadoEn(momento);
-    return lanzamientoRepo.save(lanzamiento).getId();
+    return lanzamientoRepo.save(lanzamiento);
   }
 
   /**
@@ -1988,7 +2085,7 @@ public class SimulacionConfiguracionService {
   private record Par(Long clusterId, Long chuteId) {}
 
   /** Ruta que el balanceo cambió de chute y el chute del que salió. */
-  private record Traslado(RutaProyeccion ruta, Long origen) {}
+  private record Traslado(RutaProyeccion ruta, Long origen, Long destino) {}
 
   private record Estadistica(
       long rutas, BigDecimal bultos, BigDecimal unidades, BigDecimal lineas, long cod) {
@@ -2207,7 +2304,7 @@ public class SimulacionConfiguracionService {
                             .orElse(null)))
             .toList();
     return new ConfiguracionSimulacionResponse(
-        aArchivo(ctx.archivo(), carga),
+        SimulacionRespuestas.archivo(ctx.archivo()),
         ctx.config().getVelocidadBase(),
         operariosMaximos(ctx, operarios),
         ctx.config().getOperariosPorChute(),
@@ -2221,40 +2318,6 @@ public class SimulacionConfiguracionService {
                 .map((fila) -> new Par(fila.getClusterId(), fila.getChuteId()))
                 .toList(),
             ctx));
-  }
-
-  private ArchivoSimulacionResponse aArchivo(ArchivoExcel archivo, List<CargaRutas> carga) {
-    long rutas = 0;
-    BigDecimal bultos = BigDecimal.ZERO;
-    BigDecimal unidades = BigDecimal.ZERO;
-    BigDecimal lineas = BigDecimal.ZERO;
-    BigDecimal cod = BigDecimal.ZERO;
-    Set<Long> chutes = new HashSet<>();
-    for (CargaRutas fila : carga) {
-      rutas += fila.getRutas();
-      bultos = bultos.add(fila.getBultos());
-      unidades = unidades.add(fila.getUnidades());
-      lineas = lineas.add(fila.getLineas());
-      cod = cod.add(fila.getCod());
-      chutes.add(fila.getChuteId());
-    }
-    return new ArchivoSimulacionResponse(
-        archivo.getId(),
-        archivo.getNombreRegistro(),
-        archivo.getNombreArchivo(),
-        archivo.getEtiqueta(),
-        archivo.getColorHex(),
-        archivo.getEstado(),
-        rutas,
-        chutes.size(),
-        bultos,
-        unidades,
-        lineas,
-        cod,
-        archivo.getCreadoEn(),
-        archivo.getActualizadoEn(),
-        archivo.getCreadoPor(),
-        archivo.getActualizadoPor());
   }
 
   private static Map<Long, BigDecimal> limites(Contexto ctx) {
@@ -2353,6 +2416,16 @@ public class SimulacionConfiguracionService {
     archivoRepo.save(archivo);
   }
 
+  /**
+   * Clave de caché de una lectura del registro: incluye su última
+   * actualización, que cambia en cada escritura (tocar), así que una respuesta
+   * vieja nunca se sirve y no hace falta invalidar a mano.
+   */
+  private static String claveCache(Contexto ctx, String vista) {
+    ArchivoExcel archivo = ctx.archivo();
+    return "simulacion:" + archivo.getId() + ":" + archivo.getActualizadoEn() + ":" + vista;
+  }
+
   private <T> Mono<ApiResponse<T>> leer(String operacion, Supplier<T> trabajo, String mensaje) {
     return Mono.fromCallable(
             () ->
@@ -2389,7 +2462,7 @@ public class SimulacionConfiguracionService {
     log.setLanzamientoId(lanzamientoId);
     log.setRutaId(traslado.ruta().getId());
     log.setChuteOrigenId(traslado.origen());
-    log.setChuteDestinoId(traslado.ruta().getChuteId());
+    log.setChuteDestinoId(traslado.destino());
     return log;
   }
 

@@ -445,9 +445,8 @@
 }
 
 <app-simulacion-historial-cambios
+  [registroId]="seleccionado()"
   [abierto]="historialAbierto()"
-  [cargando]="historialCargando()"
-  [grupos]="historialAgrupado()"
   (cerrar)="historialAbierto.set(false)"
 />
 

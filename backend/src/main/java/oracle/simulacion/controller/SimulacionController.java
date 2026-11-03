@@ -20,6 +20,7 @@ import oracle.simulacion.response.BalanceoResponse;
 import oracle.simulacion.response.ConfiguracionSimulacionResponse;
 import oracle.simulacion.response.DashboardSimulacionResponse;
 import oracle.simulacion.response.HistorialRegistroResponse;
+import oracle.simulacion.response.HistorialSimulacionResponse;
 import oracle.simulacion.response.RutaSimulacionResponse;
 import oracle.simulacion.response.RutasDashboardResponse;
 import oracle.simulacion.service.SimulacionConfiguracionService;
@@ -202,6 +203,17 @@ public class SimulacionController {
   @PreAuthorize("hasAuthority('VER_CONFIGURACION_SIMULACION')")
   public Mono<ApiResponse<HistorialRegistroResponse>> historial(@PathVariable Long id) {
     return configuracionService.historial(id);
+  }
+
+  /** Cambios de un lanzamiento (sin lanzamientoId: los que no tienen), paginados. */
+  @GetMapping("/registros/{id}/historial/cambios")
+  @PreAuthorize("hasAuthority('VER_CONFIGURACION_SIMULACION')")
+  public Mono<ApiResponse<PaginaResponse<HistorialSimulacionResponse>>> historialCambios(
+      @PathVariable Long id,
+      @RequestParam(required = false) Long lanzamientoId,
+      @RequestParam(defaultValue = "1") int pagina,
+      @RequestParam(defaultValue = "25") int tamano) {
+    return configuracionService.historialCambios(id, lanzamientoId, pagina, tamano);
   }
 
   /** Sin clusterId, el resumen del registro; con él, la vista de ese cluster. */

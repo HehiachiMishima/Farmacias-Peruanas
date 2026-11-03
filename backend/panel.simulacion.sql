@@ -1,4 +1,3 @@
--- Active: 1791152181635@@127.0.0.1@3306@farmacias_peruanas
 -- ############################################################
 -- 4. Panel Simulación: registros Excel, clusters, chutes, rutas e historial
 --    (origen: panel.simulacion.sql)
@@ -33,6 +32,12 @@ CREATE TABLE IF NOT EXISTS archivos_excel (
     etiqueta VARCHAR(50) NULL COMMENT 'Etiqueta visual (Ej: URGENTE, OK).',
     color_hex VARCHAR(10) NULL COMMENT 'Color del registro (Ej: #6366f1).',
     estado ENUM('PROYECCION', 'EN_PROCESO', 'FINALIZADO') NOT NULL DEFAULT 'PROYECCION' COMMENT 'PROYECCION (ningún cluster empezado), EN_PROCESO (alguno empezado) o FINALIZADO (todos los clusters cerrados).',
+    total_rutas INT NOT NULL DEFAULT 0 COMMENT 'Totales del Excel (no cambian al balancear): la lista los lee sin sumar las rutas.',
+    total_chutes INT NOT NULL DEFAULT 0,
+    total_bultos DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    total_unidades DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    total_lineas DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
+    total_cod INT NOT NULL DEFAULT 0,
     creado_por BIGINT NOT NULL COMMENT 'ID del usuario que subió el archivo.',
     actualizado_por BIGINT NOT NULL COMMENT 'ID del usuario que modificó por última vez.',
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)),
@@ -129,6 +134,7 @@ CREATE TABLE IF NOT EXISTS rutas_proyeccion (
     total_unidades DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     total_lineas DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     conteo_cod INT NOT NULL DEFAULT 0 COMMENT 'Cuántos códigos (COD) componen esta ruta.',
+    movida TINYINT(1) AS (chute_id <> chute_original_id) STORED COMMENT 'La ruta está hoy en otro chute que al cargar el Excel.',
     CONSTRAINT fk_ruta_archivo FOREIGN KEY (archivo_id) REFERENCES archivos_excel (id) ON DELETE CASCADE,
     CONSTRAINT fk_ruta_chute FOREIGN KEY (chute_id) REFERENCES chutes (id),
     CONSTRAINT fk_ruta_chute_original FOREIGN KEY (chute_original_id) REFERENCES chutes (id),
@@ -136,7 +142,8 @@ CREATE TABLE IF NOT EXISTS rutas_proyeccion (
     CONSTRAINT uq_rutas_archivo_ruta_tipo UNIQUE (archivo_id, codigo_ruta, tipo),
     INDEX idx_rutas_archivo_chute (archivo_id, chute_id),
     INDEX idx_rutas_archivo_chute_original (archivo_id, chute_original_id),
-    INDEX idx_rutas_archivo_cluster (archivo_id, cluster_id)
+    INDEX idx_rutas_archivo_cluster (archivo_id, cluster_id),
+    INDEX idx_rutas_archivo_movida (archivo_id, movida, cluster_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Rutas del Excel, agrupadas y optimizadas para balanceo.';
 
 -- ============================================================
@@ -148,6 +155,9 @@ CREATE TABLE IF NOT EXISTS lanzamientos_balanceo (
     cluster_id BIGINT NOT NULL COMMENT 'Cluster (ola) lanzado.',
     fase ENUM('RUTAS', 'OPERARIOS') NOT NULL COMMENT 'RUTAS: paso 1; OPERARIOS: paso 2 o su recálculo.',
     mensaje VARCHAR(1000) NOT NULL COMMENT 'Resultado del lanzamiento tal como lo vio el usuario.',
+    rutas INT NOT NULL DEFAULT 0 COMMENT 'Rutas movidas (filas del historial).',
+    separaciones INT NOT NULL DEFAULT 0 COMMENT 'De esas, las movidas para separar CL1 y CL2.',
+    chutes_operarios INT NOT NULL DEFAULT 0 COMMENT 'Chutes cuya dotación cambió (paso 2).',
     creado_por BIGINT NOT NULL,
     creado_en DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)),
     CONSTRAINT fk_lanzamiento_archivo FOREIGN KEY (archivo_id) REFERENCES archivos_excel (id) ON DELETE CASCADE,

@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.Setter;
 import oracle.common.model.Auditable;
@@ -42,4 +43,25 @@ public class ArchivoExcel extends Auditable {
 
   @Column(name = "estado", length = 20, nullable = false)
   private String estado;
+
+  // Totales del Excel: el balanceo solo cambia chutes, así que no varían y la
+  // lista de registros los lee de aquí en lugar de sumar todas sus rutas.
+
+  @Column(name = "total_rutas", nullable = false)
+  private int totalRutas;
+
+  @Column(name = "total_chutes", nullable = false)
+  private int totalChutes;
+
+  @Column(name = "total_bultos", precision = 14, scale = 2, nullable = false)
+  private BigDecimal totalBultos = BigDecimal.ZERO;
+
+  @Column(name = "total_unidades", precision = 14, scale = 2, nullable = false)
+  private BigDecimal totalUnidades = BigDecimal.ZERO;
+
+  @Column(name = "total_lineas", precision = 14, scale = 2, nullable = false)
+  private BigDecimal totalLineas = BigDecimal.ZERO;
+
+  @Column(name = "total_cod", nullable = false)
+  private int totalCod;
 }

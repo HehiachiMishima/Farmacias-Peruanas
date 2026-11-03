@@ -8,6 +8,7 @@ import {
   DashboardSimulacion,
   FaseBalanceo,
   HistorialRegistroSimulacion,
+  HistorialSimulacion,
   RegistroSimulacionActualizarRequest,
   RutaSimulacion,
   RutasDashboardFiltros,
@@ -114,6 +115,19 @@ export class SimulacionApi {
 
   historial(id: number): Observable<HistorialRegistroSimulacion> {
     return this.api.get<HistorialRegistroSimulacion>(`/simulacion/registros/${id}/historial`);
+  }
+
+  /** Cambios de un lanzamiento (null: los que no tienen), del más reciente al más antiguo. */
+  historialCambios(
+    id: number,
+    lanzamientoId: number | null,
+    pagina: number,
+    tamano: number,
+  ): Observable<Pagina<HistorialSimulacion>> {
+    return this.api.get<Pagina<HistorialSimulacion>>(
+      `/simulacion/registros/${id}/historial/cambios`,
+      { lanzamientoId, pagina, tamano },
+    );
   }
 
   /** Sin clusterId, el resumen del registro; con él, la vista de ese cluster. */

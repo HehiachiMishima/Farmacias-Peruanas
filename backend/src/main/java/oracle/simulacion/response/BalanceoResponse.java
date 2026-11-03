@@ -2,7 +2,8 @@ package oracle.simulacion.response;
 
 /**
  * Resultado de lanzar un cluster: qué paso se ejecutó, en qué estado quedó
- * el cluster y qué cambió.
+ * el cluster, qué cambió y la configuración ya actualizada (la pantalla no
+ * necesita pedirla de nuevo).
  */
 public record BalanceoResponse(
     Long clusterId,
@@ -14,4 +15,5 @@ public record BalanceoResponse(
     int rutasMovidas,
     /** Operarios asignados en la ola tras el paso 2. */
     int operariosAsignados,
-    String mensaje) {}
+    String mensaje,
+    ConfiguracionSimulacionResponse configuracion) {}

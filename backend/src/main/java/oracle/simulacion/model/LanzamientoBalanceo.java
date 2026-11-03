@@ -39,4 +39,16 @@ public class LanzamientoBalanceo {
 
   @Column(name = "creado_en", nullable = false)
   private Instant creadoEn;
+
+  /** Rutas movidas (filas del historial), para listar sin contar el historial. */
+  @Column(name = "rutas", nullable = false)
+  private int rutas;
+
+  /** De esas, las movidas para separar CL1 y CL2. */
+  @Column(name = "separaciones", nullable = false)
+  private int separaciones;
+
+  /** Chutes cuya dotación cambió (paso 2). */
+  @Column(name = "chutes_operarios", nullable = false)
+  private int chutesOperarios;
 }

@@ -2,6 +2,10 @@ package oracle.simulacion.response;
 
 import java.util.List;
 
-/** Lanzamientos del registro y los cambios; cada cambio del balanceo apunta a su lanzamiento. */
+/**
+ * Lanzamientos del registro, del más reciente al más antiguo, y cuántos
+ * cambios no tienen lanzamiento (a mano o de versiones anteriores). Los
+ * cambios de cada uno se piden paginados.
+ */
 public record HistorialRegistroResponse(
-    List<LanzamientoSimulacionResponse> lanzamientos, List<HistorialSimulacionResponse> cambios) {}
+    List<LanzamientoSimulacionResponse> lanzamientos, long sinLanzamiento) {}

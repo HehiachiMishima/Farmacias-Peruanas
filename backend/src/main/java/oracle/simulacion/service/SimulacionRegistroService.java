@@ -3,6 +3,7 @@ package oracle.simulacion.service;
 import jakarta.persistence.criteria.Predicate;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -17,7 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
-import java.util.stream.Collectors;
+import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 import oracle.common.config.Transacciones;
 import oracle.common.exception.ConflictoException;
@@ -34,8 +35,6 @@ import oracle.simulacion.model.ArchivoExcel;
 import oracle.simulacion.model.ParametroChute;
 import oracle.simulacion.model.SimulacionConfig;
 import oracle.simulacion.repository.ArchivoExcelRepository;
-import oracle.simulacion.repository.ResumenRutasArchivo;
-import oracle.simulacion.repository.RutaProyeccionRepository;
 import oracle.simulacion.repository.SimulacionLotesRepository;
 import oracle.simulacion.request.RegistroActualizarRequest;
 import oracle.simulacion.response.ArchivoSimulacionResponse;
@@ -75,7 +74,6 @@ public class SimulacionRegistroService {
       "Este archivo ya se había registrado hace un momento; se devuelve el registro existente.";
 
   private final ArchivoExcelRepository archivoRepo;
-  private final RutaProyeccionRepository rutaRepo;
   private final SimulacionLotesRepository lotes;
   private final Transacciones transacciones;
   private final Semaphore cargas = new Semaphore(MAX_CARGAS_SIMULTANEAS);
@@ -85,20 +83,17 @@ public class SimulacionRegistroService {
   @Autowired
   public SimulacionRegistroService(
       ArchivoExcelRepository archivoRepo,
-      RutaProyeccionRepository rutaRepo,
       SimulacionLotesRepository lotes,
       Transacciones transacciones) {
-    this(archivoRepo, rutaRepo, lotes, transacciones, Clock.systemUTC());
+    this(archivoRepo, lotes, transacciones, Clock.systemUTC());
   }
 
   SimulacionRegistroService(
       ArchivoExcelRepository archivoRepo,
-      RutaProyeccionRepository rutaRepo,
       SimulacionLotesRepository lotes,
       Transacciones transacciones,
       Clock reloj) {
     this.archivoRepo = archivoRepo;
-    this.rutaRepo = rutaRepo;
     this.lotes = lotes;
     this.transacciones = transacciones;
     this.recientes = new CargasRecientes(reloj, VENTANA_DUPLICADOS);
@@ -361,11 +356,18 @@ public class SimulacionRegistroService {
     entidad.setEtiqueta(normalizarEtiqueta(etiqueta));
     entidad.setColorHex(color);
     entidad.setEstado(ArchivoExcel.ESTADO_PROYECCION);
+    List<SimulacionExcel.FilaRuta> rutas = analisis.rutas();
+    entidad.setTotalRutas(rutas.size());
+    entidad.setTotalChutes(
+        (int) rutas.stream().map(SimulacionExcel.FilaRuta::chute).distinct().count());
+    entidad.setTotalBultos(sumar(rutas, SimulacionExcel.FilaRuta::bultos));
+    entidad.setTotalUnidades(sumar(rutas, SimulacionExcel.FilaRuta::unidades));
+    entidad.setTotalLineas(sumar(rutas, SimulacionExcel.FilaRuta::lineas));
+    entidad.setTotalCod(rutas.stream().mapToInt(SimulacionExcel.FilaRuta::conteoCod).sum());
     Auditoria.alCrear(entidad, actor);
     ArchivoExcel guardado = archivoRepo.saveAndFlush(entidad);
     Long archivoId = guardado.getId();
 
-    List<SimulacionExcel.FilaRuta> rutas = analisis.rutas();
     Map<String, Long> clusters =
         lotes.asegurarClusters(rutas.stream().map(SimulacionExcel.FilaRuta::cluster).toList());
     Map<String, Long> chutes =
@@ -386,17 +388,13 @@ public class SimulacionRegistroService {
     return new RecursoNoEncontradoException("No existe el registro con id " + id + ".");
   }
 
-  /** Respuestas con los totales de rutas de cada registro (una consulta agregada). */
-  private List<ArchivoSimulacionResponse> aResponses(List<ArchivoExcel> archivos) {
-    if (archivos.isEmpty()) {
-      return List.of();
-    }
-    Map<Long, ResumenRutasArchivo> resumenes =
-        rutaRepo.resumenPorArchivos(archivos.stream().map(ArchivoExcel::getId).toList()).stream()
-            .collect(Collectors.toMap(ResumenRutasArchivo::getArchivoId, (fila) -> fila));
-    return archivos.stream()
-        .map((archivo) -> SimulacionRespuestas.archivo(archivo, resumenes.get(archivo.getId())))
-        .toList();
+  private static BigDecimal sumar(
+      List<SimulacionExcel.FilaRuta> rutas, Function<SimulacionExcel.FilaRuta, BigDecimal> campo) {
+    return rutas.stream().map(campo).reduce(BigDecimal.ZERO, BigDecimal::add);
+  }
+
+  private static List<ArchivoSimulacionResponse> aResponses(List<ArchivoExcel> archivos) {
+    return archivos.stream().map(SimulacionRespuestas::archivo).toList();
   }
 
   private String nombreRegistro(String nombreRegistro, String nombreArchivo) {

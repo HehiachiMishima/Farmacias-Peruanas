@@ -39,6 +39,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         // Petición de fondo: sin toasts.
       } else if (err.status === 403) {
         notificaciones.error('Acceso denegado', mensajeDeError(err));
+      } else if (err.status === 429) {
+        notificaciones.advertencia('Demasiadas solicitudes', mensajeDeError(err));
       } else if (err.status !== 0) {
         notificaciones.error('Error', mensajeDeError(err));
       } else {

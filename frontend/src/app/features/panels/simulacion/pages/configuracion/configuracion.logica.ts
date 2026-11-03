@@ -1,8 +1,4 @@
-import {
-  ConfiguracionSimulacion,
-  HistorialRegistroSimulacion,
-  HistorialSimulacion,
-} from '../../data/simulacion.model';
+import { ConfiguracionSimulacion } from '../../data/simulacion.model';
 import {
   LIMITES,
   colorCluster,
@@ -60,19 +56,6 @@ export interface ResumenCluster {
   previo: string | null;
   siguen: number;
   siguiente: string | null;
-}
-
-/** Un balanceo de un cluster (o un movimiento suelto) con sus cambios. */
-export interface GrupoHistorial {
-  clave: string;
-  titulo: string;
-  mensaje: string | null;
-  fecha: string;
-  creadoPor: number | null;
-  separaciones: number;
-  rutas: number;
-  chutesOperarios: number;
-  cambios: HistorialSimulacion[];
 }
 
 /**
@@ -197,86 +180,6 @@ export function resumirClusters(
       siguiente,
     };
   });
-}
-
-/**
- * Historial agrupado: cada balanceo de un cluster con sus rutas movidas y su
- * resultado, y cada movimiento manual aparte. Los cambios sin lanzamiento de
- * versiones anteriores se agrupan por fecha. Del más reciente al más antiguo.
- */
-export function agruparHistorial({
-  lanzamientos,
-  cambios,
-}: HistorialRegistroSimulacion): GrupoHistorial[] {
-  const grupos: GrupoHistorial[] = [];
-  const nuevoGrupo = (
-    clave: string,
-    titulo: string,
-    mensaje: string | null,
-    fecha: string,
-    creadoPor: number | null,
-  ): GrupoHistorial => {
-    const grupo = {
-      clave,
-      titulo,
-      mensaje,
-      fecha,
-      creadoPor,
-      separaciones: 0,
-      rutas: 0,
-      chutesOperarios: 0,
-      cambios: [],
-    };
-    grupos.push(grupo);
-    return grupo;
-  };
-  const porLanzamiento = new Map(
-    lanzamientos.map((lanzamiento) => [
-      lanzamiento.id,
-      nuevoGrupo(
-        `l${lanzamiento.id}`,
-        `${lanzamiento.cluster} · ${
-          lanzamiento.fase === 'RUTAS' ? 'Balanceo de rutas' : 'Asignación de operarios'
-        }`,
-        lanzamiento.mensaje,
-        lanzamiento.creadoEn,
-        lanzamiento.creadoPor,
-      ),
-    ]),
-  );
-  let anterior: GrupoHistorial | undefined;
-  for (const cambio of cambios) {
-    const manual = cambio.motivo === 'MANUAL';
-    let grupo =
-      cambio.lanzamientoId === null ? undefined : porLanzamiento.get(cambio.lanzamientoId);
-    if (!grupo) {
-      const mismoLote =
-        !manual &&
-        anterior !== undefined &&
-        anterior.fecha === cambio.creadoEn &&
-        anterior.creadoPor === cambio.creadoPor;
-      grupo = mismoLote
-        ? anterior!
-        : nuevoGrupo(
-            `c${cambio.id}`,
-            manual ? 'Movimiento manual' : 'Balanceo anterior',
-            null,
-            cambio.creadoEn,
-            cambio.creadoPor,
-          );
-      anterior = manual ? undefined : grupo;
-    }
-    grupo.cambios.push(cambio);
-    if (cambio.tipoAccion === 'MOVER_RUTA') {
-      grupo.rutas++;
-      if (cambio.motivo === 'SEPARACION') {
-        grupo.separaciones++;
-      }
-    } else if (cambio.tipoAccion === 'ASIGNAR_OPERARIOS') {
-      grupo.chutesOperarios++;
-    }
-  }
-  return grupos.sort((a, b) => Date.parse(b.fecha) - Date.parse(a.fecha));
 }
 
 // ---------------- Normalización de lo que se escribe ----------------

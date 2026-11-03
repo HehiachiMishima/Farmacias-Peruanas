@@ -84,6 +84,21 @@ public class SimulacionLotesRepository {
         });
   }
 
+  /** Chute nuevo de cada ruta movida por el balanceo (id → chute), en lotes. */
+  public void moverRutas(Map<Long, Long> chutes) {
+    if (chutes.isEmpty()) {
+      return;
+    }
+    jdbc.batchUpdate(
+        "UPDATE rutas_proyeccion SET chute_id = ? WHERE id = ?",
+        List.copyOf(chutes.entrySet()),
+        LOTE,
+        (ps, cambio) -> {
+          ps.setLong(1, cambio.getValue());
+          ps.setLong(2, cambio.getKey());
+        });
+  }
+
   /**
    * Historial del balanceo en lotes: con IDENTITY, JPA insertaría fila a fila
    * y una ejecución larga podría pasar el tiempo límite de la petición.

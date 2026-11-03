@@ -12,14 +12,13 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Observable, Subject, debounceTime, finalize, of, switchMap, tap } from 'rxjs';
+import { Observable, Subject, debounceTime, finalize, map, of, switchMap, tap } from 'rxjs';
 import { PERMISOS } from '../../../../../core/config/permisos';
 import { mensajeDeError } from '../../../../../core/errors/error.util';
 import {
   ArchivoSimulacion,
   ConfiguracionSimulacion,
   ConfiguracionSimulacionRequest,
-  HistorialRegistroSimulacion,
   RutaSimulacion,
 } from '../../data/simulacion.model';
 import { Pagina } from '../../../../../core/models';
@@ -55,7 +54,6 @@ import {
 import { SimulacionClusterCard } from './cluster-card/cluster-card';
 import {
   Paso,
-  agruparHistorial,
   normalizarEquipo,
   normalizarPorChute,
   normalizarVelocidad,
@@ -190,11 +188,7 @@ export class SimulacionConfiguracion {
     () => (this.config()?.clusters ?? []).find((cluster) => cluster.estado === 'CERRADO') ?? null,
   );
 
-  readonly historial = signal<HistorialRegistroSimulacion>({ lanzamientos: [], cambios: [] });
   readonly historialAbierto = signal(false);
-  readonly historialCargando = signal(false);
-
-  readonly historialAgrupado = computed(() => agruparHistorial(this.historial()));
 
   readonly restablecerAbierto = signal(false);
   /** Cluster cuyo restablecimiento se está confirmando. */
@@ -644,18 +638,22 @@ export class SimulacionConfiguracion {
       return;
     }
     this.trabajando.set(paso);
-    const operacion: Observable<string> = this.conCambiosGuardados(id, () =>
-      paso === 'CERRAR'
-        ? this.api.cerrar(id, cluster.id).pipe(
-            tap((config) => this.actualizarEstadoEnLista(id, config.archivo.estado)),
-            switchMap(() => of(this.mensajeCierre(cluster.nombre))),
-          )
-        : this.api
-            .balancear(id, cluster.id, paso)
-            .pipe(switchMap((resultado) => of(resultado.mensaje))),
-    );
+    // Cada paso devuelve la configuración ya actualizada: no hace falta pedirla.
+    const operacion: Observable<{ mensaje: string; config: ConfiguracionSimulacion }> =
+      this.conCambiosGuardados(id, () =>
+        paso === 'CERRAR'
+          ? this.api
+              .cerrar(id, cluster.id)
+              .pipe(map((config) => ({ mensaje: this.mensajeCierre(cluster.nombre), config })))
+          : this.api.balancear(id, cluster.id, paso).pipe(
+              map((resultado) => ({
+                mensaje: resultado.mensaje,
+                config: resultado.configuracion,
+              })),
+            ),
+      );
     operacion.pipe(finalize(() => this.trabajando.set(null))).subscribe({
-      next: (mensaje) => {
+      next: ({ mensaje, config }) => {
         this.notificaciones.exito(
           paso === 'RUTAS'
             ? `${cluster.nombre}: rutas balanceadas`
@@ -664,8 +662,10 @@ export class SimulacionConfiguracion {
               : `${cluster.nombre} cerrado`,
           mensaje,
         );
+        this.actualizarEstadoEnLista(id, config.archivo.estado);
         if (this.seleccionado() === id) {
-          this.cargarConfiguracion(id);
+          this.aplicarConfiguracion(config);
+          this.rutas.recargar();
         }
       },
     });
@@ -762,25 +762,12 @@ export class SimulacionConfiguracion {
     );
   }
 
+  /** El modal carga el historial del registro elegido al abrirse. */
   verCambios(): void {
-    const id = this.seleccionado();
-    if (!id) {
-      return;
+    if (this.seleccionado()) {
+      this.directorio.cargar();
+      this.historialAbierto.set(true);
     }
-    this.historial.set({ lanzamientos: [], cambios: [] });
-    this.directorio.cargar();
-    this.historialAbierto.set(true);
-    this.historialCargando.set(true);
-    this.api
-      .historial(id)
-      .pipe(
-        finalize(() => this.historialCargando.set(false)),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        next: (historial) => this.historial.set(historial),
-        error: () => this.historialAbierto.set(false),
-      });
   }
 
   confirmarRestablecer(): void {

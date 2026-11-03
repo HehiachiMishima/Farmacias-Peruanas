@@ -15,7 +15,7 @@ public record ArchivoSimulacionResponse(
     BigDecimal bultos,
     BigDecimal unidades,
     BigDecimal lineas,
-    BigDecimal cod,
+    int cod,
     Instant creadoEn,
     Instant actualizadoEn,
     Long creadoPor,

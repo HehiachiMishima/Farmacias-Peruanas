@@ -2,11 +2,13 @@
   [abierto]="abierto()"
   ancho="xl"
   titulo="Cambios del registro"
-  subtitulo="Cada balanceo de un cluster y cada movimiento manual, del más reciente al más antiguo."
+  subtitulo="Cada lanzamiento de un cluster, del más reciente al más antiguo. Ábrelo para ver sus cambios."
   (cerrar)="cerrar.emit()"
 >
   @if (cargando()) {
     <div class="loading"><span class="ui-spinner"></span> Cargando historial…</div>
+  } @else if (error()) {
+    <ui-empty icono="alerta" titulo="No se pudo cargar" [mensaje]="error()!" />
   } @else if (grupos().length === 0) {
     <ui-empty
       icono="info"
@@ -15,18 +17,26 @@
     />
   } @else {
     @for (grupo of grupos(); track grupo.clave) {
-      <section class="historial-grupo">
-        <header class="historial-grupo__head">
-          <div>
-            <h3 class="historial-grupo__titulo">{{ grupo.titulo }}</h3>
-            <p class="historial-grupo__meta">
-              {{ grupo.fecha | date: 'dd/MM/yyyy HH:mm' }} ·
-              {{ grupo.creadoPor | actorLabel }}
-            </p>
-            @if (grupo.mensaje) {
-              <p class="historial-grupo__mensaje">{{ grupo.mensaje }}</p>
+      @let abiertoEste = abiertoGrupo() === grupo.clave;
+      <section class="historial-grupo" [class.historial-grupo--abierto]="abiertoEste">
+        <button
+          type="button"
+          class="historial-grupo__head"
+          [attr.aria-expanded]="abiertoEste"
+          (click)="alternar(grupo)"
+        >
+          <span class="historial-grupo__textos">
+            <span class="historial-grupo__titulo">{{ grupo.titulo }}</span>
+            @if (grupo.fecha) {
+              <span class="historial-grupo__meta">
+                {{ grupo.fecha | date: 'dd/MM/yyyy HH:mm' }} ·
+                {{ grupo.creadoPor | actorLabel }}
+              </span>
             }
-          </div>
+            @if (grupo.mensaje) {
+              <span class="historial-grupo__mensaje">{{ grupo.mensaje }}</span>
+            }
+          </span>
           <ul class="historial-grupo__resumen">
             @if (grupo.rutas > 0) {
               <li>{{ formatearNumero(grupo.rutas) }} ruta(s) movida(s)</li>
@@ -38,62 +48,86 @@
               <li>{{ formatearNumero(grupo.chutesOperarios) }} chute(s) con otra dotación</li>
             }
           </ul>
-        </header>
-        @if (grupo.cambios.length > 0) {
-          <div class="ui-table-wrap">
-            <table class="ui-table">
-              <thead>
-                <tr>
-                  <th>Acción</th>
-                  <th>Ruta</th>
-                  <th>Cluster · tipo</th>
-                  <th class="num">Bultos</th>
-                  <th>Detalle</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (cambio of grupo.cambios; track cambio.id) {
-                  <tr>
-                    @if (cambio.tipoAccion === 'ASIGNAR_OPERARIOS') {
-                      <td><span class="ui-badge ui-badge--info">Operarios</span></td>
-                      <td class="u-muted">—</td>
-                      <td class="u-muted">—</td>
-                      <td class="num u-muted">—</td>
-                      <td>
-                        <strong>{{ cambio.chuteModificado }}</strong
-                        >: {{ cambio.operariosOrigen ?? 0 }} → {{ cambio.operariosDestino ?? 0 }}
-                        operario(s)
-                      </td>
-                    } @else {
-                      <td>
-                        <span
-                          class="ui-badge"
-                          [class.ui-badge--success]="cambio.motivo === 'SEPARACION'"
-                          [class.ui-badge--warning]="cambio.motivo !== 'SEPARACION'"
-                        >
-                          {{ cambio.motivo === 'SEPARACION' ? 'Separa CL1/CL2' : 'Ruta movida' }}
-                        </span>
-                      </td>
-                      <td class="u-mono">{{ cambio.ruta ?? '—' }}</td>
-                      <td>
-                        {{ cambio.cluster ?? '—' }}
-                        @if (cambio.tipo) {
-                          · {{ cambio.tipo }}
-                        }
-                      </td>
-                      <td class="num">
-                        {{ cambio.bultos === null ? '—' : formatearNumero(cambio.bultos, 2) }}
-                      </td>
-                      <td>
-                        De <strong>{{ cambio.chuteOrigen }}</strong> a
-                        <strong>{{ cambio.chuteDestino }}</strong>
-                      </td>
-                    }
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
+          <ui-icon class="historial-grupo__flecha" name="flecha" [size]="16" />
+        </button>
+
+        @if (abiertoEste) {
+          @if (cambios(); as pagina) {
+            <div
+              class="historial-grupo__cambios"
+              [class.historial-grupo__cambios--cargando]="cargandoCambios()"
+            >
+              @if (pagina.contenido.length === 0) {
+                <p class="u-muted">Este lanzamiento no cambió nada.</p>
+              } @else {
+                <div class="ui-table-wrap">
+                  <table class="ui-table">
+                    <thead>
+                      <tr>
+                        <th>Acción</th>
+                        <th>Ruta</th>
+                        <th>Cluster · tipo</th>
+                        <th class="num">Bultos</th>
+                        <th>Detalle</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (cambio of pagina.contenido; track cambio.id) {
+                        <tr>
+                          @if (cambio.tipoAccion === 'ASIGNAR_OPERARIOS') {
+                            <td><span class="ui-badge ui-badge--info">Operarios</span></td>
+                            <td class="u-muted">—</td>
+                            <td class="u-muted">—</td>
+                            <td class="num u-muted">—</td>
+                            <td>
+                              <strong>{{ cambio.chuteModificado }}</strong
+                              >: {{ cambio.operariosOrigen ?? 0 }} →
+                              {{ cambio.operariosDestino ?? 0 }} operario(s)
+                            </td>
+                          } @else {
+                            <td>
+                              <span
+                                class="ui-badge"
+                                [class.ui-badge--success]="cambio.motivo === 'SEPARACION'"
+                                [class.ui-badge--warning]="cambio.motivo !== 'SEPARACION'"
+                              >
+                                {{
+                                  cambio.motivo === 'SEPARACION' ? 'Separa CL1/CL2' : 'Ruta movida'
+                                }}
+                              </span>
+                            </td>
+                            <td class="u-mono">{{ cambio.ruta ?? '—' }}</td>
+                            <td>
+                              {{ cambio.cluster ?? '—' }}
+                              @if (cambio.tipo) {
+                                · {{ cambio.tipo }}
+                              }
+                            </td>
+                            <td class="num">
+                              {{ cambio.bultos === null ? '—' : formatearNumero(cambio.bultos, 2) }}
+                            </td>
+                            <td>
+                              De <strong>{{ cambio.chuteOrigen }}</strong> a
+                              <strong>{{ cambio.chuteDestino }}</strong>
+                            </td>
+                          }
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+                <ui-paginador
+                  [pagina]="pagina.pagina"
+                  [total]="pagina.total"
+                  [porPagina]="porPagina()"
+                  (paginaCambia)="cambiarPagina(grupo, $event)"
+                  (porPaginaCambia)="cambiarPorPagina(grupo, $event)"
+                />
+              }
+            </div>
+          } @else {
+            <div class="loading"><span class="ui-spinner"></span> Cargando cambios…</div>
+          }
         }
       </section>
     }

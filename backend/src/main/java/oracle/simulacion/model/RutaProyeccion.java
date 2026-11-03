@@ -33,6 +33,13 @@ public class RutaProyeccion {
   @Column(name = "chute_original_id", nullable = false)
   private Long chuteOriginalId;
 
+  /**
+   * Columna generada en MySQL (chute_id <> chute_original_id) e indexada: las
+   * consultas de rutas movidas no recorren todo el registro. Solo lectura.
+   */
+  @Column(name = "movida", insertable = false, updatable = false)
+  private boolean movida;
+
   @Column(name = "cluster_id", nullable = false)
   private Long clusterId;
 

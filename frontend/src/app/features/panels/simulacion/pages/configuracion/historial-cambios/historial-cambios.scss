@@ -1,38 +1,60 @@
-/* Historial: un bloque por ejecución del balanceo o movimiento manual. */
+/* Historial: un bloque desplegable por lanzamiento; sus cambios, paginados. */
 .historial-grupo {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+
   & + & {
-    margin-top: var(--space-5);
-    padding-top: var(--space-5);
-    border-top: 1px solid var(--border);
+    margin-top: var(--space-3);
   }
 
   &__head {
     display: flex;
     flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: space-between;
+    align-items: center;
     gap: var(--space-2) var(--space-4);
-    margin-bottom: var(--space-3);
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+    color: inherit;
+    background: var(--surface);
+    border: 0;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+
+    &:hover {
+      background: var(--surface-2);
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: inset var(--ring);
+    }
+  }
+
+  &__textos {
+    display: flex;
+    flex: 1 1 260px;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
   }
 
   &__titulo {
-    margin: 0;
     font-size: var(--fs-base);
     font-weight: 800;
     color: var(--text);
   }
 
+  &__meta {
+    font-size: var(--fs-xs);
+    color: var(--text-3);
+  }
+
   &__mensaje {
-    margin: var(--space-1) 0 0;
     font-size: var(--fs-xs);
     line-height: 1.45;
     color: var(--text-2);
-  }
-
-  &__meta {
-    margin: 2px 0 0;
-    font-size: var(--fs-xs);
-    color: var(--text-3);
   }
 
   &__resumen {
@@ -51,6 +73,27 @@
       color: var(--text-2);
       background: var(--surface-2);
       border: 1px solid var(--border);
+    }
+  }
+
+  &__flecha {
+    flex: none;
+    color: var(--text-3);
+    transform: rotate(90deg);
+    transition: transform var(--transition-fast);
+  }
+
+  &--abierto &__flecha {
+    transform: rotate(-90deg);
+  }
+
+  &__cambios {
+    padding: var(--space-3) var(--space-4) var(--space-4);
+    border-top: 1px solid var(--border);
+    transition: opacity var(--transition-fast);
+
+    &--cargando {
+      opacity: 0.55;
     }
   }
 }

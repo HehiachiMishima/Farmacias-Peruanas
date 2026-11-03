@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
@@ -36,7 +35,6 @@ import oracle.common.exception.ConflictoException;
 import oracle.common.response.ApiResponse;
 import oracle.simulacion.model.ArchivoExcel;
 import oracle.simulacion.repository.ArchivoExcelRepository;
-import oracle.simulacion.repository.RutaProyeccionRepository;
 import oracle.simulacion.repository.SimulacionLotesRepository;
 import oracle.simulacion.response.ArchivoSimulacionResponse;
 import oracle.simulacion.service.SimulacionExcel.ArchivoInvalidoException;
@@ -61,7 +59,6 @@ class SimulacionRegistroServiceTest {
   @SuppressWarnings("unchecked")
   void preparar() {
     archivoRepo = mock(ArchivoExcelRepository.class);
-    RutaProyeccionRepository rutaRepo = mock(RutaProyeccionRepository.class);
     lotes = mock(SimulacionLotesRepository.class);
     Transacciones transacciones = mock(Transacciones.class);
     when(transacciones.ejecutar(any())).thenAnswer((i) -> ((Supplier<Object>) i.getArgument(0)).get());
@@ -76,11 +73,10 @@ class SimulacionRegistroServiceTest {
             });
     when(archivoRepo.findById(anyLong()))
         .thenAnswer((i) -> Optional.ofNullable(guardados.get(i.<Long>getArgument(0))));
-    when(rutaRepo.resumenPorArchivos(anyCollection())).thenReturn(List.of());
     when(lotes.asegurarClusters(anyList())).thenReturn(Map.of("CL1", 1L));
     when(lotes.asegurarChutes(anyList())).thenReturn(Map.of("CHUTE 1", 2L));
     reloj = new RelojMovil();
-    servicio = new SimulacionRegistroService(archivoRepo, rutaRepo, lotes, transacciones, reloj);
+    servicio = new SimulacionRegistroService(archivoRepo, lotes, transacciones, reloj);
   }
 
   @Test

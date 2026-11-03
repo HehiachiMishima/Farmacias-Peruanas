@@ -6,20 +6,25 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+import oracle.common.config.CacheRespuestas;
 import oracle.common.config.Transacciones;
 import oracle.common.exception.ConflictoException;
 import oracle.common.exception.SolicitudInvalidaException;
+import oracle.common.response.PaginaResponse;
 import oracle.simulacion.model.ArchivoExcel;
 import oracle.simulacion.model.Chute;
 import oracle.simulacion.model.Cluster;
@@ -58,6 +63,8 @@ import oracle.simulacion.response.BalanceoResponse;
 import oracle.simulacion.response.ChuteComparativoResponse;
 import oracle.simulacion.response.DashboardSimulacionResponse;
 import oracle.simulacion.response.FlujoOperariosResponse;
+import oracle.simulacion.response.HistorialRegistroResponse;
+import oracle.simulacion.response.HistorialSimulacionResponse;
 import oracle.simulacion.response.OlaSimulacionResponse;
 import oracle.simulacion.response.RutasDashboardResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -115,7 +122,8 @@ class SimulacionBalanceoTest {
             operarioOlaRepo,
             lanzamientoRepo,
             lotes,
-            transacciones);
+            transacciones,
+            new CacheRespuestas(false, 1, 1));
     lenient()
         .when(transacciones.ejecutar(any()))
         .thenAnswer(invocacion -> ((Supplier<?>) invocacion.getArgument(0)).get());
@@ -169,6 +177,44 @@ class SimulacionBalanceoTest {
     verify(lotes).insertarHistorial(logs.capture());
     assertEquals(77L, logs.getValue().get(0).getLanzamientoId());
     assertEquals(HistorialBalanceo.MOTIVO_SEPARACION, logs.getValue().get(0).getMotivo());
+    assertEquals(2L, logs.getValue().get(0).getChuteDestinoId());
+    // El lanzamiento guarda sus totales y la ruta movida se guarda en lote.
+    assertEquals(1, lanzamiento.getValue().getRutas());
+    assertEquals(1, lanzamiento.getValue().getSeparaciones());
+    verify(lotes).moverRutas(Map.of(3L, 2L));
+    // El paso devuelve la configuración ya actualizada.
+    assertEquals(2, resultado.configuracion().clusters().size());
+  }
+
+  @Test
+  void unClusterGrandeLlegaALaMetaSinCortarse() {
+    // 3000 rutas de CL3: 2900 en CHUTE 1 y 100 en CHUTE 2. Emparejarlas exige unas 1400
+    // movidas, más que el tope fijo de antes (1000): ahora llega a ≤ 10 %.
+    ParametroCluster cl3 = limite(CL3, "100");
+    prepararRegistro(
+        archivo(),
+        configuracion("100", null),
+        List.of(cl3),
+        List.of(operarios(1L, 0), operarios(2L, 0)),
+        List.of(),
+        List.of(cluster(CL3, "CL3")),
+        List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
+    List<RutaProyeccion> rutas = new ArrayList<>();
+    for (long id = 1; id <= 3000; id++) {
+      rutas.add(ruta(id, CL3, id <= 2900 ? 1L : 2L, "R" + id, String.valueOf(5 + id % 7)));
+    }
+    when(rutaRepo.findByArchivoIdOrderByIdAsc(10L)).thenReturn(rutas);
+
+    BalanceoResponse resultado = lanzar(CL3, FaseBalanceo.RUTAS);
+
+    Map<Long, Integer> bultos = new HashMap<>();
+    rutas.forEach(
+        (r) -> bultos.merge(r.getChuteId(), r.getTotalBultos().intValue(), Integer::sum));
+    int diferencia = Math.abs(bultos.get(1L) - bultos.get(2L));
+    double promedio = (bultos.get(1L) + bultos.get(2L)) / 2.0;
+    assertTrue(diferencia <= promedio * 0.10, bultos + " · " + resultado.mensaje());
+    assertFalse(resultado.mensaje().contains("máximo de movimientos"), resultado.mensaje());
+    verify(lotes).moverRutas(anyMap());
   }
 
   @Test
@@ -665,19 +711,21 @@ class SimulacionBalanceoTest {
         List.of(cluster(CL1, "CL1"), cluster(CL3, "CL3")),
         List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
     lenient().when(rutaRepo.cargaPorArchivo(10L)).thenReturn(List.of());
-    // Su balanceo llevó la ruta de CHUTE 2 a CHUTE 1: restablecer la devuelve.
-    RutaProyeccion ruta = ruta(5L, CL3, 2L, "3030", "10");
-    ruta.setChuteId(1L);
+    // Su balanceo llevó la ruta de CHUTE 2 a CHUTE 1 y luego a CHUTE 3: restablecer la
+    // devuelve a CHUTE 2 (el origen de su movimiento más antiguo).
+    HistorialBalanceo segunda = new HistorialBalanceo();
+    segunda.setRutaId(5L);
+    segunda.setChuteOrigenId(1L);
+    segunda.setChuteDestinoId(3L);
     HistorialBalanceo movida = new HistorialBalanceo();
     movida.setRutaId(5L);
     movida.setChuteOrigenId(2L);
     movida.setChuteDestinoId(1L);
-    when(historialRepo.movimientosParaDeshacer(10L, CL3)).thenReturn(List.of(movida));
-    when(rutaRepo.findAllById(List.of(5L))).thenReturn(List.of(ruta));
+    when(historialRepo.movimientosParaDeshacer(10L, CL3)).thenReturn(List.of(segunda, movida));
 
     servicio.restablecerCluster(10L, CL3).block();
 
-    assertEquals(2L, ruta.getChuteId());
+    verify(lotes).moverRutas(Map.of(5L, 2L));
     verify(rutaRepo, never()).restaurarChutes(10L);
     verify(lanzamientoRepo).borrarPorCluster(10L, CL3);
     verify(historialRepo).borrarSinLanzamientoDeCluster(10L, CL3);
@@ -1123,6 +1171,46 @@ class SimulacionBalanceoTest {
     assertEquals(0, BigDecimal.ONE.compareTo(ola.tiempoCierre()));
     assertEquals(0, new BigDecimal("800").compareTo(ola.bultos()));
     assertEquals(1, ola.rutasMovidas());
+  }
+
+  @Test
+  void elHistorialListaLanzamientosYPaginaSusCambios() {
+    prepararLectura(
+        archivo(),
+        List.of(limite(CL1, "2", ParametroCluster.ESTADO_RUTAS)),
+        List.of(operarios(1L, 0), operarios(2L, 0)),
+        List.of(),
+        List.of(cluster(CL1, "CL1")),
+        List.of(chute(1L, "CHUTE 1"), chute(2L, "CHUTE 2")));
+    LanzamientoBalanceo lanzado = new LanzamientoBalanceo();
+    lanzado.setId(77L);
+    lanzado.setClusterId(CL1);
+    lanzado.setFase("RUTAS");
+    lanzado.setMensaje("CL1: 1200 ruta(s) movida(s).");
+    lanzado.setRutas(1200);
+    when(lanzamientoRepo.findTop200ByArchivoIdOrderByIdDesc(10L)).thenReturn(List.of(lanzado));
+    when(historialRepo.countByArchivoIdAndLanzamientoIdIsNull(10L)).thenReturn(3L);
+    HistorialBalanceo log = new HistorialBalanceo();
+    log.setId(900L);
+    log.setLanzamientoId(77L);
+    log.setTipoAccion(HistorialBalanceo.ACCION_MOVER_RUTA);
+    log.setRutaId(5L);
+    log.setChuteOrigenId(1L);
+    log.setChuteDestinoId(2L);
+    when(historialRepo.findByArchivoIdAndLanzamientoId(eq(10L), eq(77L), any()))
+        .thenReturn(new PageImpl<>(List.of(log), PageRequest.of(1, 25), 1200));
+    when(rutaRepo.findAllById(any())).thenReturn(List.of(ruta(5L, CL1, 2L, "3050", "40")));
+
+    HistorialRegistroResponse historial = servicio.historial(10L).block().datos();
+    PaginaResponse<HistorialSimulacionResponse> cambios =
+        servicio.historialCambios(10L, 77L, 2, 25).block().datos();
+
+    assertEquals(1200, historial.lanzamientos().get(0).rutas());
+    assertEquals(3L, historial.sinLanzamiento());
+    assertEquals(1200, cambios.total());
+    assertEquals(2, cambios.pagina());
+    assertEquals("3050", cambios.contenido().get(0).ruta());
+    assertEquals("CHUTE 2", cambios.contenido().get(0).chuteDestino());
   }
 
   // ---------------- Apoyo ----------------

@@ -1,19 +1,25 @@
 package oracle.simulacion.repository;
 
-import java.util.Collection;
+import jakarta.persistence.QueryHint;
 import java.util.List;
 import java.util.Optional;
 import oracle.simulacion.model.RutaProyeccion;
+import org.hibernate.jpa.HibernateHints;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 public interface RutaProyeccionRepository
     extends JpaRepository<RutaProyeccion, Long>, JpaSpecificationExecutor<RutaProyeccion> {
 
-  /** Todas las rutas del archivo: solo para el balanceo, que necesita moverlas una a una. */
+  /**
+   * Todas las rutas del archivo para el balanceo, en solo lectura: Hibernate no
+   * guarda copias para detectar cambios; los chutes nuevos se guardan en lote.
+   */
+  @QueryHints(@QueryHint(name = HibernateHints.HINT_READ_ONLY, value = "true"))
   List<RutaProyeccion> findByArchivoIdOrderByIdAsc(Long archivoId);
 
   Optional<RutaProyeccion> findByIdAndArchivoId(Long id, Long archivoId);
@@ -27,20 +33,6 @@ public interface RutaProyeccionRepository
       """)
   List<Long> clustersEnChute(
       @Param("archivoId") Long archivoId, @Param("chuteId") Long chuteId);
-
-  @Query("""
-      SELECT r.archivoId AS archivoId,
-             COUNT(r) AS rutas,
-             COUNT(DISTINCT r.chuteId) AS chutes,
-             COALESCE(SUM(r.totalBultos), 0) AS bultos,
-             COALESCE(SUM(r.totalUnidades), 0) AS unidades,
-             COALESCE(SUM(r.totalLineas), 0) AS lineas,
-             COALESCE(SUM(r.conteoCod), 0) AS cod
-        FROM RutaProyeccion r
-       WHERE r.archivoId IN :ids
-       GROUP BY r.archivoId
-      """)
-  List<ResumenRutasArchivo> resumenPorArchivos(@Param("ids") Collection<Long> ids);
 
   /**
    * Carga por (cluster, chute): la configuración y el dashboard trabajan con
@@ -89,7 +81,7 @@ public interface RutaProyeccionRepository
              COUNT(r) AS rutas
         FROM RutaProyeccion r
        WHERE r.archivoId = :archivoId
-         AND r.chuteId <> r.chuteOriginalId
+         AND r.movida = true
          AND (:clusterId IS NULL OR r.clusterId = :clusterId)
        GROUP BY r.chuteOriginalId, r.chuteId
       """)
@@ -102,7 +94,7 @@ public interface RutaProyeccionRepository
              COUNT(r) AS rutas
         FROM RutaProyeccion r
        WHERE r.archivoId = :archivoId
-         AND r.chuteId <> r.chuteOriginalId
+         AND r.movida = true
        GROUP BY r.clusterId
       """)
   List<RutasMovidasCluster> rutasMovidasPorCluster(@Param("archivoId") Long archivoId);
@@ -113,7 +105,7 @@ public interface RutaProyeccionRepository
       UPDATE RutaProyeccion r
          SET r.chuteId = r.chuteOriginalId
        WHERE r.archivoId = :archivoId
-         AND r.chuteId <> r.chuteOriginalId
+         AND r.movida = true
       """)
   int restaurarChutes(@Param("archivoId") Long archivoId);
 
@@ -123,8 +115,7 @@ public interface RutaProyeccionRepository
       SELECT COUNT(*) AS rutas,
              COALESCE(SUM(CASE WHEN tipo = 'B2C' THEN 1 ELSE 0 END), 0) AS rutasB2c,
              COALESCE(SUM(CASE WHEN tipo = 'B2B' THEN 1 ELSE 0 END), 0) AS rutasB2b,
-             COALESCE(SUM(CASE WHEN chute_id <> chute_original_id THEN 1 ELSE 0 END), 0)
-                 AS cambios,
+             COALESCE(SUM(movida), 0) AS cambios,
              COALESCE(SUM(total_bultos), 0) AS bultos,
              COALESCE(SUM(total_unidades), 0) AS unidades,
              COALESCE(SUM(total_lineas), 0) AS lineas,
@@ -134,7 +125,7 @@ public interface RutaProyeccionRepository
          AND (:texto IS NULL OR codigo_ruta LIKE :texto)
          AND (:tipo IS NULL OR tipo = :tipo)
          AND (:clusterId IS NULL OR cluster_id = :clusterId)
-         AND (:soloCambios = FALSE OR chute_id <> chute_original_id)
+         AND (:soloCambios = FALSE OR movida = 1)
       """;
 
   /** Rutas que los chutes tenían al cargar el Excel (usa idx_rutas_archivo_chute_original). */

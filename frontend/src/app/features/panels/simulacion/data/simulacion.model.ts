@@ -155,12 +155,17 @@ export interface LanzamientoSimulacion {
   mensaje: string;
   creadoEn: string;
   creadoPor: number | null;
+  /** Rutas movidas, de ellas las que separaron CL1/CL2, y chutes con otra dotación. */
+  rutas: number;
+  separaciones: number;
+  chutesOperarios: number;
 }
 
 export interface HistorialRegistroSimulacion {
-  /** Del más reciente al más antiguo. */
+  /** Del más reciente al más antiguo; sus cambios se piden paginados. */
   lanzamientos: LanzamientoSimulacion[];
-  cambios: HistorialSimulacion[];
+  /** Cambios sin lanzamiento (a mano o de versiones anteriores). */
+  sinLanzamiento: number;
 }
 
 /** RUTAS: reparte las rutas de la ola de un cluster; OPERARIOS: asigna los operarios de su ola. */
@@ -176,6 +181,8 @@ export interface BalanceoSimulacion {
   /** Operarios asignados en la ola tras el paso 2. */
   operariosAsignados: number;
   mensaje: string;
+  /** Configuración ya actualizada: no hace falta pedirla de nuevo. */
+  configuracion: ConfiguracionSimulacion;
 }
 
 export interface SimulacionKpis {
