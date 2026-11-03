@@ -244,129 +244,7 @@
 
   @if (olaActual()) {
     <div class="dash-grid" [class.dash-grid--cargando]="cargando()">
-      <article class="dash-card" [class.dash-card--cargando]="cargando()">
-        <header class="dash-card__head">
-          <div class="dash-card__titulos">
-            <h2 class="dash-card__titulo">
-              <ui-icon name="paquete" [size]="18" /> Carga por chute: antes vs. después
-            </h2>
-            <p class="dash-card__sub">
-              @if (olaActual(); as ola) {
-                Cómo cambió la carga de {{ ola.cluster }} en cada chute al mover sus rutas.
-              } @else {
-                Cómo cambió la carga de cada chute al mover rutas.
-              }
-              Elige la métrica y pulsa un chute para ver sus rutas antes y después.
-            </p>
-          </div>
-          <div class="segmento" role="tablist" aria-label="Métrica de carga">
-            @for (m of metricas; track m.id) {
-              <button
-                type="button"
-                role="tab"
-                class="segmento__opcion"
-                [class.segmento__opcion--activa]="metrica() === m.id"
-                [attr.aria-selected]="metrica() === m.id"
-                (click)="metrica.set(m.id)"
-              >
-                {{ m.nombre }}
-              </button>
-            }
-          </div>
-        </header>
-        <div class="dash-card__body">
-          @if (gruposChute().length > 0) {
-            <ui-comparativo
-              [datos]="gruposChute()"
-              [formato]="formatoCarga"
-              etiquetaAntes="Antes del balanceo"
-              etiquetaDespues="Después del balanceo"
-              color="var(--accent)"
-              [altura]="320"
-            />
-          } @else {
-            <div class="dash-card__vacio">Sin chutes para comparar.</div>
-          }
-        </div>
-
-        <div class="dash-tabla-wrap cuadro dash-tabla-wrap--scroll">
-          <table class="dash-tabla cuadro__tabla">
-            <thead>
-              <tr>
-                <th rowspan="2">Chute</th>
-                @for (m of metricas; track m.id) {
-                  <th
-                    colspan="2"
-                    class="cuadro__grupo"
-                    [class.cuadro__grupo--activo]="metrica() === m.id"
-                  >
-                    {{ m.nombre }}
-                  </th>
-                }
-              </tr>
-              <tr>
-                @for (m of metricas; track m.id) {
-                  <th class="num" [class.cuadro__col--activa]="metrica() === m.id">Antes</th>
-                  <th class="num" [class.cuadro__col--activa]="metrica() === m.id">Después</th>
-                }
-              </tr>
-            </thead>
-            <tbody>
-              @for (chute of chutesVisibles(); track chute.chute) {
-                <tr>
-                  <td class="fuerte">
-                    <button
-                      type="button"
-                      class="cuadro__chute"
-                      [attr.title]="tituloDetalleChute(chute)"
-                      [attr.aria-label]="tituloDetalleChute(chute)"
-                      (click)="abrirDetalle(chute)"
-                    >
-                      {{ chute.chute }}
-                    </button>
-                  </td>
-                  @for (m of metricas; track m.id) {
-                    <td class="num u-muted" [class.cuadro__col--activa]="metrica() === m.id">
-                      {{ formatearNumero(m.antes(chute), m.decimales) }}
-                    </td>
-                    <td class="num" [class.cuadro__col--activa]="metrica() === m.id">
-                      <span class="fuerte">{{
-                        formatearNumero(m.despues(chute), m.decimales)
-                      }}</span>
-                      <span
-                        class="cuadro__delta"
-                        [class]="claseVariacion(m.antes(chute), m.despues(chute), false)"
-                      >
-                        {{ variacion(m.antes(chute), m.despues(chute)) }}
-                      </span>
-                    </td>
-                  }
-                </tr>
-              }
-            </tbody>
-            <tfoot>
-              <tr>
-                <td class="fuerte">Total</td>
-                @for (total of totalesChute(); track $index) {
-                  <td class="num">
-                    {{ formatearNumero(total.antes, metricas[$index].decimales) }}
-                  </td>
-                  <td class="num fuerte">
-                    {{ formatearNumero(total.despues, metricas[$index].decimales) }}
-                  </td>
-                }
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        @if (vista() === null && filtroClusters().length > 0) {
-          <p class="filtro-nota cuadro__nota">
-            <ui-icon name="info" [size]="14" />
-            Con filtro de cluster se listan los chutes que lo atienden, con toda su carga (también
-            la de otros clusters en ese chute).
-          </p>
-        }
-      </article>
+      <ng-container [ngTemplateOutlet]="cargaPorChute" />
     </div>
   }
 
@@ -597,6 +475,8 @@
         </div>
       </article>
 
+      <ng-container [ngTemplateOutlet]="cargaPorChute" />
+
       <article class="dash-card" [class.dash-card--cargando]="cargando()">
         <header class="dash-card__head">
           <div class="dash-card__titulos">
@@ -687,3 +567,137 @@
     }
   </ui-modal>
 }
+
+<!-- Carga por chute antes vs. después: la usan la vista de cada cluster y el resumen. -->
+<ng-template #cargaPorChute>
+  <article class="dash-card" [class.dash-card--cargando]="cargando()">
+    <header class="dash-card__head">
+      <div class="dash-card__titulos">
+        <h2 class="dash-card__titulo">
+          <ui-icon name="paquete" [size]="18" /> Carga por chute: antes vs. después
+        </h2>
+        <p class="dash-card__sub">
+          @if (olaActual(); as ola) {
+            Cómo cambió la carga de {{ ola.cluster }} en cada chute al mover sus rutas.
+          } @else {
+            Todos los chutes con la carga de todos los clusters: cómo cambió al mover rutas.
+          }
+          Elige la métrica y pulsa un chute para ver sus rutas antes y después.
+        </p>
+      </div>
+      <div class="segmento" role="tablist" aria-label="Métrica de carga">
+        @for (m of metricas; track m.id) {
+          <button
+            type="button"
+            role="tab"
+            class="segmento__opcion"
+            [class.segmento__opcion--activa]="metrica() === m.id"
+            [attr.aria-selected]="metrica() === m.id"
+            (click)="metrica.set(m.id)"
+          >
+            {{ m.nombre }}
+          </button>
+        }
+      </div>
+    </header>
+    <div class="dash-card__body">
+      @if (gruposChute().length > 0) {
+        <ui-comparativo
+          [datos]="gruposChute()"
+          [formato]="formatoCarga"
+          etiquetaAntes="Antes del balanceo"
+          etiquetaDespues="Después del balanceo"
+          color="var(--accent)"
+          [altura]="320"
+        />
+      } @else {
+        <div class="dash-card__vacio">Sin chutes para comparar.</div>
+      }
+    </div>
+
+    <div class="dash-tabla-wrap cuadro dash-tabla-wrap--scroll">
+      <table class="dash-tabla cuadro__tabla">
+        <thead>
+          <tr>
+            <th rowspan="2">Chute</th>
+            @if (vista() === null) {
+              <th rowspan="2">Clusters</th>
+            }
+            @for (m of metricas; track m.id) {
+              <th
+                colspan="2"
+                class="cuadro__grupo"
+                [class.cuadro__grupo--activo]="metrica() === m.id"
+              >
+                {{ m.nombre }}
+              </th>
+            }
+          </tr>
+          <tr>
+            @for (m of metricas; track m.id) {
+              <th class="num" [class.cuadro__col--activa]="metrica() === m.id">Antes</th>
+              <th class="num" [class.cuadro__col--activa]="metrica() === m.id">Después</th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (chute of chutesVisibles(); track chute.chute) {
+            <tr>
+              <td class="fuerte">
+                <button
+                  type="button"
+                  class="cuadro__chute"
+                  [attr.title]="tituloDetalleChute(chute)"
+                  [attr.aria-label]="tituloDetalleChute(chute)"
+                  (click)="abrirDetalle(chute)"
+                >
+                  {{ chute.chute }}
+                </button>
+              </td>
+              @if (vista() === null) {
+                <td class="cuadro__clusters">{{ clustersDeChute(chute) }}</td>
+              }
+              @for (m of metricas; track m.id) {
+                <td class="num u-muted" [class.cuadro__col--activa]="metrica() === m.id">
+                  {{ formatearNumero(m.antes(chute), m.decimales) }}
+                </td>
+                <td class="num" [class.cuadro__col--activa]="metrica() === m.id">
+                  <span class="fuerte">{{ formatearNumero(m.despues(chute), m.decimales) }}</span>
+                  <span
+                    class="cuadro__delta"
+                    [class]="claseVariacion(m.antes(chute), m.despues(chute), false)"
+                  >
+                    {{ variacion(m.antes(chute), m.despues(chute)) }}
+                  </span>
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+        <tfoot>
+          <tr>
+            <td class="fuerte">Total</td>
+            @if (vista() === null) {
+              <td class="u-muted">{{ formatearNumero(chutesVisibles().length) }} chutes</td>
+            }
+            @for (total of totalesChute(); track $index) {
+              <td class="num">
+                {{ formatearNumero(total.antes, metricas[$index].decimales) }}
+              </td>
+              <td class="num fuerte">
+                {{ formatearNumero(total.despues, metricas[$index].decimales) }}
+              </td>
+            }
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    @if (vista() === null && filtroClusters().length > 0) {
+      <p class="filtro-nota cuadro__nota">
+        <ui-icon name="info" [size]="14" />
+        Con filtro de cluster se listan los chutes que lo atienden, con toda su carga (también la de
+        otros clusters en ese chute).
+      </p>
+    }
+  </article>
+</ng-template>

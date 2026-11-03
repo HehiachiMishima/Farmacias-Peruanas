@@ -184,10 +184,7 @@ public class SimulacionConfiguracionService {
   public Mono<ApiResponse<ConfiguracionSimulacionResponse>> obtener(Long archivoId) {
     return leer(
         "obtener id=" + archivoId,
-        () -> {
-          Contexto ctx = contexto(archivoId, false);
-          return cache.obtener(claveCache(ctx, "configuracion"), () -> aConfiguracion(ctx));
-        },
+        () -> cacheado(archivoId, "configuracion", this::aConfiguracion),
         "Configuración de simulación.");
   }
 
@@ -752,14 +749,16 @@ public class SimulacionConfiguracionService {
   public Mono<ApiResponse<DashboardSimulacionResponse>> dashboard(Long archivoId, Long clusterId) {
     return leer(
         "dashboard id=" + archivoId + " cluster=" + clusterId,
-        () -> {
-          Contexto ctx = contexto(archivoId, false);
-          if (clusterId != null) {
-            parametroCluster(ctx, clusterId);
-          }
-          return cache.obtener(
-              claveCache(ctx, "dashboard:" + clusterId), () -> calcularDashboard(ctx, clusterId));
-        },
+        () ->
+            cacheado(
+                archivoId,
+                "dashboard:" + clusterId,
+                (ctx) -> {
+                  if (clusterId != null) {
+                    parametroCluster(ctx, clusterId);
+                  }
+                  return calcularDashboard(ctx, clusterId);
+                }),
         "Dashboard de simulación.");
   }
 
@@ -2420,9 +2419,24 @@ public class SimulacionConfiguracionService {
    * actualización, que cambia en cada escritura (tocar), así que una respuesta
    * vieja nunca se sirve y no hace falta invalidar a mano.
    */
-  private static String claveCache(Contexto ctx, String vista) {
-    ArchivoExcel archivo = ctx.archivo();
-    return "simulacion:" + archivo.getId() + ":" + archivo.getActualizadoEn() + ":" + vista;
+  /**
+   * Respuesta de solo lectura cacheada por registro y versión: un acierto
+   * cuesta una consulta (el registro, por su actualizadoEn) y el contexto
+   * completo (parámetros, operarios, nombres) solo se carga para recalcular.
+   * Con muchos usuarios mirando el mismo registro, Caffeine calcula una sola
+   * vez por clave y los demás esperan ese resultado.
+   */
+  private <T> T cacheado(Long archivoId, String vista, Function<Contexto, T> calculo) {
+    ArchivoExcel archivo =
+        archivoRepo
+            .findById(archivoId)
+            .orElseThrow(
+                () ->
+                    new RecursoNoEncontradoException(
+                        "No existe el registro con id " + archivoId + "."));
+    String clave =
+        "simulacion:" + archivo.getId() + ":" + archivo.getActualizadoEn() + ":" + vista;
+    return cache.obtener(clave, () -> calculo.apply(contexto(archivoId, false)));
   }
 
   private <T> Mono<ApiResponse<T>> leer(String operacion, Supplier<T> trabajo, String mensaje) {

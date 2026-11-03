@@ -6,6 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -125,6 +126,7 @@ const METRICAS: ReadonlyArray<{
   selector: 'app-simulacion-dashboard',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    NgTemplateOutlet,
     HasPermiso,
     Kpi,
     ComparativoChart,
@@ -222,6 +224,13 @@ export class SimulacionDashboard {
 
   cerrarDetalle(): void {
     this.detalleChute.set(null);
+  }
+
+  /** Clusters que atiende el chute en el resumen; si el balanceo los cambió, «antes → después». */
+  clustersDeChute(chute: ChuteComparativoSimulacion): string {
+    const antes = chute.clustersOriginal.join(', ') || '—';
+    const despues = chute.clustersBalanceado.join(', ') || '—';
+    return antes === despues ? despues : `${antes} → ${despues}`;
   }
 
   /** Texto del chute en el cuadro: al pulsarlo se abren sus rutas antes y después. */
