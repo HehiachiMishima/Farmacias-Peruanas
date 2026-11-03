@@ -37,6 +37,11 @@ export class Api {
     return this.http.delete<ApiResponse<T>>(this.url(ruta)).pipe(map(this.desempaquetar));
   }
 
+  /** Archivo binario sin envoltorio (Excel generado por el servidor). */
+  getArchivo(ruta: string): Observable<Blob> {
+    return this.http.get(this.url(ruta), { responseType: 'blob' });
+  }
+
   private readonly desempaquetar = <T>(respuesta: ApiResponse<T>): T => respuesta.datos;
 
   private url(ruta: string): string {

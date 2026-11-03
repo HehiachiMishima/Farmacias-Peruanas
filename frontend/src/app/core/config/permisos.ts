@@ -59,6 +59,12 @@ export const PERMISOS = {
 
   VER_DASHBOARD_SIMULACION: 'VER_DASHBOARD_SIMULACION',
 
+  PANEL_MALLA: 'PANEL_MALLA',
+
+  VER_MALLA: 'VER_MALLA',
+  MODIFICAR_MALLA: 'MODIFICAR_MALLA',
+  EXPORTAR_MALLA: 'EXPORTAR_MALLA',
+
   // Paneles en construcción (sin lógica todavía). Quedan públicos hasta que se
   // les asigne permisos reales en el backend.
   PANEL_ANALISIS: 'PANEL_ANALISIS',

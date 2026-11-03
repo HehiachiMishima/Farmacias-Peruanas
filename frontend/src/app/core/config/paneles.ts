@@ -178,6 +178,34 @@ export const PANEL_SIMULACION: PanelDef = {
   ],
 };
 
+export const PANEL_MALLA: PanelDef = {
+  id: 'malla',
+  nombre: 'Malla Operativa',
+  descripcion: 'Turnos, flujos de proceso, olas y capacidad por centro de distribución.',
+  icono: 'calendario',
+  ruta: '/malla',
+  permiso: PERMISOS.PANEL_MALLA,
+  acento: 'var(--cyan)',
+  modulos: [
+    {
+      id: 'configuracion',
+      nombre: 'Configuración',
+      descripcion: 'Datos de cada centro: turnos, flujos, olas, zonas, capacidad y dotación.',
+      icono: 'control',
+      ruta: 'configuracion',
+      permiso: PERMISOS.VER_MALLA,
+    },
+    {
+      id: 'operativa',
+      nombre: 'Malla',
+      descripcion: 'Vista operativa de cada centro, por turno y por proceso.',
+      icono: 'calendario',
+      ruta: 'operativa',
+      permiso: PERMISOS.VER_MALLA,
+    },
+  ],
+};
+
 /**
  * Paneles en construcción: misma estructura que los paneles reales (permiso,
  * módulos, acento), pero marcados como `publico` mientras no tengan lógica,
@@ -293,6 +321,7 @@ export const PANELES: PanelDef[] = [
   PANEL_BITACORA,
   PANEL_INBOUND,
   PANEL_SIMULACION,
+  PANEL_MALLA,
   PANEL_ANALISIS,
   PANEL_TRAZABILIDAD,
   PANEL_LOGISTICA,

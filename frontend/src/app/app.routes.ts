@@ -62,6 +62,11 @@ export const routes: Routes = [
       import('./features/panels/simulacion/simulacion.routes').then((m) => m.SIMULACION_ROUTES),
   },
   {
+    path: 'malla',
+    canMatch: [permisoGuard(PERMISOS.PANEL_MALLA)],
+    loadChildren: () => import('./features/panels/malla/malla.routes').then((m) => m.MALLA_ROUTES),
+  },
+  {
     path: 'analisis',
     canMatch: [panelGuard(PANEL_ANALISIS)],
     loadChildren: () =>
