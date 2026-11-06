@@ -12,7 +12,7 @@ import lombok.Setter;
 
 /** Un lanzamiento de un cluster: paso, resultado, quién y cuándo. */
 @Entity
-@Table(name = "lanzamientos_balanceo")
+@Table(schema = "simulacion", name = "lanzamientos_balanceo")
 @Getter
 @Setter
 public class LanzamientoBalanceo {

@@ -12,7 +12,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Table(name = "permisos")
+@Table(schema = "seguridad", name = "permisos")
 @Getter
 @Setter
 public class Permiso extends Auditable {

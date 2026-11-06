@@ -5,7 +5,8 @@ import oracle.common.exception.OperacionNoPermitidaException;
 
 /**
  * Reglas de proteccion espejo de los triggers de la base de datos.
- * Validar aqui = fallar con 403 limpio antes de que MySQL senale SQLSTATE 45000.
+ * Validar aqui = fallar con 403 limpio antes de que el trigger de PostgreSQL
+ * falle con SQLSTATE AT403.
  */
 final class Protecciones {
 
@@ -30,9 +31,9 @@ final class Protecciones {
 
     /**
      * Usuarios protegidos: sin update, delete ni cambio de rol. "@admin" es el
-     * usuario semilla (USER_ADMIN) y coincide con protection.admin.sql.
-     * La comparacion es case-insensitive para alinearse con el collation
-     * utf8mb4_unicode_ci de MySQL (igual que los triggers de proteccion).
+     * usuario semilla (USER_ADMIN). Coincide con seguridad.es_usuario_protegido
+     * de postgresql.sql; la comparacion ignora mayusculas, como la colacion
+     * comun.ci que usan los triggers de proteccion.
      */
     static final Set<String> USUARIOS_PROTEGIDOS = Set.of("@admin", "@hehiachi");
 

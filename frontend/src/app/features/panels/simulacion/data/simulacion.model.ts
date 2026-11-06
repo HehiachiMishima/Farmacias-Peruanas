@@ -58,6 +58,11 @@ export interface RutaSimulacion {
   chuteOriginal: string;
   clusterId: number;
   cluster: string;
+  /** Cluster que tenía la ruta al cargar el Excel (distinto si se cambió a mano). */
+  clusterOriginalId: number;
+  clusterOriginal: string;
+  /** Su cluster y algún otro siguen sin cerrar: se puede pasar a otro cluster (antes o después de balancear). */
+  clusterEditable: boolean;
   codigoRuta: string;
   /** Tipo de operación de la ruta: B2C o B2B. */
   tipo: 'B2C' | 'B2B' | string;
@@ -97,8 +102,16 @@ export interface ConfiguracionSimulacion {
   mezclas: ChuteMezcladoSimulacion[];
 }
 
+/** Página de rutas por keyset: `siguiente` es el cursor de la próxima; `total` solo en la primera. */
+export interface PaginaRutas {
+  contenido: RutaSimulacion[];
+  total: number | null;
+  siguiente: number | null;
+}
+
 export interface RutasSimulacionFiltros {
-  pagina: number;
+  /** Id de la última ruta recibida (sin él, la primera página). */
+  despues: number | null;
   tamano: number;
   texto: string;
   clusterIds: number[];
@@ -125,7 +138,7 @@ export interface HistorialSimulacion {
   id: number;
   /** Lanzamiento que hizo el cambio; null = movimiento manual o de una versión anterior. */
   lanzamientoId: number | null;
-  tipoAccion: 'MOVER_RUTA' | 'ASIGNAR_OPERARIOS' | string;
+  tipoAccion: 'MOVER_RUTA' | 'ASIGNAR_OPERARIOS' | 'CAMBIAR_CLUSTER' | string;
   /** BALANCEO: paso 1 o 2; SEPARACION: CL1 y CL2; MANUAL: hecho por el usuario. */
   motivo: 'BALANCEO' | 'SEPARACION' | 'MANUAL' | string;
   rutaId: number | null;
@@ -136,6 +149,9 @@ export interface HistorialSimulacion {
   chuteOrigen: string | null;
   chuteDestino: string | null;
   chuteModificado: string | null;
+  /** CAMBIAR_CLUSTER: cluster de origen y de destino. */
+  clusterOrigen: string | null;
+  clusterDestino: string | null;
   /**
    * MOVER_RUTA: operarios del chute de origen y destino tras el cambio.
    * ASIGNAR_OPERARIOS: operarios del chute en la ola antes (origen) y después (destino).
@@ -201,6 +217,13 @@ export interface ClusterComparativoSimulacion {
   tiempoBalanceado: number | null;
   limiteHoras: number;
   excede: boolean;
+  rutasOriginal: number;
+  rutasBalanceado: number;
+  /** Rutas que llegaron de otro cluster y las que se fueron a otro (cambio manual). */
+  rutasEntraron: number;
+  rutasSalieron: number;
+  unidadesOriginal: number;
+  unidadesBalanceado: number;
   bultosOriginal: number;
   bultosBalanceado: number;
   lineasOriginal: number;
@@ -246,6 +269,19 @@ export interface ChuteComparativoSimulacion {
   clustersSeparados: string[];
 }
 
+/** Rutas que pasaron de un cluster (original) a otro (actual), con lo que se llevaron. */
+export interface CambioClusterSimulacion {
+  origenId: number;
+  origen: string;
+  destinoId: number;
+  destino: string;
+  rutas: number;
+  bultos: number;
+  unidades: number;
+  lineas: number;
+  cod: number;
+}
+
 /** Rutas que pasaron de un chute a otro (por chute original y actual). */
 export interface MovimientoChuteSimulacion {
   origenId: number;
@@ -261,6 +297,8 @@ export interface DashboardSimulacion {
   mezclas: ChuteMezcladoSimulacion[];
   /** Movimientos de rutas entre chutes: flujo de cualquier grupo de chutes. */
   movimientos: MovimientoChuteSimulacion[];
+  /** Rutas que cambiaron de cluster; en la vista de un cluster, las que entraron o salieron de él. */
+  cambiosCluster: CambioClusterSimulacion[];
   /** Clusters en el orden de las olas con su avance: arman el selector de vistas. */
   olas: OlaSimulacion[];
   /** Paso de operarios entre olas: en la vista de un cluster, solo el que llega a él. */
@@ -310,7 +348,7 @@ export interface ResumenRutasSimulacion {
   rutas: number;
   rutasB2c: number;
   rutasB2b: number;
-  /** Rutas que cambiaron de chute: salieron (antes) o llegaron (después). */
+  /** Rutas que cambiaron de chute o de cluster: salieron (antes) o llegaron (después). */
   cambios: number;
   bultos: number;
   unidades: number;
@@ -328,7 +366,7 @@ export interface RutasDashboardFiltros {
   /** ANTES: rutas que los chutes tenían al cargar el Excel; DESPUES: las que tienen hoy. */
   lado: LadoChute;
   clusterId: number | null;
-  /** Solo las rutas que cambiaron de chute. */
+  /** Solo las rutas que cambiaron de chute o de cluster. */
   soloCambios: boolean;
 }
 

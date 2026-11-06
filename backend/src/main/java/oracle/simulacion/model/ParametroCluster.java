@@ -14,7 +14,7 @@ import lombok.Setter;
  * se puede empezar el siguiente.
  */
 @Entity
-@Table(name = "parametros_clusters")
+@Table(schema = "simulacion", name = "parametros_clusters")
 @Getter
 @Setter
 public class ParametroCluster {

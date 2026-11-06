@@ -74,8 +74,9 @@ public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor,
         return valor;
     }
 
+    /** Antes que {@link ConexionBaseDatos}, que lee las claves de la conexion. */
     @Override
     public int getOrder() {
-        return Ordered.LOWEST_PRECEDENCE;
+        return Ordered.LOWEST_PRECEDENCE - 10;
     }
 }

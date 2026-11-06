@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Size;
  */
 public record UsuarioActualizarRequest(
         @Size(max = 50) String usuario,
-        @Size(min = 6, max = 100) String contrasena,
+        @Size(min = 10, max = 72) String contrasena,
         @Size(max = 100) String nombre,
         @Size(max = 100) String apellido,
         @Email @Size(max = 100) String email,

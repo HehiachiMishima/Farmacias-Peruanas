@@ -7,6 +7,7 @@ import oracle.admin.model.UsuarioRol;
 import oracle.admin.repository.RolRepository;
 import oracle.admin.repository.UsuarioRepository;
 import oracle.admin.repository.UsuarioRolRepository;
+import oracle.common.support.PoliticaContrasena;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -81,6 +82,10 @@ public class SeedUsuarioAdmin implements ApplicationRunner {
         if (usuarioRepository.existsByUsuario(usuario)|| usuarioRepository.existsByEmail(email)) {
             log.info("Usuario semilla '{}' ya existe; no se crea de nuevo.", usuario);
             return;
+        }
+
+        if (!PoliticaContrasena.cumple(contrasena)) {
+            throw new IllegalStateException("USER_PASSWORD no cumple la politica: " + PoliticaContrasena.MENSAJE);
         }
 
         Instant ahora = Instant.now();

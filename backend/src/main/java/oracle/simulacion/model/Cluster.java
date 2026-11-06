@@ -11,7 +11,7 @@ import lombok.Setter;
 
 /** Catálogo de clusters (CL1, CL2, CP3, ...). */
 @Entity
-@Table(name = "clusters")
+@Table(schema = "simulacion", name = "clusters")
 @Getter
 @Setter
 public class Cluster {

@@ -3,6 +3,7 @@ package oracle.common.security;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,9 +14,25 @@ import org.springframework.stereotype.Component;
 @Component
 public class LimiteSolicitudes {
 
+    /** Claves a partir de las cuales se poda (una por usuario + panel + categoria). */
     private static final int MAX_CLAVES = 10_000;
+    /** Como mucho una poda cada 10 s: podar recorre todo el mapa. */
+    private static final long INTERVALO_PODA_MS = 10_000L;
+
+    private final long intervaloPodaMs;
 
     private final ConcurrentHashMap<String, Deque<Long>> solicitudes = new ConcurrentHashMap<>();
+    /** Ventana mas larga usada: una clave sin solicitudes en ella ya no limita nada. */
+    private final AtomicLong ventanaMaxima = new AtomicLong();
+    private final AtomicLong ultimaPoda = new AtomicLong();
+
+    public LimiteSolicitudes() {
+        this(INTERVALO_PODA_MS);
+    }
+
+    LimiteSolicitudes(long intervaloPodaMs) {
+        this.intervaloPodaMs = intervaloPodaMs;
+    }
 
     /**
      * Registra una solicitud si cabe en la ventana. Devuelve 0 si se admitio o,
@@ -36,19 +53,34 @@ public class LimiteSolicitudes {
                 espera = 0;
             }
         }
+        ventanaMaxima.accumulateAndGet(ventanaMs, Math::max);
         if (solicitudes.size() > MAX_CLAVES) {
-            podarVencidas(ahora, ventanaMs);
+            podarVencidas(ahora);
         }
         return espera;
     }
 
-    /** Descarta las claves sin solicitudes en la ventana (acota la memoria). */
-    private void podarVencidas(long ahora, long ventanaMs) {
+    /**
+     * Descarta las claves sin solicitudes en la ventana mas larga (acota la memoria).
+     * Antes se podaba en CADA solicitud mientras hubiera mas de MAX_CLAVES: con miles
+     * de usuarios activos casi ninguna vence y cada peticion recorria el mapa entero.
+     */
+    private void podarVencidas(long ahora) {
+        long anterior = ultimaPoda.get();
+        if (ahora - anterior < intervaloPodaMs || !ultimaPoda.compareAndSet(anterior, ahora)) {
+            return;
+        }
+        long limite = ahora - ventanaMaxima.get();
         solicitudes.entrySet().removeIf(entrada -> {
             Deque<Long> cola = entrada.getValue();
             synchronized (cola) {
-                return cola.isEmpty() || cola.peekLast() <= ahora - ventanaMs;
+                return cola.isEmpty() || cola.peekLast() <= limite;
             }
         });
+    }
+
+    /** Claves en memoria (para pruebas y metricas). */
+    int claves() {
+        return solicitudes.size();
     }
 }

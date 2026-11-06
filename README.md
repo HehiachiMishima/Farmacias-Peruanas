@@ -2,8 +2,9 @@
 
 **Atlas** (*Interfaz Atlas*) es la plataforma de control operativo de
 Ingeniería Logística: gobierno de identidades, roles y permisos, y
-registro/seguimiento de incidencias (Bitácora e Inbound), con acceso por
-paneles según los permisos de cada usuario. Su nombre es un acróstico:
+registro/seguimiento de incidencias (Bitácora), proyección y
+balanceo de rutas (Simulación), con acceso por paneles según los permisos de
+cada usuario. Su nombre es un acróstico:
 **A**nálisis · **T**razabilidad · **L**ogística · **A**utomatización ·
 **S**incronización.
 
@@ -11,10 +12,8 @@ paneles según los permisos de cada usuario. Su nombre es un acróstico:
   "Atlas": cromo navy, rojo y oro de marca, paleta de señales, modo claro/oscuro.
 - **Backend**: Spring Boot 4.1 (Java 25), API REST stateless con JWT (HS256),
   organizado **por paneles**.
-- **Base de datos**: MySQL 8 (Aiven en producción).
-
-Resumen para gerencia (módulos, estado, riesgos y hoja de ruta):
-[docs/resumen-ejecutivo.md](docs/resumen-ejecutivo.md).
+- **Base de datos**: PostgreSQL 15+ (Render en producción), con un esquema por
+  dominio y conexiones múltiples por variables de entorno.
 
 ---
 
@@ -24,24 +23,36 @@ Resumen para gerencia (módulos, estado, riesgos y hoja de ruta):
 | --- | --- | --- | --- |
 | Administración | `/admin` | Dashboard, Usuarios, Roles, Permisos | `PANEL_ADMIN` |
 | Bitácora | `/bitacora` | Incidencias, Control (centros, sistemas, áreas, responsables), Dashboard | `PANEL_BITACORA` |
-| Inbound | `/inbound` | Incidencias, Control (proveedores, tipos de incidencia), Dashboard | `PANEL_INBOUND` |
-| Simulación | `/simulacion` | Registro (Excel/CSV), Configuración (límites, operarios, rutas, balanceo), Dashboard | `PANEL_SIMULACION` |
-| Análisis | `/analisis` | Resumen *(en construcción)* | `PANEL_ANALISIS` |
-| Trazabilidad | `/trazabilidad` | Resumen *(en construcción)* | `PANEL_TRAZABILIDAD` |
-| Logística | `/logistica` | Resumen *(en construcción)* | `PANEL_LOGISTICA` |
-| Automatización | `/automatizacion` | Resumen *(en construcción)* | `PANEL_AUTOMATIZACION` |
-| Sincronización | `/sincronizacion` | Resumen *(en construcción)* | `PANEL_SINCRONIZACION` |
+| Simulación | `/simulacion` | Registro (Excel), Configuración (clusters, chutes, balanceo), Dashboard | `PANEL_SIMULACION` |
+| Malla Operativa | `/malla` | Malla (turnos, flujos de proceso, olas, zonas, capacidad) | `PANEL_MALLA` |
+| Análisis | `/analisis` | Resumen | `PANEL_ANALISIS` |
+| Trazabilidad | `/trazabilidad` | Resumen | `PANEL_TRAZABILIDAD` |
+| Logística | `/logistica` | Resumen | `PANEL_LOGISTICA` |
+| Automatización | `/automatizacion` | Resumen | `PANEL_AUTOMATIZACION` |
+| Sincronización | `/sincronizacion` | Resumen | `PANEL_SINCRONIZACION` |
+
+Los paneles Análisis, Trazabilidad, Logística, Automatización y Sincronización
+exigen su permiso de entrada igual que el resto. Su módulo Resumen muestra un
+estado vacío neutro mientras se implementa la lógica del panel.
 
 El *launcher* (`/`) muestra los paneles y, en cada uno, los módulos habilitados
 para el usuario. Cada ruta protegida valida su permiso con `permisoGuard`, y
 cada endpoint con `@PreAuthorize`.
+
+El panel **Malla Operativa** reutiliza el tablero de la malla ya construido,
+pero no lo publica como archivo estático: el backend entrega el HTML en
+`GET /api/malla/vista` sólo con `VER_MALLA`, y el frontend lo descarga con el
+token y lo muestra en un iframe. `MODIFICAR_MALLA` habilita la edición y
+`EXPORTAR_MALLA` la descarga en Excel; sin ellos la vista queda en solo lectura.
+Los centros y su malla se crean desde el propio panel (formulario o importación
+de Excel); las reglas de evaluación vienen precargadas en `backend/postgresql.sql`.
 
 Los cinco paneles nuevos aún **no tienen lógica**: están marcados `publico: true`
 en `core/config/paneles.ts` (visibles para cualquier usuario autenticado, vía
 `panelGuard`) y su página `pages/resumen` muestra la vista común
 `EnConstruccion`. Para darles lógica:
 
-1. Crea el permiso en el backend (`data.sql`) y quita `publico: true` del panel.
+1. Crea el permiso en `backend/postgresql.sql` (sección 7) y quita `publico: true` del panel.
 2. Añade sus módulos en `paneles.ts` (id, ruta, icono, permiso).
 3. Registra cada módulo en `<panel>.routes.ts` con `permisoGuard` y reemplaza
    `pages/resumen` por las páginas reales.
@@ -56,28 +67,24 @@ La ruta raíz de cada panel redirige a su primer módulo accesible con
 ```
 .
 ├── Dockerfile                  # Imagen única: frontend + backend + nginx
-├── docker-compose.yml          # Stack local opcional (MySQL + imagen)
+├── docker-compose.yml          # Stack local opcional (PostgreSQL + imagen)
 ├── render.yaml                 # Blueprint de Render (1 servicio web)
 ├── backend/
 │   ├── .env.example            # Plantilla de variables (el .env real no se sube)
-│   ├── schema.sql              # 1) RBAC: usuarios, roles, permisos, vistas, triggers
-│   ├── panel.bitacora.sql      # 2) Tablas del panel Bitácora
-│   ├── panel.inbound.sql       # 3) Tablas del panel Inbound
-│   ├── panel.simulacion.sql    # 4) Tablas del panel Simulación
-│   ├── protection.admin.sql    # 5) Protección del usuario @admin (triggers)
-│   ├── data.sql                # 6) Permisos de paneles, catálogos y datos de ejemplo
-│   ├── permisos.simulacion.sql # 7) Permisos del panel Simulación
+│   ├── .env.example            # Plantilla de variables (el .env real no se sube)
+│   ├── postgresql.sql          # Instalación completa: esquemas, tablas, triggers, permisos y catálogos
+│   ├── datos.sql               # Incidencias de ejemplo de Bitácora (opcional)
 │   └── src/main/java/oracle/
 │       ├── auth/               # Login y sesión vigente
 │       ├── admin/              # Panel Administración (usuarios, roles, permisos, resolución)
 │       ├── bitacora/           # Panel Bitácora (incidencias + catálogos de control)
-│       ├── inbound/            # Panel Inbound (incidencias + proveedores/tipos)
-│       ├── simulacion/         # Panel Simulación (registros Excel, configuración, balanceo)
+│       ├── simulacion/         # Panel Simulación (Excel, configuración, balanceo, dashboard)
+│       ├── malla/              # Panel Malla Operativa (entrega protegida del tablero)
 │       └── common/             # Transversal: config, security, exception, support, web
 └── frontend/src/app/
-    ├── core/                   # solo transversal: sesión, http, guards, interceptors, config, utils
-    ├── features/               # auth, launcher, panels/<panel>/{data,state,pages}
-    └── shared/                 # directivas, pipes y UI (icon, modal, charts, filtros, …)
+    ├── core/                   # config, guards, interceptors, models, services, utils
+    ├── features/               # auth, launcher, panels/{admin,bitacora,simulacion,malla,…}
+    └── shared/                 # directivas, pipes y UI (icon, modal, charts, …)
 ```
 
 Cada panel del backend tiene sus propias capas:
@@ -99,19 +106,6 @@ Cada panel del backend tiene sus propias capas:
 Los originales (`atlasLogo.jpg`, `atlasCarga.jpg`, `FarmaciasPeruanasName.jpg`)
 quedan en `public/` como fuente; la app usa las versiones `webp` optimizadas.
 
-- **Intro** (`/intro`, `features/auth/intro/`): apertura de cine de 7,6 s
-  antes del primer login de cada pestaña. Una línea roja se abre en abanico,
-  estalla en un túnel de haces, forma una cortina vertical y se cierra en el
-  logotipo **ATLAS** (canvas 2D, `intro-escena.ts`, sin video). Banda sonora
-  sintetizada con Web Audio (`intro-sonido.ts`, sin archivos); si el
-  navegador bloquea el audio automático, sigue en silencio. Sin botones: se
-  omite con un clic en cualquier parte (o `Esc`) y siempre termina en el
-  login conservando el `returnUrl`. La controla `introGuard`
-  (marca `oracle.intro` en `sessionStorage`); con `prefers-reduced-motion`
-  arranca directamente en el logotipo (≈4 s, solo fundidos). Todo el diseño
-  (línea de tiempo, textos, paleta, densidad de la escena y mezcla de sonido)
-  vive en `intro-diseno.ts`; el SCSS lo recibe como tokens `--intro-*`, así
-  que se ajusta el aspecto o la duración sin tocar la lógica.
 - **Login**: réplica del diseño de referencia. Hero con marca FP + IL, título
   ATLAS, acróstico en ciclo, mapa real del Perú con la red de distribución
   desde Lima y cuatro pines (Almacenes, Distribución, Farmacias, Datos y
@@ -130,63 +124,90 @@ quedan en `public/` como fuente; la app usa las versiones `webp` optimizadas.
 
 ## Base de datos
 
-> Los `.sql` **no** se ejecutan automáticamente ni entran en la imagen: se
-> aplican a mano (o con `docker compose`, ver más abajo). Hibernate no toca el
-> esquema (`ddl-auto=none`).
-
-**Orden de ejecución** (mismo para local y Aiven):
+PostgreSQL 15 o superior. Hibernate no toca el esquema (`ddl-auto=none`): todo
+se instala con `backend/postgresql.sql` y los `.sql` no entran en la imagen.
 
 | Paso | Archivo | Notas |
 | --- | --- | --- |
-| 1 | `schema.sql` | Crea la BD `farmacias_peruanas`, RBAC, vistas de resolución y triggers. Re-ejecutable. |
-| 2 | `panel.bitacora.sql` | Catálogos e `incidencias`. `CREATE TABLE IF NOT EXISTS`. |
-| 3 | `panel.inbound.sql` | Proveedores, tipos e `incidencias_inbound`. |
-| 4 | `panel.simulacion.sql` | Registros Excel, catálogos de clusters/chutes, rutas e historial de balanceo. Si las tablas ya existían, aplica a mano el bloque *MIGRACIÓN* del final. |
-| 5 | **Arrancar el backend una vez** | Crea el usuario semilla `USER_ADMIN` (id = 1) con BCrypt y le asigna `USER_ROL`. |
-| 6 | `protection.admin.sql` | Triggers que blindan a `@admin`. Re-ejecutable. |
-| 7 | `data.sql` | Permisos de Bitácora/Inbound, catálogos y registros de ejemplo. Requiere el usuario id = 1 (FK de `creado_por`). |
-| 8 | `permisos.simulacion.sql` | Permisos del panel Simulación (asignados a ADMINISTRADOR). Idempotente. |
-
-Con el cliente `mysql` (respeta `DELIMITER`):
+| 1 | `postgresql.sql` | Instalación completa en **una transacción**. ⚠️ Borra y recrea los esquemas `comun`, `seguridad`, `bitacora`, `simulacion` y `malla`. |
+| 2 | **Arrancar el backend una vez** | Crea el usuario semilla `USER_ADMIN` con BCrypt y le asigna `USER_ROL`. |
+| 3 | `datos.sql` *(opcional)* | 53 incidencias de ejemplo de Bitácora. Re-ejecutable (omite tickets existentes). |
 
 ```bash
-mysql -h <host> -P <puerto> -u <usuario> -p < backend/schema.sql
+psql "host=<host> port=5432 dbname=<base> user=<usuario> sslmode=require" -v ON_ERROR_STOP=1 -f backend/postgresql.sql
 ```
 
-> `data.sql`: permisos y catálogos son idempotentes; las incidencias de
-> Bitácora usan `INSERT IGNORE` (ticket único). Las de Inbound no tienen clave
-> natural: ejecútalo **una sola vez** o se duplicarán los registros de ejemplo.
+Organización y decisiones del esquema:
 
----
+| Esquema | Contenido |
+| --- | --- |
+| `comun` | Colación `comun.ci`, trigger `fijar_actualizado_en` y `proteger()` (errores `AT403`). |
+| `seguridad` | Usuarios, roles, permisos, overrides, `sesiones_refresh` y vistas `v_permisos_efectivos` / `v_permisos_finales` (deny-wins con `bool_and`). |
+| `bitacora` | Catálogos (centro, sistema, área, responsable, tipo) e `incidencias`. |
+| `simulacion` | Registros Excel, clusters, chutes, parámetros, rutas, lanzamientos e historial de balanceo. |
+| `malla` | Centros, turnos, flujos, olas, zonas, capacidad, dotación, historial de cambios y reglas. |
+
+- La conexión lleva `currentSchema=seguridad,bitacora,simulacion,malla,public`,
+  así el backend consulta las tablas sin prefijo.
+- Ids `GENERATED ALWAYS AS IDENTITY`; instantes en `TIMESTAMPTZ` (UTC) y
+  `actualizado_en` mantenido por trigger en cada `UPDATE`.
+- Nombres, logins, emails y códigos usan la colación ICU `comun.ci`: comparan
+  e indexan **sin mayúsculas ni tildes** (`Lima` = `LIMA` = `Líma`), también en
+  los `UNIQUE`. PostgreSQL no admite `LIKE` ni regex sobre esa colación, por eso
+  las columnas que se buscan por texto (ticket, descripción, rutas) no la llevan
+  y se indexan con trigram (`pg_trgm`) o `varchar_pattern_ops`.
+- Valores cerrados con `CHECK` (estados, tipos B2C/B2B, procesos, severidades…),
+  `rutas_proyeccion.movida` es columna generada `STORED` y
+  `malla_regla.parametros` es `JSONB`.
+- Protecciones (rol `ADMINISTRADOR`, permisos base, usuarios `@admin` y
+  `@hehiachi`) en triggers PL/pgSQL; el backend responde 403 con su mensaje.
 
 ## Configuración del entorno
 
-El backend lee sus credenciales de `backend/.env` (no se sube al repositorio).
-Es un **único archivo conmutable**: contiene los bloques de conexión (MySQL
-local y Aiven) y para alternar basta con comentar uno y descomentar el otro.
+El backend lee sus variables de `backend/.env` (no se sube al repositorio) o
+del entorno; Render las inyecta desde el dashboard.
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-Render **no usa ese archivo**: inyecta las variables desde el dashboard.
+**Conexiones múltiples.** Declara uno o varios bloques `DB_<NOMBRE>_*` y elige
+el activo con `DB_CONEXION` (lo resuelve `ConexionBaseDatos` al arrancar):
+
+```dotenv
+DB_CONEXION=NUBE
+DB_NUBE_HOST=dpg-xxxx.oregon-postgres.render.com
+DB_NUBE_PORT=5432
+DB_NUBE_NAME=ingenieria_logistica
+DB_NUBE_USER=...
+DB_NUBE_PASSWORD=...
+DB_NUBE_SSLMODE=require
+
+#DB_LOCAL_HOST=localhost   (y DB_CONEXION=LOCAL para usarlo)
+```
 
 | Variable | Descripción |
 | --- | --- |
 | `PORT` | Puerto **público** del contenedor (nginx). Render lo inyecta (`10000`). |
 | `BACKEND_PORT` | Puerto **interno** del backend Java. Debe ser **distinto** de `PORT`. |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PARAMS` | Conexión MySQL. En Aiven `DB_PARAMS` incluye `sslMode=REQUIRED&serverTimezone=UTC`. |
+| `DB_CONEXION` | Bloque activo (`NUBE`, `LOCAL`, …). Sin ella se usan `DB_HOST`, `DB_NAME`, … sin prefijo. |
+| `DB_<N>_HOST`, `_PORT`, `_NAME`, `_USER`, `_PASSWORD` | Datos de la conexión `<N>` (puerto por defecto `5432`). |
+| `DB_<N>_URL` | Alternativa: `postgresql://usuario:clave@host:puerto/base` (la URL que da Render). |
+| `DB_<N>_SSLMODE` | `disable`, `prefer`, `require` (por defecto), `verify-ca` o `verify-full` (valida el certificado con las CA de Java; úsalo al conectar por red pública). |
+| `DB_<N>_POOL` | Conexiones **fijas** por instancia (por defecto 20, máx. 50). Ver **Rendimiento y escalado**. |
+| `DB_<N>_STATEMENT_TIMEOUT_MS` | Tiempo máximo por sentencia en el servidor (por defecto 15000). |
 | `JWT_SECRET` | Firma JWT. **Mínimo 32 bytes** (`openssl rand -hex 32`). |
 | `JWT_ISSUER` | Emisor del token (`iss`). |
-| `JWT_EXPIRATION_MS` | Vida del token en ms (opcional, por defecto `3600000`). |
+| `JWT_EXPIRATION_MS` | Vida del access token en ms (opcional, por defecto `900000`). |
 | `CORS_ALLOWED_ORIGINS` | Orígenes permitidos (solo si el SPA se sirve desde otro dominio). |
 | `USER_ADMIN`, `USER_PASSWORD`, `USER_EMAIL` | **Obligatorios** para crear el administrador semilla. |
 | `USER_NAME`, `USER_LASTNAME`, `USER_PHONE`, `USER_ACTIVO`, `USER_ROL` | Datos opcionales del administrador semilla. |
 | `JAVA_OPTS` | (Solo Docker) flags de la JVM. |
 
-> El usuario `@admin` está protegido en la BD (`protection.admin.sql`) **y** en
-> el backend (`Protecciones.USUARIOS_PROTEGIDOS`): no se puede editar, borrar
-> ni cambiar sus roles/permisos. Si usas otro `USER_ADMIN`, ajusta ambos.
+> Los usuarios `@admin` y `@hehiachi` están protegidos en la BD
+> (`seguridad.es_usuario_protegido`) **y** en el backend
+> (`Protecciones.USUARIOS_PROTEGIDOS`): no se pueden editar, borrar ni cambiar
+> sus roles/permisos. Si usas otro `USER_ADMIN`, ajusta ambos.
 
 ---
 
@@ -242,30 +263,22 @@ docker run --rm -p 10000:10000 --env-file backend/.env -e PORT=10000 -e BACKEND_
 App en `http://localhost:10000`; health check en `/api/health` (204). La
 imagen trae `HEALTHCHECK` propio.
 
-> Si tu `.env` apunta a un MySQL en `127.0.0.1`, dentro del contenedor usa
-> `-e DB_HOST=host.docker.internal`.
+> Si tu conexión activa apunta a un PostgreSQL en `127.0.0.1`, dentro del
+> contenedor usa `-e DB_LOCAL_HOST=host.docker.internal`.
 
-### Stack completo con MySQL (`docker compose`)
+### Stack completo con PostgreSQL (`docker compose`)
 
 ```bash
 docker compose up --build
 ```
 
-- MySQL 8.4 en `localhost:3307`; al crear el volumen aplica `schema.sql`,
-  `panel.bitacora.sql`, `panel.inbound.sql` y `panel.simulacion.sql`.
-- La app arranca, crea `@admin` y queda en `http://localhost:10000`.
-- Luego aplica `protection.admin.sql`, `data.sql` y `permisos.simulacion.sql`:
+- PostgreSQL 17 en `localhost:5433`; al crear el volumen aplica `postgresql.sql`.
+- La app usa el bloque `LOCAL` hacia ese contenedor, crea `@admin` y queda en
+  `http://localhost:10000`.
+- Opcional, después del primer arranque, los ejemplos de Bitácora:
 
 ```bash
-docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" farmacias_peruanas' < backend/protection.admin.sql
-```
-
-```bash
-docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" farmacias_peruanas' < backend/data.sql
-```
-
-```bash
-docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" farmacias_peruanas' < backend/permisos.simulacion.sql
+docker compose exec -T postgres psql -U atlas -d ingenieria_logistica -v ON_ERROR_STOP=1 < backend/datos.sql
 ```
 
 Los secretos (`JWT_SECRET`, `USER_*`) se leen de `backend/.env` si existe.
@@ -280,10 +293,11 @@ Los secretos (`JWT_SECRET`, `USER_*`) se leen de `backend/.env` si existe.
 
 1. Sube el repositorio a GitHub/GitLab.
 2. Render: **New + → Blueprint** y selecciona el repositorio.
-3. Completa los valores `sync: false`: `DB_*`, `USER_*` y (opcional)
+3. Completa los valores `sync: false`: `DB_NUBE_URL` (la *Internal Database
+   URL* de tu PostgreSQL de Render), `USER_*`, `SFTP_PASSWORD` y (opcional)
    `CORS_ALLOWED_ORIGINS`.
-4. Aplica los `.sql` en Aiven siguiendo el orden de **Base de datos** (el paso 4
-   es el primer deploy).
+4. Aplica `postgresql.sql` en la base antes del primer deploy (ver **Base de
+   datos**); `datos.sql` después, si quieres los ejemplos.
 5. Abre `https://farmacias-peruanas.onrender.com`.
 
 Notas:
@@ -294,15 +308,15 @@ Notas:
 - En `plan: free` el servicio se suspende tras ~15 min sin tráfico; el primer
   arranque en frío tarda ~1 min. Para miles de usuarios usa un plan con RAM
   ≥ 1 GB y sube `spring.datasource.hikari.maximum-pool-size` según el límite
-  de conexiones de tu plan de Aiven.
+  de conexiones de tu plan de PostgreSQL (o fija `DB_NUBE_POOL`).
 
 ### Si el deploy falla
 
 | Síntoma | Causa probable |
 | --- | --- |
 | Error de YAML al sincronizar el Blueprint | Claves duplicadas o mal escritas en `render.yaml`. |
-| Deploy en rojo, health check `502` | El backend no arranca: falta alguna `DB_*` o la base no es alcanzable. |
-| `Could not resolve placeholder 'DB_HOST'` | Falta una variable de conexión en el dashboard. |
+| Deploy en rojo, health check `502` | El backend no arranca: la base no es alcanzable o no se aplicó `postgresql.sql`. |
+| `Falta configurar la conexion 'NUBE' (DB_NUBE_*)` | Falta una variable de conexión en el dashboard (el mensaje dice cuáles). |
 | `JWT_SECRET ... al menos 32 bytes` | `JWT_SECRET` demasiado corto. |
 | Build larga / sin memoria | La build compila Angular + Maven; en `free` conviene reintentar. |
 
@@ -321,15 +335,9 @@ Base: `/api`
 | `GET` | `/usuarios/resumen` | Roles y permisos de todos los usuarios (2 consultas) |
 | `GET/POST/PUT/DELETE` | `/centros`, `/areas`, `/sistemas` | JWT + `*_CONTROL` |
 | `GET/POST/PUT/DELETE` | `/incidencias` (+ `/exportar`, `/estadisticas`) | JWT + `*_INCIDENCIAS` / `VER_DASHBOARD` |
-| `GET/POST/PUT/DELETE` | `/inbound/incidencias`, `/inbound/control/*` | JWT + permisos `*_INBOUND` |
 | `GET` | `/incidencias/analitica` | `VER_DASHBOARD` — KPIs, Pareto de sistemas, matriz centro × sistema, tipos, tendencia y horas |
-| `GET` | `/inbound/incidencias/analitica` | `VER_DASHBOARD_INBOUND` — ranking/Pareto de proveedores, matriz proveedor × tipo, SKUs, tendencias |
-| `GET` | `/admin/analitica` | `DASHBOARD_ADMIN` — cuentas activas, usuarios sin rol, excepciones y cobertura por panel |
-| `GET/POST/PUT/DELETE` | `/simulacion/registros` (+ `/opciones`) | `*_REGISTRO_SIMULACION` — carga multipart (.xlsx/.xls/.csv, 20 MB, 100 000 filas) |
-| `GET/PUT` | `/simulacion/registros/{id}/configuracion` | `VER/MODIFICAR_CONFIGURACION_SIMULACION` — parámetros y carga agregada por cluster/chute |
-| `GET` | `/simulacion/registros/{id}/rutas` | `VER_CONFIGURACION_SIMULACION` — rutas paginadas (filtros cluster, chute y prefijo de código) |
-| `PUT/POST` | `/simulacion/registros/{id}/rutas/{rutaId}/mover`, `/balancear`, `/restablecer` | `MODIFICAR_CONFIGURACION_SIMULACION` — serializados por registro (`SELECT … FOR UPDATE`) |
-| `GET` | `/simulacion/registros/{id}/historial`, `/dashboard` | `VER_CONFIGURACION_SIMULACION` / `VER_DASHBOARD_SIMULACION` |
+| `GET` | `/admin/analitica` | `DASHBOARD_ADMIN` — cuentas, roles, permisos, cobertura por panel y altas |
+| `GET` | `/malla/vista` | `VER_MALLA` — HTML autónomo de la malla (`text/html`, `no-store`) |
 
 ---
 
@@ -338,9 +346,8 @@ Base: `/api`
 - **Listados del frontend** (`ListadoRemoto` / `RecursoRemoto`): un único flujo
   con `switchMap` cancela la petición anterior, los errores no rompen la
   búsqueda y la tabla conserva las filas mientras refresca (sin parpadeo).
-- **Catálogos cacheados** en el navegador (`BitacoraCatalogos`,
-  `InboundCatalogos`) y en el servidor (`CatalogoBitacora`, `CatalogoInbound`,
-  invalidados en cada CRUD): resolver una página de incidencias no hace
+- **Catálogos cacheados** en el navegador (`BitacoraCatalogos`) y en el
+  servidor (`CatalogoBitacora`, invalidado en cada CRUD): resolver una página de incidencias no hace
   consultas por fila.
 - **Permisos**: caché Caffeine por usuario (invalidada al cambiar roles,
   permisos o estado); el frontend resincroniza la sesión al volver a la pestaña.
@@ -352,22 +359,102 @@ Base: `/api`
   defecto): la latencia es la de la consulta más lenta y un pico de dashboards
   nunca agota el pool de conexiones de los CRUD. El resultado se cachea por
   filtro (single-flight) y se invalida al escribir incidencias o catálogos.
-  Requiere MySQL 8 (CTE y funciones de ventana).
+  Usa `COUNT(*) FILTER`, CTE y funciones de ventana de PostgreSQL.
 - **Gráficos**: componentes SVG/CSS propios (`OnPush`, sin librerías): KPI con
   variación vs periodo anterior, Pareto, mapa de calor, barras apiladas,
   líneas y columnas. Se adaptan al contenedor sin deformarse.
 - **Responsive**: en móvil las tablas se muestran como tarjetas
   (`data-label` automático) y el panel de filtros es una hoja inferior.
-- **Infra**: virtual threads, `open-in-view=false`, timeouts JDBC, apagado
-  ordenado, nginx con gzip, keep-alive al backend y cache inmutable de assets.
+- **Infra**: virtual threads, `open-in-view=false`, apagado ordenado, nginx
+  con gzip, keep-alive al backend y cache inmutable de assets.
+
+### Capacidad medida (prueba de carga local)
+
+Instancia simulada como Render (1 CPU visible, heap 384 MB, pool 20), base con
+**1 M de incidencias, 4 M de rutas, 2 M de movimientos y 500 mil sesiones**,
+1000 usuarios activos a la vez (una petición cada ~350 ms):
+
+| Métrica | Valor |
+| --- | --- |
+| Throughput | ~2 600–2 750 req/s |
+| Latencia p50 / p95 / p99 | < 1 ms / 86–132 ms / 0,3–1 s |
+| Errores / esperas de conexión | 0 |
+
+Desde fuera de Render (Lima → Oregón) cada ida y vuelta a la base cuesta
+~176 ms y abrir una conexión TLS ~1,4 s: **el servicio web y la base deben
+estar en la misma región** (`oregon` en `render.yaml`).
+
+### Pool de conexiones
+
+- **Fijo** (`minimumIdle = maximumPoolSize`, `DB_<N>_POOL`, 20 por defecto):
+  ninguna petición paga el ~1 s de abrir una conexión TLS en un pico.
+- Lo usan los services (`Schedulers.boundedElastic`, 10 × CPU), la analítica
+  (6) y el filtro JWT cuando un usuario no está en caché. Con 10 se agotaba
+  en el arranque en frío de la caché; con 20, nunca.
+- Sin conexión libre en 3 s → **503** (`Retry-After`), no una cola infinita;
+  si el filtro JWT no puede consultar la base responde 503, **no 401**
+  (no cierra la sesión del usuario).
+- Límites en el servidor por conexión: `statement_timeout` 15 s
+  (`DB_<N>_STATEMENT_TIMEOUT_MS`), `lock_timeout` 5 s e
+  `idle_in_transaction_session_timeout` 30 s. Aviso en el log si una conexión
+  se retiene más de 30 s.
+- Tamaño en la base: `max_connections` es 100 en tu plan de Render (≈12 los usa
+  Render). Con 20 por instancia caben 3–4 instancias.
+
+### Datos masivos: decisiones medidas
+
+| Problema (1 M / 4 M filas) | Causa | Corrección | Antes → después |
+| --- | --- | --- | --- |
+| Exportar incidencias | El cursor `a < x OR (a = x AND id < y)` no acota el índice: cada lote recorría lo ya leído | `a <= x AND (a < x OR id < y)` (`CursorRecientes`) + tope de 50 000 filas | 120 ms → 1,5 ms por lote; sin filtro: 128 s / 503 MB → 400 inmediato |
+| Analítica de Bitácora | `GROUP BY` por nombres con colación ICU (`comun.ci`) fila a fila y `COUNT(DISTINCT)` | Agrupar por ids y unir los nombres después | 2,27 s → 0,47 s |
+| Búsqueda de rutas por prefijo | Índice aparte con `varchar_pattern_ops` (165 MB) | `codigo_ruta COLLATE "C"`: el índice único sirve para `LIKE 'x%'` | Índices de rutas 630 → 341 MB; búsqueda 0,6 ms |
+| Restablecer un cluster | Un `UPDATE` por ruta (~26 mil) | Un `UPDATE … FROM unnest(arrays)` por bloque | 1,6 s → 0,17 s |
+| `/usuarios/resumen` | Usuarios × permisos en cada llamada (~39 mil filas) | Snapshot invalidado con cada cambio de RBAC | Sin carga repetida |
+| Borrar un usuario | FK `historial_balanceo.creado_por` sin índice (recorría 2 M) | Índice | recorrido → búsqueda por índice |
+| `sesiones_refresh` | Solo se purgaba al volver a entrar cada usuario | Purga global cada hora, en lotes (`PurgaSesiones`) | La tabla ya no crece sin límite |
+| Filas muertas | Autovacuum al 20 % (800 mil en 4 M) | 2 % en rutas e historial, 5 % en incidencias y sesiones | Estadísticas y limpieza al día |
+
+- **Rate limiting** por usuario y panel (lecturas, escrituras, analítica,
+  exportación) con 429 + `Retry-After`. La poda de contadores corre como mucho
+  cada 10 s; antes, con más de 10 000 claves (≈3 000 usuarios activos), cada
+  petición recorría el mapa entero. Es memoria **por instancia**: con varias
+  instancias cada una cuenta lo suyo (para límites globales, Redis).
+- **Inyección SQL**: todo valor del usuario va como parámetro enlazado; los
+  únicos fragmentos concatenados son nombres de tabla/columna constantes del
+  código. No hay orden (`ORDER BY`) tomado de la petición. Los comodines de
+  `LIKE` del usuario se escapan (`Filtros.escaparLike`).
+- **Esquema validado al arrancar** (`ddl-auto=validate`, entidades con su
+  esquema explícito): si la base no coincide con el código, la app no arranca.
 
 ---
 
 ## Seguridad
 
-- `backend/.env` y `backend/certs/` están ignorados por Git; **no** los subas.
-- Errores de triggers (`SQLSTATE 45000`) llegan como 403 con su mensaje; un
+- `backend/.env` y `backend/certs/` están ignorados por Git (y nunca estuvieron
+  en el historial); **no** los subas.
+- **Conexión a la base**: `verify-full` valida el certificado con las CA de Java
+  (úsalo desde fuera de Render). Recomendado: rol de ejecución `atlas_app` solo
+  con DML (sección 8 de `postgresql.sql`); el dueño del esquema queda para
+  instalar.
+- **Contraseñas**: 10 a 72 bytes (BCrypt ignora lo que sigue), también para
+  `USER_PASSWORD` del semilla. Cambiar la contraseña invalida al instante los
+  access tokens emitidos antes (`credenciales_desde`) y cierra las demás
+  sesiones. `@admin` y `@hehiachi` pueden cambiar su propia contraseña; nada más
+  de su fila.
+- **Fuerza bruta**: límites por IP+usuario (10/min), por IP (30/min) y por
+  **cuenta** desde cualquier IP (20 / 15 min); el intento se cuenta antes de
+  verificar la contraseña (sin carreras). Cambio de contraseña: 5 / 15 min.
+- **Sin escalada de privilegios**: nadie otorga un permiso que no tiene ni
+  administra (edita, cambia la clave, desactiva, borra, cambia roles o
+  permisos) a un usuario con permisos que él no tiene (`ControlEscalamiento`).
+- Errores de triggers (`SQLSTATE AT403`) llegan como 403 con su mensaje; un
   borrado bloqueado por FK llega como 409 claro.
-- nginx añade `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`
-  y `Permissions-Policy`.
+- nginx: `Content-Security-Policy` estricta (sin scripts inline), HSTS,
+  `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`,
+  `Permissions-Policy`, COOP/CORP en **cada** ruta; la API sale con
+  `Cache-Control: no-store`.
+- Exportaciones CSV: los textos que empiezan con `= + - @` se neutralizan (no se
+  ejecutan como fórmula en Excel).
+- `X-Request-Id` entrante solo se acepta con forma segura; los logs de login no
+  incluyen el usuario tecleado.
 - Rota `JWT_SECRET` y las credenciales de la base periódicamente.

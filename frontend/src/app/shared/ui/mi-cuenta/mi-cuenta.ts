@@ -40,7 +40,7 @@ export class MiCuenta {
 
   readonly formulario = this.fb.nonNullable.group({
     contrasenaActual: ['', [Validators.required]],
-    contrasenaNueva: ['', [Validators.required, Validators.minLength(6), Validators.maxLength(100)]],
+    contrasenaNueva: ['', [Validators.required, Validators.minLength(10), Validators.maxLength(72)]],
     contrasenaConfirmar: ['', [Validators.required]],
   });
 

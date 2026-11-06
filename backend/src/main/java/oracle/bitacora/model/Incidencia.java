@@ -23,7 +23,7 @@ import lombok.Setter;
  * Auditable para permitir su actualización.
  */
 @Entity
-@Table(name = "incidencias")
+@Table(schema = "bitacora", name = "incidencias")
 @AttributeOverride(name = "creadoEn", column = @Column(name = "creado_en", nullable = false))
 @Getter
 @Setter

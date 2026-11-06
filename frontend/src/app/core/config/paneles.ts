@@ -16,11 +16,6 @@ export interface PanelDef {
   icono: string;
   ruta: string;
   permiso: string;
-  /**
-   * Panel sin lógica todavía: visible y accesible para cualquier usuario
-   * autenticado, sin exigir permiso. Quitar cuando tenga permisos reales.
-   */
-  publico?: boolean;
   /** Color de señal del panel (CSS): tarjeta del launcher y detalles del panel. */
   acento: string;
   modulos: ModuloPanel[];
@@ -106,42 +101,6 @@ export const PANEL_BITACORA: PanelDef = {
   ],
 };
 
-export const PANEL_INBOUND: PanelDef = {
-  id: 'inbound',
-  nombre: 'Inbound',
-  descripcion: 'Incidencias de inbound, catálogos de control y métricas operativas.',
-  icono: 'truck',
-  ruta: '/inbound',
-  permiso: PERMISOS.PANEL_INBOUND,
-  acento: 'var(--accent)',
-  modulos: [
-    {
-      id: 'incidencias',
-      nombre: 'Incidencias',
-      descripcion: 'Registro y seguimiento de incidencias de inbound.',
-      icono: 'incidencias',
-      ruta: 'incidencias',
-      permiso: PERMISOS.VER_INCIDENCIAS_INBOUND,
-    },
-    {
-      id: 'control',
-      nombre: 'Control',
-      descripcion: 'Proveedores y tipos de incidencia.',
-      icono: 'control',
-      ruta: 'control',
-      permiso: PERMISOS.VER_CONTROL_INBOUND,
-    },
-    {
-      id: 'dashboard',
-      nombre: 'Dashboard',
-      descripcion: 'Indicadores de inbound.',
-      icono: 'dashboard',
-      ruta: 'dashboard',
-      permiso: PERMISOS.VER_DASHBOARD_INBOUND,
-    },
-  ],
-};
-
 export const PANEL_SIMULACION: PanelDef = {
   id: 'simulacion',
   nombre: 'Simulación',
@@ -206,10 +165,46 @@ export const PANEL_MALLA: PanelDef = {
   ],
 };
 
+export const PANEL_PICKING: PanelDef = {
+  id: 'picking',
+  nombre: 'Picking',
+  descripcion: 'Avance del picking del día: órdenes, SKU y cumplimiento por área y cluster.',
+  icono: 'paquete',
+  ruta: '/picking',
+  permiso: PERMISOS.PANEL_PICKING,
+  acento: 'var(--warning)',
+  modulos: [
+    {
+      id: 'resumen',
+      nombre: 'Resumen',
+      descripcion: 'Avance del día por área, cluster, ruta y hora.',
+      icono: 'dashboard',
+      ruta: 'resumen',
+      permiso: PERMISOS.VER_RESUMEN_PICKING,
+    },
+    {
+      id: 'ordenes',
+      nombre: 'Órdenes',
+      descripcion: 'Control de órdenes: estado, unidades y detalle por cartón.',
+      icono: 'logistica',
+      ruta: 'ordenes',
+      permiso: PERMISOS.VER_ORDENES_PICKING,
+    },
+    {
+      id: 'sku',
+      nombre: 'SKU',
+      descripcion: 'Detalle por SKU: unidades solicitadas, asignadas y empacadas.',
+      icono: 'almacen',
+      ruta: 'sku',
+      permiso: PERMISOS.VER_SKU_PICKING,
+    },
+  ],
+};
+
 /**
- * Paneles en construcción: misma estructura que los paneles reales (permiso,
- * módulos, acento), pero marcados como `publico` mientras no tengan lógica,
- * para que se visualicen sin exigir permisos.
+ * Paneles que todavía no tienen módulos con lógica propia: misma estructura
+ * que los paneles reales (permiso, módulos, acento) para que su acceso se
+ * valide igual que el resto.
  */
 export const PANEL_ANALISIS: PanelDef = {
   id: 'analisis',
@@ -218,7 +213,6 @@ export const PANEL_ANALISIS: PanelDef = {
   icono: 'analisis',
   ruta: '/analisis',
   permiso: PERMISOS.PANEL_ANALISIS,
-  publico: true,
   acento: 'var(--brand)',
   modulos: [
     {
@@ -239,7 +233,6 @@ export const PANEL_TRAZABILIDAD: PanelDef = {
   icono: 'trazabilidad',
   ruta: '/trazabilidad',
   permiso: PERMISOS.PANEL_TRAZABILIDAD,
-  publico: true,
   acento: 'var(--accent)',
   modulos: [
     {
@@ -260,7 +253,6 @@ export const PANEL_LOGISTICA: PanelDef = {
   icono: 'logistica',
   ruta: '/logistica',
   permiso: PERMISOS.PANEL_LOGISTICA,
-  publico: true,
   acento: 'var(--success)',
   modulos: [
     {
@@ -281,7 +273,6 @@ export const PANEL_AUTOMATIZACION: PanelDef = {
   icono: 'automatizacion',
   ruta: '/automatizacion',
   permiso: PERMISOS.PANEL_AUTOMATIZACION,
-  publico: true,
   acento: 'var(--violet)',
   modulos: [
     {
@@ -302,7 +293,6 @@ export const PANEL_SINCRONIZACION: PanelDef = {
   icono: 'sincronizacion',
   ruta: '/sincronizacion',
   permiso: PERMISOS.PANEL_SINCRONIZACION,
-  publico: true,
   acento: '#f59e0b',
   modulos: [
     {
@@ -319,9 +309,9 @@ export const PANEL_SINCRONIZACION: PanelDef = {
 export const PANELES: PanelDef[] = [
   PANEL_ADMIN,
   PANEL_BITACORA,
-  PANEL_INBOUND,
   PANEL_SIMULACION,
   PANEL_MALLA,
+  PANEL_PICKING,
   PANEL_ANALISIS,
   PANEL_TRAZABILIDAD,
   PANEL_LOGISTICA,
@@ -329,11 +319,8 @@ export const PANELES: PanelDef[] = [
   PANEL_SINCRONIZACION,
 ];
 
-/** Módulos del panel que el usuario puede abrir (todos si el panel es público). */
+/** Módulos del panel que el usuario puede abrir. */
 export function modulosAccesibles(panel: PanelDef, permisos: readonly string[]): ModuloPanel[] {
-  if (panel.publico) {
-    return panel.modulos;
-  }
   return panel.modulos.filter((modulo) => permisos.includes(modulo.permiso));
 }
 
@@ -342,7 +329,7 @@ export function primerModuloAccesible(panel: PanelDef, permisos: readonly string
 }
 
 export function panelAccesible(panel: PanelDef, permisos: readonly string[]): boolean {
-  return panel.publico === true || permisos.includes(panel.permiso);
+  return permisos.includes(panel.permiso);
 }
 
 export function tienePermiso(permisos: readonly string[], permiso: string): boolean {

@@ -11,7 +11,7 @@ import oracle.common.model.Auditable;
 
 /** Velocidad base (bultos por hora por operario) de un archivo. */
 @Entity
-@Table(name = "simulacion_config")
+@Table(schema = "simulacion", name = "simulacion_config")
 @Getter
 @Setter
 public class SimulacionConfig extends Auditable {

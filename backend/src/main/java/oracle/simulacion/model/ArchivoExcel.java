@@ -13,7 +13,7 @@ import oracle.common.model.Auditable;
 
 /** Registro de un archivo Excel cargado para simulación. */
 @Entity
-@Table(name = "archivos_excel")
+@Table(schema = "simulacion", name = "archivos_excel")
 @Getter
 @Setter
 public class ArchivoExcel extends Auditable {

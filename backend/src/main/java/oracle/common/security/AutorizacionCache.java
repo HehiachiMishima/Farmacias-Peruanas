@@ -3,7 +3,9 @@ package oracle.common.security;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -28,7 +30,8 @@ import org.springframework.stereotype.Component;
 public class AutorizacionCache {
 
     /** Autorizacion resuelta de un usuario. */
-    public record Autorizacion(boolean activo, String usuario, List<SimpleGrantedAuthority> autoridades) {
+    public record Autorizacion(boolean activo, String usuario, List<SimpleGrantedAuthority> autoridades,
+            Instant credencialesDesde) {
     }
 
     private record Clave(long generacion, Long usuarioId) {
@@ -38,6 +41,7 @@ public class AutorizacionCache {
     private final boolean habilitado;
     private final Cache<Clave, Autorizacion> cache;
     private final AtomicLong generacion = new AtomicLong();
+    private final List<Runnable> oyentes = new CopyOnWriteArrayList<>();
 
     public AutorizacionCache(
             FuenteAutorizacion fuente,
@@ -65,12 +69,23 @@ public class AutorizacionCache {
         if (usuarioId != null) {
             cache.invalidate(new Clave(generacion.get(), usuarioId));
         }
+        oyentes.forEach(Runnable::run);
     }
 
     /** Invalida todas las entradas (cambios de rol o de permisos globales). */
     public void invalidarTodo() {
         generacion.incrementAndGet();
         cache.invalidateAll();
+        oyentes.forEach(Runnable::run);
+    }
+
+    /**
+     * Registra una accion que se ejecuta en cada invalidacion: las caches que
+     * derivan de roles y permisos (p. ej. el resumen de usuarios) se
+     * descartan junto con esta.
+     */
+    public void alInvalidar(Runnable accion) {
+        oyentes.add(accion);
     }
 
     private Autorizacion consultar(Long usuarioId) {
@@ -79,6 +94,6 @@ public class AutorizacionCache {
         List<SimpleGrantedAuthority> autoridades = identidad.permisos().stream()
                 .map(SimpleGrantedAuthority::new)
                 .toList();
-        return new Autorizacion(identidad.activo(), identidad.usuario(), autoridades);
+        return new Autorizacion(identidad.activo(), identidad.usuario(), autoridades, identidad.credencialesDesde());
     }
 }

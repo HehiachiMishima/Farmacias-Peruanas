@@ -76,7 +76,7 @@
                 [class.ui-input--invalid]="campoInvalido('contrasenaNueva')"
                 formControlName="contrasenaNueva"
                 autocomplete="new-password"
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 10 caracteres"
               />
               <button
                 type="button"
@@ -88,7 +88,7 @@
               </button>
             </div>
             @if (campoInvalido('contrasenaNueva')) {
-              <span class="ui-error">Mínimo 6 caracteres.</span>
+              <span class="ui-error">Entre 10 y 72 caracteres.</span>
             }
           </div>
 

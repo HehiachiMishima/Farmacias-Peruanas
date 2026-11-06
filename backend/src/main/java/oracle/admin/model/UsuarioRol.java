@@ -15,7 +15,7 @@ import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
 
 @Entity
-@Table(name = "usuarios_roles")
+@Table(schema = "seguridad", name = "usuarios_roles")
 @Getter
 @Setter
 public class UsuarioRol {

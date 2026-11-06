@@ -3,16 +3,18 @@
 .env.*
 !.env.example
 
-# --- Certificados (CA TLS de Aiven) ---
-certs/
-*.pem
-
 # --- Sistema operativo / editores ---
 .DS_Store
 Thumbs.db
 .idea/
 *.iml
 .vscode/
+.github/
+.claude/
 
 # --- Logs ---
 *.log
+*.sql
+# --- Datos desechables del panel Picking (los trae el SFTP) ---
+/data/
+/backend/data/

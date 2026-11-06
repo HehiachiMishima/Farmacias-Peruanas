@@ -10,7 +10,9 @@ import org.slf4j.LoggerFactory;
 import java.sql.SQLException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.dao.QueryTimeoutException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -23,7 +25,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.transaction.TransactionTimedOutException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -162,13 +166,16 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * La peticion asincrona (Mono) supero spring.mvc.async.request-timeout: el
-     * servicio esta saturado o la operacion es demasiado lenta -> 503.
+     * La operacion supero su tope de tiempo: el de un lote analitico
+     * (TiempoAgotadoException) o el total de una transaccion de lectura
+     * (TransactionTimedOutException, ver Transacciones.consultar con tope) -> 503.
      */
-    @ExceptionHandler(AsyncRequestTimeoutException.class)
-    public ResponseEntity<ApiError> tiempoAgotado(AsyncRequestTimeoutException ex, HttpServletRequest req) {
-        return cuerpo(HttpStatus.SERVICE_UNAVAILABLE,
-                "La operacion tardo demasiado en responder. Intente de nuevo.", req);
+    @ExceptionHandler({TiempoAgotadoException.class, TransactionTimedOutException.class})
+    public ResponseEntity<ApiError> tiempoAgotado(RuntimeException ex, HttpServletRequest req) {
+        String mensaje = ex instanceof TiempoAgotadoException
+                ? ex.getMessage()
+                : "La consulta tardo demasiado en responder. Intente de nuevo.";
+        return cuerpo(HttpStatus.SERVICE_UNAVAILABLE, mensaje, req);
     }
 
     /** Ruta inexistente: ninguna coincidencia de handler ni recurso estatico. */
@@ -178,22 +185,31 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Errores de la base de datos. Distingue:
-     *  - SQLSTATE 45000: SIGNAL de un trigger de proteccion -> 403 con su mensaje.
-     *  - error 1451 (FK RESTRICT al borrar/actualizar un padre en uso) -> 409 claro.
-     *  - resto de violaciones de integridad (uq_*, FK) -> 409 generico.
+     * Errores de PostgreSQL, por SQLSTATE:
+     *  - AT403: trigger de proteccion (comun.proteger) -> 403 con su mensaje.
+     *  - 23503: FK; al borrar o cambiar un padre en uso -> 409 claro.
+     *  - 23505: UNIQUE (uq_*) -> 409 de duplicado.
+     *  - resto de violaciones de integridad (CHECK, NOT NULL) -> 409 generico.
      */
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<ApiError> baseDeDatos(DataAccessException ex, HttpServletRequest req) {
         SQLException sql = causaSql(ex);
-        if (sql != null && "45000".equals(sql.getSQLState())) {
-            return cuerpo(HttpStatus.FORBIDDEN, sql.getMessage(), req);
+        String estado = sql == null ? null : sql.getSQLState();
+        if (ESTADO_PROTECCION.equals(estado)) {
+            return cuerpo(HttpStatus.FORBIDDEN, mensajeServidor(sql), req);
         }
-        if (sql != null && sql.getErrorCode() == 1451) {
+        // lock_timeout (55P03) o deadlock (40P01): otra persona está modificando lo mismo.
+        if (ex instanceof PessimisticLockingFailureException
+                || ESTADO_SIN_BLOQUEO.equals(estado) || ESTADO_INTERBLOQUEO.equals(estado)) {
+            return cuerpo(HttpStatus.CONFLICT,
+                    "Otra persona esta modificando este registro en este momento. Intente de nuevo en unos segundos.", req);
+        }
+        if (ESTADO_FK.equals(estado) && sql.getMessage() != null
+                && sql.getMessage().contains("update or delete on table")) {
             return cuerpo(HttpStatus.CONFLICT,
                     "El registro esta en uso por otros datos y no se puede eliminar.", req);
         }
-        if (sql != null && sql.getErrorCode() == 1062) {
+        if (ESTADO_UNICO.equals(estado)) {
             return cuerpo(HttpStatus.CONFLICT, "Ya existe un registro con esos datos.", req);
         }
         if (ex instanceof DataIntegrityViolationException) {
@@ -207,6 +223,47 @@ public class GlobalExceptionHandler {
         }
         log.error("Error de acceso a datos", ex);
         return cuerpo(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno inesperado.", req);
+    }
+
+    /**
+     * Sin conexion a la base: el pool Hikari se agoto (connection-timeout de 3 s)
+     * o la base no responde. Al abrir la transaccion llega como
+     * CannotCreateTransactionException; en JDBC sin transaccion (analitica), como
+     * CannotGetJdbcConnectionException. Es saturacion pasajera, no un error del
+     * codigo: 503 con Retry-After para que el cliente reintente, y una linea de
+     * aviso (sin stack) para no inundar el log justo cuando hay mas carga.
+     */
+    @ExceptionHandler({CannotCreateTransactionException.class, CannotGetJdbcConnectionException.class})
+    public ResponseEntity<ApiError> sinConexion(RuntimeException ex, HttpServletRequest req) {
+        log.warn("Sin conexion a la base para {} {}: {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(REINTENTAR_EN_S))
+                .body(ApiError.de(HttpStatus.SERVICE_UNAVAILABLE.value(),
+                        HttpStatus.SERVICE_UNAVAILABLE.getReasonPhrase(),
+                        "El sistema esta atendiendo muchas solicitudes. Intente de nuevo en unos segundos.",
+                        req.getRequestURI()));
+    }
+
+    /** Segundos sugeridos al cliente para reintentar cuando no hay conexion libre. */
+    static final int REINTENTAR_EN_S = 2;
+
+    /** SQLSTATE con que fallan los triggers de proteccion (comun.proteger en postgresql.sql). */
+    static final String ESTADO_PROTECCION = "AT403";
+    private static final String ESTADO_FK = "23503";
+    private static final String ESTADO_UNICO = "23505";
+    /** lock_timeout vencido esperando el bloqueo de otra transacción. */
+    private static final String ESTADO_SIN_BLOQUEO = "55P03";
+    private static final String ESTADO_INTERBLOQUEO = "40P01";
+
+    /**
+     * Mensaje del trigger sin el envoltorio del driver: PostgreSQL lo entrega
+     * como "ERROR: <mensaje>" seguido del contexto (Where: funcion PL/pgSQL...).
+     */
+    static String mensajeServidor(SQLException sql) {
+        String mensaje = sql.getMessage() == null ? "" : sql.getMessage();
+        int salto = mensaje.indexOf('\n');
+        String linea = (salto < 0 ? mensaje : mensaje.substring(0, salto)).strip();
+        return linea.startsWith("ERROR:") ? linea.substring("ERROR:".length()).strip() : linea;
     }
 
     private static SQLException causaSql(Throwable ex) {

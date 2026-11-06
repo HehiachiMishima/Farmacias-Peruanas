@@ -10,11 +10,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * Ejecuta bloques de trabajo dentro de una transaccion.
  *
- * Los services devuelven Mono y ejecutan su cuerpo en Schedulers.boundedElastic,
- * por lo que @Transactional en el metodo publico no abarcaria el trabajo real
- * (solo la construccion del Mono). Este helper permite abrir la transaccion
- * DENTRO del hilo de trabajo, de modo que las lecturas + escritura de una
- * operacion compartan la misma transaccion (evita ventanas TOCTOU inconsistentes).
+ * Los services abren la transaccion con este helper (en lugar de @Transactional)
+ * para que cubra exactamente el trabajo medido con Trazas.medir: las lecturas y
+ * la escritura de una operacion comparten la misma transaccion (evita ventanas
+ * TOCTOU inconsistentes) y el armado de la respuesta queda fuera de ella.
  *
  * Las lecturas puramente de solo consulta usan consultar() (readOnly=true).
  * Los efectos fuera de la BD (invalidar caches) se registran con alConfirmar()
@@ -25,8 +24,10 @@ public class Transacciones {
 
     private final TransactionTemplate escritura;
     private final TransactionTemplate lectura;
+    private final PlatformTransactionManager gestor;
 
     public Transacciones(PlatformTransactionManager gestor) {
+        this.gestor = gestor;
         this.escritura = new TransactionTemplate(gestor);
         this.lectura = new TransactionTemplate(gestor);
         this.lectura.setReadOnly(true);
@@ -38,6 +39,17 @@ public class Transacciones {
 
     public <T> T consultar(Supplier<T> trabajo) {
         return lectura.execute(estado -> trabajo.get());
+    }
+
+    /**
+     * Lectura con tope TOTAL en segundos: Spring aplica a cada sentencia JDBC/JPA
+     * el tiempo que le queda a la transacción, así una consulta de varias
+     * sentencias no supera el tope aunque cada una quede bajo statement_timeout.
+     */
+    public <T> T consultar(Supplier<T> trabajo, int topeSegundos) {
+        TransactionTemplate conTope = new TransactionTemplate(gestor, lectura);
+        conTope.setTimeout(topeSegundos);
+        return conTope.execute(estado -> trabajo.get());
     }
 
     /**

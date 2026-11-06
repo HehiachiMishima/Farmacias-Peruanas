@@ -21,8 +21,12 @@ export const CONFIG = {
     duracionError: 6000,
   },
   sesion: {
-    /** Margen (ms) antes del vencimiento real para forzar el cierre. */
-    margenExpiracionMs: 0,
+    /** El access token se renueva este tiempo antes de vencer (si hubo actividad). */
+    anticipoRenovacionMs: 60_000,
+    /** Sin conexión al renovar: se reintenta pasado este tiempo. */
+    reintentoMs: 30_000,
+    /** Al abrir la app, cuánto se espera la renovación antes de seguir sin sesión. */
+    esperaInicioMs: 8_000,
   },
   /**
    * Zona horaria del negocio (Lima, sin horario de verano). La API envía la

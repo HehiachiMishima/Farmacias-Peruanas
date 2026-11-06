@@ -43,6 +43,22 @@ RUN apk add --no-cache nginx supervisor gettext \
 COPY --from=backend /app/target/*.jar /app/app.jar
 COPY --from=frontend /app/dist/frontend/browser /usr/share/nginx/html
 
+# --- Cabeceras de seguridad (se incluyen en CADA location: en nginx un
+#     add_header dentro de un location anula los heredados del server) ---
+#   CSP: solo scripts propios (el build no deja scripts inline), estilos
+#   propios + Google Fonts (Angular inyecta <style>, por eso 'unsafe-inline'
+#   en estilos, nunca en scripts), API en el mismo origen, sin iframes.
+RUN cat > /etc/nginx/seguridad.conf <<'NGINX'
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "DENY" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
+add_header Cross-Origin-Opener-Policy "same-origin" always;
+add_header Cross-Origin-Resource-Policy "same-origin" always;
+NGINX
+
 # --- Config de nginx: sirve el SPA y proxifica /api al backend ---
 RUN cat > /etc/nginx/http.d/default.conf.template <<'NGINX'
 # Protocolo original del cliente: Render termina TLS antes de nginx y envia
@@ -79,14 +95,21 @@ server {
     gzip_min_length 1024;
     gzip_proxied any;
     gzip_vary on;
-    gzip_types text/plain text/css text/javascript application/javascript application/json application/xml image/svg+xml font/woff2;
+    gzip_types text/plain text/csv text/css text/javascript application/javascript application/json application/xml image/svg+xml font/woff2;
 
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "DENY" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    include /etc/nginx/seguridad.conf;
 
+    # Respuestas de la API: nunca en caches intermedias ni del navegador.
     location /api/ {
+        include /etc/nginx/seguridad.conf;
+        add_header Cache-Control "no-store" always;
+        # Las mismas cabeceras que pone Spring Security: una sola copia (la de nginx).
+        proxy_hide_header X-Content-Type-Options;
+        proxy_hide_header X-Frame-Options;
+        proxy_hide_header Strict-Transport-Security;
+        proxy_hide_header Cache-Control;
+        proxy_hide_header Pragma;
+        proxy_hide_header Expires;
         proxy_pass http://backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -104,16 +127,15 @@ server {
 
     # Assets con hash en el nombre (Angular outputHashing=all): cache larga.
     location ~* \.(?:js|css|woff2?|ttf|eot|png|jpe?g|gif|svg|webp|ico)$ {
+        include /etc/nginx/seguridad.conf;
         add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header X-Content-Type-Options "nosniff" always;
         try_files $uri =404;
     }
 
     # index.html nunca se cachea: asi cada deploy se ve al instante.
     location = /index.html {
+        include /etc/nginx/seguridad.conf;
         add_header Cache-Control "no-cache, no-store, must-revalidate";
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-Frame-Options "DENY" always;
     }
 
     location / {

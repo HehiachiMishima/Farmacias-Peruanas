@@ -62,4 +62,45 @@ class LoginRateLimiterTest {
         assertThatThrownBy(() -> limiter.verificarPorIp("10.0.0.1"))
                 .isInstanceOf(LimiteExcedidoException.class);
     }
+
+    @Test
+    void laReservaCuentaElIntentoAntesDeVerificarLaContrasena() {
+        LoginRateLimiter limiter = new LoginRateLimiter();
+
+        for (int i = 0; i < MAX_POR_USUARIO; i++) {
+            limiter.reservarLogin("10.0.0.1", "ana");
+        }
+
+        assertThatThrownBy(() -> limiter.reservarLogin("10.0.0.1", "ana"))
+                .isInstanceOf(LimiteExcedidoException.class);
+    }
+
+    @Test
+    void elCuboPorCuentaFrenaElAtaqueDesdeMuchasIps() {
+        LoginRateLimiter limiter = new LoginRateLimiter();
+
+        for (int i = 0; i < 20; i++) {
+            limiter.reservarLogin("10.0.1." + i, "@admin");
+        }
+
+        assertThatThrownBy(() -> limiter.reservarLogin("10.0.2.1", "@ADMIN"))
+                .isInstanceOf(LimiteExcedidoException.class);
+    }
+
+    @Test
+    void unLoginCorrectoLiberaUsuarioYCuentaPeroNoLaIp() {
+        LoginRateLimiter limiter = new LoginRateLimiter();
+        LoginRateLimiter.Reserva reserva = null;
+        for (int i = 0; i < MAX_POR_USUARIO; i++) {
+            reserva = limiter.reservarLogin("10.0.0.1", "ana");
+        }
+
+        limiter.loginCorrecto(reserva);
+
+        assertThatCode(() -> limiter.reservarLogin("10.0.0.1", "ana")).doesNotThrowAnyException();
+        for (int i = 0; i < MAX_POR_IP - MAX_POR_USUARIO - 1; i++) {
+            limiter.reservarLogin("10.0.0.1", "otro" + i);
+        }
+        assertThatThrownBy(() -> limiter.verificarPorIp("10.0.0.1")).isInstanceOf(LimiteExcedidoException.class);
+    }
 }

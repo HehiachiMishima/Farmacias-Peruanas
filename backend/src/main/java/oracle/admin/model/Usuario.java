@@ -1,5 +1,6 @@
 package oracle.admin.model;
 
+import java.time.Instant;
 import oracle.common.model.Auditable;
 
 import jakarta.persistence.Column;
@@ -12,7 +13,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Table(name = "usuarios")
+@Table(schema = "seguridad", name = "usuarios")
 @Getter
 @Setter
 public class Usuario extends Auditable {
@@ -42,4 +43,8 @@ public class Usuario extends Auditable {
 
     @Column(name = "activo", nullable = false)
     private Boolean activo = Boolean.TRUE;
+
+    /** Ultimo cambio de contrasena (lo fija un trigger): invalida los tokens anteriores. */
+    @Column(name = "credenciales_desde", insertable = false, updatable = false)
+    private Instant credencialesDesde;
 }

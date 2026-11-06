@@ -12,7 +12,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Table(name = "data_incidencia")
+@Table(schema = "bitacora", name = "data_incidencia")
 @Getter
 @Setter
 public class DataIncidencia extends Auditable {

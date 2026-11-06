@@ -5,6 +5,7 @@ import java.util.List;
 import oracle.bitacora.request.FiltroIncidencia;
 import oracle.common.config.ZonaNegocio;
 import oracle.common.support.CondicionSql;
+import oracle.common.support.Filtros;
 
 /** WHERE dinamico de la tabla {@code incidencias} (alias {@code i}) a partir del filtro. */
 final class CondicionIncidencia {
@@ -44,7 +45,7 @@ final class CondicionIncidencia {
             }
             if (filtro.texto() != null && !filtro.texto().isBlank()) {
                 condiciones.add("(LOWER(i.ticket) LIKE ? OR LOWER(i.descripcion) LIKE ?)");
-                String patron = "%" + filtro.texto().trim().toLowerCase() + "%";
+                String patron = "%" + Filtros.escaparLike(filtro.texto().trim().toLowerCase()) + "%";
                 args.add(patron);
                 args.add(patron);
             }

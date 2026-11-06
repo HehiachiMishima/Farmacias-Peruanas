@@ -37,12 +37,4 @@ public class ZonaNegocio {
     public Timestamp inicioDelDiaSql(LocalDate dia) {
         return Timestamp.from(inicioDelDia(dia));
     }
-
-    /**
-     * Desfase actual del negocio respecto de UTC, en segundos, para agrupar
-     * por dia o mes en SQL sin depender de las tablas de zonas de MySQL.
-     */
-    public int desfaseSegundos() {
-        return zona.getRules().getOffset(Instant.now()).getTotalSeconds();
-    }
 }

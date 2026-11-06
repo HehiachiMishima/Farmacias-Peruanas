@@ -10,7 +10,8 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 /**
- * Consultas de resolucion de permisos sobre las vistas de MySQL.
+ * Consultas de resolucion de permisos sobre las vistas de PostgreSQL
+ * (v_permisos_efectivos y v_permisos_finales, esquema seguridad).
  * Al ser vistas (no entidades), se leen con JdbcTemplate y se mapean
  * directamente a las respuestas, evitando el problema de identidad de una
  * entidad JPA cuando la vista devuelve filas con la misma clave.

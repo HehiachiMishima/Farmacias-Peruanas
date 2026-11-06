@@ -229,7 +229,7 @@ public final class SimulacionExcel {
   /**
    * Nombre canónico para guardar (cluster, chute, ruta): sin espacios al borde y con los espacios
    * internos (incluidos los no separables) reducidos a uno. Conserva mayúsculas y tildes; de eso
-   * se encarga la colación utf8mb4_unicode_ci. La colación NO colapsa espacios internos, por eso
+   * se encarga la colación comun.ci de PostgreSQL. La colación NO colapsa espacios internos, por eso
    * se normalizan antes de insertar.
    */
   public static String nombre(String texto) {
@@ -244,7 +244,7 @@ public final class SimulacionExcel {
 
   /**
    * Clave de comparación de nombres (cluster, chute, ruta): {@link #nombre(String)} en mayúsculas y
-   * sin tildes. Equivale a utf8mb4_unicode_ci sobre el nombre canónico, así que dos nombres con la
+   * sin tildes. Equivale a la colación comun.ci sobre el nombre canónico, así que dos nombres con la
    * misma clave son el mismo registro.
    */
   public static String clave(String texto) {

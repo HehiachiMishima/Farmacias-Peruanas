@@ -15,7 +15,7 @@ import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
 
 @Entity
-@Table(name = "roles_permisos")
+@Table(schema = "seguridad", name = "roles_permisos")
 @Getter
 @Setter
 /** Plantilla RBAC. No extiende Auditable: la tabla solo tiene creado_*. */

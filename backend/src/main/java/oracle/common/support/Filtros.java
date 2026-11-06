@@ -28,6 +28,14 @@ public final class Filtros {
                 : cb.like(cb.lower(root.get(campo)), "%" + termino.toLowerCase() + "%");
     }
 
+    /**
+     * Escapa los comodines de LIKE (\\, % y _) para que el texto del usuario se
+     * busque literal. Usar con ESCAPE '\\' (el predeterminado de PostgreSQL).
+     */
+    public static String escaparLike(String texto) {
+        return texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
     private Filtros() {
     }
 }

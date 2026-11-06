@@ -20,7 +20,18 @@ export function exportarCsv(
   );
 }
 
+/**
+ * Un texto que empieza con = + - @ (o tabulador / retorno) Excel lo ejecuta como
+ * fórmula: `=HYPERLINK(...)` escrito en una incidencia correría en el equipo de
+ * quien exporta. Se antepone un apóstrofo para que quede como texto. Los números
+ * reales (negativos incluidos) se exportan tal cual.
+ */
+const INICIO_FORMULA = /^[=+\-@\t\r]/;
+
 function celdaCsv(valor: string | number | null | undefined): string {
-  const texto = valor === null || valor === undefined ? '' : String(valor);
+  let texto = valor === null || valor === undefined ? '' : String(valor);
+  if (typeof valor === 'string' && INICIO_FORMULA.test(texto)) {
+    texto = `'${texto}`;
+  }
   return `"${texto.replace(/"/g, '""')}"`;
 }

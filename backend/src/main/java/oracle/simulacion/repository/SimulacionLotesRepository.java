@@ -21,13 +21,15 @@ import org.springframework.stereotype.Repository;
  * Se usa JdbcTemplate en lugar de JPA porque las entidades con id IDENTITY
  * desactivan el batching de Hibernate (100k rutas serían 100k INSERT) y las
  * de clave asignada harían un SELECT previo por fila. Con
- * rewriteBatchedStatements cada lote viaja como un INSERT multi-fila.
+ * reWriteBatchedInserts (URL de la conexión) cada lote viaja como un INSERT
+ * multi-fila.
  */
 @Repository
 public class SimulacionLotesRepository {
 
   private static final int LOTE = 2_000;
   private static final int LOTE_IN = 500;
+  private static final int LOTE_UPDATE = 10_000;
 
   private final JdbcTemplate jdbc;
 
@@ -84,19 +86,41 @@ public class SimulacionLotesRepository {
         });
   }
 
-  /** Chute nuevo de cada ruta movida por el balanceo (id → chute), en lotes. */
+  /**
+   * Chute nuevo de cada ruta movida por el balanceo (id → chute). Un solo UPDATE por
+   * bloque con los pares en dos arrays: restablecer un cluster de 100 mil rutas eran
+   * ~26 mil UPDATE de una fila cada uno.
+   */
   public void moverRutas(Map<Long, Long> chutes) {
-    if (chutes.isEmpty()) {
+    actualizarEnLote(chutes, "chute_id");
+  }
+
+  /** Cluster de cada ruta (id → cluster), en lote: deshacer cambios de cluster al restablecer. */
+  public void cambiarClusters(Map<Long, Long> clusters) {
+    actualizarEnLote(clusters, "cluster_id");
+  }
+
+  /** UPDATE por bloques de pares (id de ruta, valor); la columna es una constante interna. */
+  private void actualizarEnLote(Map<Long, Long> valores, String columna) {
+    if (valores.isEmpty()) {
       return;
     }
-    jdbc.batchUpdate(
-        "UPDATE rutas_proyeccion SET chute_id = ? WHERE id = ?",
-        List.copyOf(chutes.entrySet()),
-        LOTE,
-        (ps, cambio) -> {
-          ps.setLong(1, cambio.getValue());
-          ps.setLong(2, cambio.getKey());
-        });
+    String sql =
+        "UPDATE rutas_proyeccion r SET " + columna + " = c.valor"
+            + " FROM unnest(?::bigint[], ?::bigint[]) AS c(id, valor) WHERE r.id = c.id";
+    List<Map.Entry<Long, Long>> cambios = List.copyOf(valores.entrySet());
+    for (int i = 0; i < cambios.size(); i += LOTE_UPDATE) {
+      List<Map.Entry<Long, Long>> bloque = cambios.subList(i, Math.min(i + LOTE_UPDATE, cambios.size()));
+      Long[] ids = bloque.stream().map(Map.Entry::getKey).toArray(Long[]::new);
+      Long[] destinos = bloque.stream().map(Map.Entry::getValue).toArray(Long[]::new);
+      jdbc.update(
+          conexion -> {
+            var ps = conexion.prepareStatement(sql);
+            ps.setArray(1, conexion.createArrayOf("bigint", ids));
+            ps.setArray(2, conexion.createArrayOf("bigint", destinos));
+            return ps;
+          });
+    }
   }
 
   /**
@@ -146,8 +170,8 @@ public class SimulacionLotesRepository {
         """
         INSERT INTO rutas_proyeccion
             (archivo_id, chute_id, chute_original_id, cluster_id, codigo_ruta, tipo,
-             total_bultos, total_unidades, total_lineas, conteo_cod)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             total_bultos, total_unidades, total_lineas, conteo_cod, cluster_original_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         rutas,
         LOTE,
@@ -157,24 +181,27 @@ public class SimulacionLotesRepository {
           ps.setLong(2, chuteId);
           // El chute original se congela al cargar: el balanceo solo cambia chute_id.
           ps.setLong(3, chuteId);
-          ps.setLong(4, idCluster.computeIfAbsent(ruta.cluster(), (n) -> id(clusters, "cluster", n)));
+          long clusterId = idCluster.computeIfAbsent(ruta.cluster(), (n) -> id(clusters, "cluster", n));
+          ps.setLong(4, clusterId);
           ps.setString(5, SimulacionExcel.nombre(ruta.codigoRuta()));
           ps.setString(6, ruta.tipo().name());
           ps.setBigDecimal(7, ruta.bultos());
           ps.setBigDecimal(8, ruta.unidades());
           ps.setBigDecimal(9, ruta.lineas());
           ps.setInt(10, ruta.conteoCod());
+          // Igual que el chute: el cluster original se congela al cargar.
+          ps.setLong(11, clusterId);
         });
   }
 
   /**
-   * INSERT IGNORE + lectura con bloqueo compartido: si dos cargas crean el
-   * mismo nombre a la vez, la segunda espera a la primera y reutiliza su
-   * fila en lugar de fallar con la restricción UNIQUE. FOR SHARE lee lo
-   * último confirmado, no la instantánea de la transacción.
+   * INSERT … ON CONFLICT DO NOTHING + lectura con bloqueo compartido: si dos
+   * cargas crean el mismo nombre a la vez, la segunda espera a la primera y
+   * reutiliza su fila en lugar de fallar con la restricción UNIQUE. FOR SHARE
+   * lee lo último confirmado (READ COMMITTED), no una instantánea vieja.
    */
   private Map<String, Long> asegurarCatalogo(String tabla, Collection<String> nombres) {
-    // Se inserta el nombre canónico (espacios internos colapsados): la colación de MySQL ignora
+    // Se inserta el nombre canónico (espacios internos colapsados): la colación comun.ci ignora
     // mayúsculas y tildes pero NO colapsa espacios, así que "CHUTE  1" y "CHUTE 1" serían dos
     // filas con la misma clave y el id resultante dependería del orden del SELECT.
     Map<String, String> porClave = new LinkedHashMap<>();
@@ -182,7 +209,7 @@ public class SimulacionLotesRepository {
         (nombre) -> porClave.putIfAbsent(SimulacionExcel.clave(nombre), SimulacionExcel.nombre(nombre)));
     List<String> unicos = new ArrayList<>(porClave.values());
     jdbc.batchUpdate(
-        "INSERT IGNORE INTO " + tabla + " (nombre, activo) VALUES (?, TRUE)",
+        "INSERT INTO " + tabla + " (nombre, activo) VALUES (?, TRUE) ON CONFLICT (nombre) DO NOTHING",
         unicos,
         LOTE,
         (ps, nombre) -> ps.setString(1, nombre));

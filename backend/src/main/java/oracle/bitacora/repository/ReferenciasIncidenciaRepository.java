@@ -18,7 +18,7 @@ public class ReferenciasIncidenciaRepository {
               EXISTS(SELECT 1 FROM data_area WHERE id = ?) AS area,
               (SELECT id_data_sistema FROM data_incidencia WHERE id = ?) AS sistema_del_tipo,
               (SELECT id_data_area FROM data_responsable WHERE id = ?) AS area_del_responsable,
-              EXISTS(SELECT 1 FROM incidencias WHERE ticket = ? AND id <> ?) AS ticket_ocupado
+              EXISTS(SELECT 1 FROM incidencias WHERE lower(ticket) = lower(?) AND id <> ?) AS ticket_ocupado
             """;
 
     private final JdbcTemplate jdbc;

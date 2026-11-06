@@ -9,6 +9,8 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import oracle.common.model.Auditable;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Regla operativa de la Malla. El catálogo de reglas vive en la base de datos
@@ -17,7 +19,7 @@ import oracle.common.model.Auditable;
  * cada regla y cómo interpretar sus parámetros.
  */
 @Entity
-@Table(name = "malla_regla")
+@Table(schema = "malla", name = "malla_regla")
 @Getter
 @Setter
 public class MallaRegla extends Auditable {
@@ -43,8 +45,9 @@ public class MallaRegla extends Auditable {
     @Column(name = "severidad", length = 10, nullable = false)
     private String severidad;
 
-    /** Parámetros efectivos en JSON: {"clave":"valor"}. */
-    @Column(name = "parametros", nullable = false, columnDefinition = "TEXT")
+    /** Parámetros efectivos (JSONB): {"clave":"valor"}. Se lee y escribe como texto JSON. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "parametros", nullable = false)
     private String parametros;
 
     @Column(name = "activa", nullable = false)

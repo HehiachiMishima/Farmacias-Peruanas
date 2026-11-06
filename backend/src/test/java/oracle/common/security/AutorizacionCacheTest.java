@@ -26,7 +26,7 @@ class AutorizacionCacheTest {
     }
 
     private Optional<FuenteAutorizacion.Identidad> anaActiva(List<String> permisos) {
-        return Optional.of(new FuenteAutorizacion.Identidad(true, "ana", permisos));
+        return Optional.of(new FuenteAutorizacion.Identidad(true, "ana", permisos, null));
     }
 
     @Test

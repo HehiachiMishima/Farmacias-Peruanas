@@ -35,6 +35,17 @@
     Actualizar
   </button>
   <button
+    *hasPermiso="permisos.EXPORTAR_USUARIOS"
+    type="button"
+    class="ui-btn ui-btn--secondary ui-btn--sm"
+    title="Exportar a Excel (CSV) con la búsqueda y los filtros aplicados"
+    (click)="exportar()"
+    [disabled]="listado.cargando() || !listado.filtrados().length"
+  >
+    <ui-icon name="descargar" [size]="16" />
+    Exportar
+  </button>
+  <button
     type="button"
     class="ui-btn ui-btn--secondary ui-btn--sm"
     [attr.aria-expanded]="listado.filtrosAbierto()"
@@ -331,10 +342,10 @@
         class="ui-input"
         [class.ui-input--invalid]="campoInvalido('contrasena')"
         formControlName="contrasena"
-        [placeholder]="editando() ? 'Dejar en blanco para no cambiar' : 'Mínimo 6 caracteres'"
+        [placeholder]="editando() ? 'Dejar en blanco para no cambiar' : 'Mínimo 10 caracteres'"
       />
       @if (campoInvalido('contrasena')) {
-        <span class="ui-error">Mínimo 6 caracteres.</span>
+        <span class="ui-error">Entre 10 y 72 caracteres.</span>
       }
     </div>
 

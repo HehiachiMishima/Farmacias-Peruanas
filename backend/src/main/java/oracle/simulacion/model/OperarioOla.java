@@ -13,7 +13,7 @@ import lombok.Setter;
  * cluster cerrado es la que recibe el siguiente.
  */
 @Entity
-@Table(name = "operarios_ola")
+@Table(schema = "simulacion", name = "operarios_ola")
 @Getter
 @Setter
 public class OperarioOla {

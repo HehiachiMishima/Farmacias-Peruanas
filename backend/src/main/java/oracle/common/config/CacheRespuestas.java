@@ -17,8 +17,7 @@ import org.springframework.stereotype.Component;
  * invalida por completo con invalidarTodo() o solo un espacio con
  * invalidarEspacio(): el espacio de una clave es el texto antes del primer
  * ':' (p. ej. "bitacora-analitica:filtro" pertenece a "bitacora-analitica"),
- * asi una escritura de Bitacora no descarta los dashboards de Inbound ni de
- * Simulacion.
+ * asi una escritura de Bitacora no descarta los dashboards de Simulacion.
  *
  * La clave interna incluye una generacion global (que invalidarTodo() avanza)
  * y la del espacio (que avanza invalidarEspacio()): un calculo que estaba en

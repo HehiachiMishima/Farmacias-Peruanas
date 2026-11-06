@@ -1,7 +1,5 @@
 package oracle.common.config;
 
-import jakarta.servlet.AsyncEvent;
-import jakarta.servlet.AsyncListener;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,10 +19,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * correlation-id en el MDC (y en la cabecera X-Request-Id) para poder cruzar
  * todas las lineas de log de una misma peticion.
  *
- * Los controllers devuelven Mono, de modo que la respuesta se completa en un
- * dispatch ASYNC posterior. Por eso, cuando la peticion entra en modo async, el
- * registro se hace en un AsyncListener (con el estado y la duracion reales) en
- * lugar del finally del filtro. No registra la query string para no volcar PII.
+ * Todas las respuestas son sincronas (Spring MVC, un hilo virtual por peticion):
+ * el registro se hace al terminar la cadena. No registra la query string para
+ * no volcar PII.
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -33,13 +30,10 @@ public class RegistroPeticiones extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(RegistroPeticiones.class);
 
     public static final String CABECERA_CORRELACION = "X-Request-Id";
+    private static final java.util.regex.Pattern CORRELACION_VALIDA =
+            java.util.regex.Pattern.compile("[A-Za-z0-9._-]{1,64}");
     public static final String MDC_CORRELACION = "correlationId";
     private static final int MAX_LARGO_CORRELACION = 128;
-
-    @Override
-    protected boolean shouldNotFilterAsyncDispatch() {
-        return false;
-    }
 
     @Override
     protected void doFilterInternal(
@@ -52,56 +46,8 @@ public class RegistroPeticiones extends OncePerRequestFilter {
         try {
             cadena.doFilter(peticion, respuesta);
         } finally {
-            if (peticion.isAsyncStarted()) {
-                registrarAlCompletarAsync(peticion, respuesta, inicio, correlacion);
-            } else {
-                registrar(peticion, respuesta, inicio);
-                MDC.remove(MDC_CORRELACION);
-            }
-        }
-    }
-
-    private void registrarAlCompletarAsync(
-            HttpServletRequest peticion, HttpServletResponse respuesta, long inicio, String correlacion) {
-        try {
-            peticion.getAsyncContext().addListener(new AsyncListener() {
-                @Override
-                public void onComplete(AsyncEvent evento) {
-                    registrarConContexto(peticion, respuesta, inicio, correlacion);
-                }
-
-                @Override
-                public void onTimeout(AsyncEvent evento) {
-                    registrarConContexto(peticion, respuesta, inicio, correlacion);
-                }
-
-                @Override
-                public void onError(AsyncEvent evento) {
-                    registrarConContexto(peticion, respuesta, inicio, correlacion);
-                }
-
-                @Override
-                public void onStartAsync(AsyncEvent evento) {
-                    // Sin accion: ya estamos trazando este dispatch.
-                }
-            });
-        } catch (IllegalStateException ex) {
             registrar(peticion, respuesta, inicio);
-        }
-    }
-
-    private void registrarConContexto(
-            HttpServletRequest peticion, HttpServletResponse respuesta, long inicio, String correlacion) {
-        String previo = MDC.get(MDC_CORRELACION);
-        MDC.put(MDC_CORRELACION, correlacion);
-        try {
-            registrar(peticion, respuesta, inicio);
-        } finally {
-            if (previo == null) {
-                MDC.remove(MDC_CORRELACION);
-            } else {
-                MDC.put(MDC_CORRELACION, previo);
-            }
+            MDC.remove(MDC_CORRELACION);
         }
     }
 
@@ -112,7 +58,9 @@ public class RegistroPeticiones extends OncePerRequestFilter {
 
     private String resolverCorrelacion(HttpServletRequest peticion) {
         String entrante = peticion.getHeader(CABECERA_CORRELACION);
-        if (entrante != null && !entrante.isBlank() && entrante.length() <= MAX_LARGO_CORRELACION) {
+        // Solo un id con forma segura: el valor llega al MDC, a los logs y a la respuesta.
+        if (entrante != null && entrante.length() <= MAX_LARGO_CORRELACION
+                && CORRELACION_VALIDA.matcher(entrante).matches()) {
             return entrante;
         }
         return UUID.randomUUID().toString();

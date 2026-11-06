@@ -12,7 +12,7 @@ import lombok.Setter;
  * Lo que asigna el paso 2 va por ola en {@link OperarioOla}.
  */
 @Entity
-@Table(name = "parametros_chutes")
+@Table(schema = "simulacion", name = "parametros_chutes")
 @Getter
 @Setter
 public class ParametroChute {

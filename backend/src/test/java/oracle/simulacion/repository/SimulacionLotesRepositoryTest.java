@@ -35,7 +35,7 @@ class SimulacionLotesRepositoryTest {
   void insertaNombresCanonicosSinDuplicarPorEspaciosNiMayusculas() throws Exception {
     JdbcTemplate jdbc = mock(JdbcTemplate.class);
     ArgumentCaptor<Collection<String>> insertados = ArgumentCaptor.forClass(Collection.class);
-    when(jdbc.batchUpdate(startsWith("INSERT IGNORE"), insertados.capture(), anyInt(), any()))
+    when(jdbc.batchUpdate(startsWith("INSERT INTO chutes"), insertados.capture(), anyInt(), any()))
         .thenReturn(new int[0][]);
     // La BD responde con la fila que ya existía con otra capitalización/tilde (colación ci/ai).
     doAnswer(
@@ -102,6 +102,8 @@ class SimulacionLotesRepositoryTest {
     verify(ps).setString(6, "B2C");
     verify(ps).setBigDecimal(7, new BigDecimal("1.00"));
     verify(ps).setInt(10, 3);
+    // El cluster original se congela igual que el chute.
+    verify(ps).setLong(11, 11L);
 
     FilaRuta huerfana =
         new FilaRuta(

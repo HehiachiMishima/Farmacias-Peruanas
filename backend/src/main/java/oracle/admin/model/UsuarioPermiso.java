@@ -16,7 +16,7 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 
 @Entity
-@Table(name = "usuarios_permisos")
+@Table(schema = "seguridad", name = "usuarios_permisos")
 @Getter
 @Setter
 public class UsuarioPermiso {

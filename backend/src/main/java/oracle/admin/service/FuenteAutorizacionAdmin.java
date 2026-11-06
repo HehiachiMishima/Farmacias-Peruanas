@@ -27,6 +27,7 @@ public class FuenteAutorizacionAdmin implements FuenteAutorizacion {
                 .map(usuario -> new Identidad(
                         Boolean.TRUE.equals(usuario.getActivo()),
                         usuario.getUsuario(),
-                        resolucionRepository.nombresPermitidos(usuarioId)));
+                        resolucionRepository.nombresPermitidos(usuarioId),
+                        usuario.getCredencialesDesde()));
     }
 }

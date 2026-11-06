@@ -11,7 +11,7 @@ public record UsuarioCrearRequest(
         String usuario,
 
         @NotBlank(message = "La contrasena es obligatoria.")
-        @Size(min = 6, max = 100, message = "La contrasena debe tener entre 6 y 100 caracteres.")
+        @Size(min = 10, max = 72, message = "La contrasena debe tener entre 10 y 72 caracteres.")
         String contrasena,
 
         @NotBlank(message = "El nombre es obligatorio.")

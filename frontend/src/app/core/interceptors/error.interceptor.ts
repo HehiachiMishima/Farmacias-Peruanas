@@ -7,6 +7,7 @@ import { CONFIG } from '../config/configuracion';
 import { mensajeDeError } from '../errors/error.util';
 import { Notificaciones } from '../services/notificaciones';
 import { SesionStore } from '../services/sesion';
+import { esRutaDeAcceso } from './rutas-acceso';
 
 /**
  * Marca una petición de segundo plano: sus errores no muestran toasts
@@ -18,16 +19,18 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const notificaciones = inject(Notificaciones);
   const sesionStore = inject(SesionStore);
   const router = inject(Router);
-  const esLogin = req.url.includes('/auth/login');
+  // Login, renovación y cierre manejan sus propios errores.
+  const esAcceso = esRutaDeAcceso(req.url);
 
   return next(req).pipe(
     catchError((err: unknown) => {
-      if (esLogin || !(err instanceof HttpErrorResponse)) {
+      if (esAcceso || !(err instanceof HttpErrorResponse)) {
         return throwError(() => err);
       }
 
       const silenciosa = req.context.get(PETICION_SILENCIOSA);
 
+      // Un 401 aquí ya pasó por la renovación (authInterceptor): no hay sesión que recuperar.
       if (err.status === 401) {
         const teniaSesion = sesionStore.sesion() !== null;
         sesionStore.limpiar();

@@ -11,7 +11,7 @@ import lombok.Setter;
 
 /** Catálogo de chutes (CHUTE 1, CHUTE 2, ...). */
 @Entity
-@Table(name = "chutes")
+@Table(schema = "simulacion", name = "chutes")
 @Getter
 @Setter
 public class Chute {

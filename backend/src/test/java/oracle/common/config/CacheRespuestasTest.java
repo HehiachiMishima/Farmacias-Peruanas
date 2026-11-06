@@ -70,17 +70,17 @@ class CacheRespuestasTest {
     @Test
     void invalidarEspacioSoloDescartaSusClaves() {
         AtomicInteger bitacora = new AtomicInteger();
-        AtomicInteger inbound = new AtomicInteger();
+        AtomicInteger simulacion = new AtomicInteger();
         CacheRespuestas cache = cache(true);
 
         cache.obtener("bitacora-analitica:f1", bitacora::incrementAndGet);
-        cache.obtener("inbound-analitica:f1", inbound::incrementAndGet);
+        cache.obtener("simulacion-dashboard:f1", simulacion::incrementAndGet);
         cache.invalidarEspacio("bitacora-analitica");
         cache.obtener("bitacora-analitica:f1", bitacora::incrementAndGet);
-        cache.obtener("inbound-analitica:f1", inbound::incrementAndGet);
+        cache.obtener("simulacion-dashboard:f1", simulacion::incrementAndGet);
 
         assertThat(bitacora.get()).isEqualTo(2);
-        assertThat(inbound.get()).isEqualTo(1);
+        assertThat(simulacion.get()).isEqualTo(1);
     }
 
     @Test

@@ -14,7 +14,7 @@ import lombok.Setter;
 
 /** Ruta proyectada de un archivo (agrupada desde el Excel). */
 @Entity
-@Table(name = "rutas_proyeccion")
+@Table(schema = "simulacion", name = "rutas_proyeccion")
 @Getter
 @Setter
 public class RutaProyeccion {
@@ -34,7 +34,7 @@ public class RutaProyeccion {
   private Long chuteOriginalId;
 
   /**
-   * Columna generada en MySQL (chute_id <> chute_original_id) e indexada: las
+   * Columna generada (STORED) en PostgreSQL (chute_id <> chute_original_id) con índice parcial: las
    * consultas de rutas movidas no recorren todo el registro. Solo lectura.
    */
   @Column(name = "movida", insertable = false, updatable = false)
@@ -42,6 +42,14 @@ public class RutaProyeccion {
 
   @Column(name = "cluster_id", nullable = false)
   private Long clusterId;
+
+  /** Cluster al cargar el Excel: no cambia nunca (restablecer vuelve a él). */
+  @Column(name = "cluster_original_id", nullable = false, updatable = false)
+  private Long clusterOriginalId;
+
+  /** Columna generada (STORED): cluster_id <> cluster_original_id. Solo lectura. */
+  @Column(name = "cluster_cambiado", insertable = false, updatable = false)
+  private boolean clusterCambiado;
 
   @Column(name = "codigo_ruta", length = 50, nullable = false)
   private String codigoRuta;

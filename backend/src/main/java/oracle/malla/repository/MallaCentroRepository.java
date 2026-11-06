@@ -1,7 +1,6 @@
 package oracle.malla.repository;
 
 import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
@@ -36,6 +35,9 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public class MallaCentroRepository {
+
+    /** Columna que devuelve el INSERT (PostgreSQL devolvería la fila entera). */
+    private static final String[] COLUMNA_ID = {"id"};
 
     private final JdbcTemplate jdbc;
 
@@ -93,7 +95,7 @@ public class MallaCentroRepository {
         List<Flujo> flujos = jdbc.query("""
                 SELECT proceso, responsable, hora_inicio, hora_fin, actividad, confirmado
                 FROM malla_flujo WHERE centro_id = ?
-                ORDER BY FIELD(proceso, 'REC', 'ALM', 'REA', 'OLA', 'DES'), orden
+                ORDER BY array_position(ARRAY['REC', 'ALM', 'REA', 'OLA', 'DES']::varchar[], proceso), orden
                 """, (rs, fila) -> new Flujo(
                 rs.getString("proceso"),
                 rs.getString("responsable"),
@@ -104,7 +106,8 @@ public class MallaCentroRepository {
         List<Ola> olas = jdbc.query("""
                 SELECT cluster, nombre, caida_pedidos, lanzamiento, cierre_picking, despacho,
                        confirmado, nota
-                FROM malla_ola WHERE centro_id = ? ORDER BY cluster + 0, cluster, lanzamiento, nombre
+                FROM malla_ola WHERE centro_id = ?
+                ORDER BY COALESCE(substring(cluster FROM '^[0-9]+')::int, 0), cluster, lanzamiento, nombre
                 """, (rs, fila) -> new Ola(
                 rs.getString("cluster"),
                 rs.getString("nombre"),
@@ -163,7 +166,7 @@ public class MallaCentroRepository {
                 ((Timestamp) datos[2]).toInstant()));
     }
 
-    /** Id del centro con ese código (sin distinguir mayúsculas), si existe. */
+    /** Id del centro con ese código (sin distinguir mayúsculas ni tildes: colación comun.ci), si existe. */
     public Optional<Long> idPorCodigo(String codigo) {
         return jdbc.query("SELECT id FROM malla_centro WHERE codigo = ?",
                 (rs, fila) -> rs.getLong("id"), codigo).stream().findFirst();
@@ -204,7 +207,7 @@ public class MallaCentroRepository {
             PreparedStatement ps = conexion.prepareStatement("""
                     INSERT INTO malla_centro (codigo, nombre, activo, creado_por, actualizado_por)
                     VALUES (?, ?, TRUE, ?, ?)
-                    """, Statement.RETURN_GENERATED_KEYS);
+                    """, COLUMNA_ID);
             ps.setString(1, codigo);
             ps.setString(2, nombre);
             ps.setLong(3, actor);
@@ -217,11 +220,12 @@ public class MallaCentroRepository {
     /**
      * Reemplaza la malla del centro: datos del centro, turnos (y con ellos su
      * dotación, por cascada), flujos, olas, zonas, capacidad y dotación real.
+     * actualizado_en lo fija el trigger comun.fijar_actualizado_en.
      */
     public void guardar(Long id, CentroMallaRequest req, Long actor) {
         jdbc.update("""
                 UPDATE malla_centro
-                SET codigo = ?, nombre = ?, actualizado_por = ?, actualizado_en = UTC_TIMESTAMP(6)
+                SET codigo = ?, nombre = ?, actualizado_por = ?
                 WHERE id = ?
                 """, req.codigo().trim(), req.nombre().trim(), actor, id);
         for (String tabla : List.of("malla_turno", "malla_flujo", "malla_ola", "malla_zona")) {
@@ -236,7 +240,7 @@ public class MallaCentroRepository {
                         INSERT INTO malla_turno (centro_id, codigo, nombre, hora_inicio, hora_fin,
                             hora_refrigerio, tipo_refrigerio, nota, confirmado, creado_por, actualizado_por)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, Statement.RETURN_GENERATED_KEYS);
+                        """, COLUMNA_ID);
                 ps.setLong(1, id);
                 ps.setString(2, turno.codigo().trim());
                 ps.setString(3, turno.nombre().trim());
@@ -296,10 +300,9 @@ public class MallaCentroRepository {
                 INSERT INTO malla_capacidad (centro_id, unidades_dia, lineas_dia, bultos_recepcion_dia,
                     proveedores_dia, creado_por, actualizado_por)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE unidades_dia = VALUES(unidades_dia), lineas_dia = VALUES(lineas_dia),
-                    bultos_recepcion_dia = VALUES(bultos_recepcion_dia),
-                    proveedores_dia = VALUES(proveedores_dia), actualizado_por = VALUES(actualizado_por),
-                    actualizado_en = UTC_TIMESTAMP(6)
+                ON CONFLICT (centro_id) DO UPDATE SET unidades_dia = EXCLUDED.unidades_dia,
+                    lineas_dia = EXCLUDED.lineas_dia, bultos_recepcion_dia = EXCLUDED.bultos_recepcion_dia,
+                    proveedores_dia = EXCLUDED.proveedores_dia, actualizado_por = EXCLUDED.actualizado_por
                 """, new Object[] {id, cap.unidadesDia(), cap.lineasDia(), cap.bultosRecepcionDia(),
                         cap.proveedoresDia(), actor, actor},
                 new int[] {Types.BIGINT, Types.INTEGER, Types.INTEGER, Types.INTEGER, Types.INTEGER,
@@ -310,9 +313,9 @@ public class MallaCentroRepository {
                 INSERT INTO malla_dotacion_real (centro_id, inbound, outbound, despacho, total, semana,
                     creado_por, actualizado_por)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE inbound = VALUES(inbound), outbound = VALUES(outbound),
-                    despacho = VALUES(despacho), total = VALUES(total), semana = VALUES(semana),
-                    actualizado_por = VALUES(actualizado_por), actualizado_en = UTC_TIMESTAMP(6)
+                ON CONFLICT (centro_id) DO UPDATE SET inbound = EXCLUDED.inbound,
+                    outbound = EXCLUDED.outbound, despacho = EXCLUDED.despacho, total = EXCLUDED.total,
+                    semana = EXCLUDED.semana, actualizado_por = EXCLUDED.actualizado_por
                 """, new Object[] {id, real.inbound(), real.outbound(), real.despacho(), real.total(),
                         texto(real.semana()), actor, actor},
                 new int[] {Types.BIGINT, Types.INTEGER, Types.INTEGER, Types.INTEGER, Types.INTEGER,
@@ -324,7 +327,7 @@ public class MallaCentroRepository {
         return jdbc.update("DELETE FROM malla_centro WHERE id = ?", id) > 0;
     }
 
-    /** Códigos de turno sin distinguir mayúsculas, igual que la colación de la base. */
+    /** Códigos de turno sin distinguir mayúsculas, igual que la colación comun.ci de la base. */
     public static String clave(String codigo) {
         return codigo.trim().toUpperCase(Locale.ROOT);
     }

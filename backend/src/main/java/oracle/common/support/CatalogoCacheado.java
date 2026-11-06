@@ -6,7 +6,7 @@ import oracle.common.config.Transacciones;
 import org.springframework.scheduling.annotation.Scheduled;
 
 /**
- * Base de las caches de nombres de catalogo de un panel (Bitacora, Inbound).
+ * Base de las caches de nombres de catalogo de un panel (p. ej. Bitacora).
  *
  * Guarda un snapshot inmutable de los catalogos y centraliza su ciclo de
  * vida: recarga programada y la invalidacion tras cada CRUD, que se difiere al
